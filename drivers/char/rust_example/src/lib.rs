@@ -32,7 +32,11 @@ struct RustExample {
 impl KernelModule for RustExample {
     fn init() -> KernelResult<Self> {
         println!("Rust Example (init)");
-        println!("Am I built-in? {}", !cfg!(MODULE));
+        kprintln!(
+            level: kernel::printk::KERN_DEBUG,
+            "Am I built-in? {}",
+            !cfg!(MODULE)
+        );
         println!("Parameters:");
         println!("  my_bool:  {}", my_bool.read());
         println!("  my_i32:   {}", my_i32.read());
@@ -45,7 +49,6 @@ impl KernelModule for RustExample {
 impl Drop for RustExample {
     fn drop(&mut self) {
         println!("My message is {}", self.message);
-        println!("Rust Example (exit)");
+        eprintln!("Rust Example (exit)");
     }
 }
-

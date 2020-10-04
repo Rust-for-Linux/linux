@@ -2,16 +2,8 @@
 
 //! The `kernel` prelude
 
-pub use alloc::{
-    string::String,
-    borrow::ToOwned,
-};
+pub use alloc::{borrow::ToOwned, string::String};
 
 pub use module::module;
 
-pub use super::{
-    println,
-    KernelResult,
-    KernelModule,
-};
-
+pub use super::{eprintln, kprintln, println, KernelModule, KernelResult};
