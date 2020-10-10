@@ -637,6 +637,55 @@ static struct conf_printer kconfig_printer_cb =
 };
 
 /*
+ * Rust configuration printer
+ *
+ * This printer is used when generating the resulting rustc configuration
+ * after kconfig invocation and `defconfig` files.
+ *
+ */
+static void
+rconfig_print_symbol(FILE *fp, struct symbol *sym, const char *value, void *arg)
+{
+  const char *str;
+
+	switch (sym->type) {
+	case S_INT:
+	case S_HEX:
+	case S_BOOLEAN:
+	case S_TRISTATE:
+		str = sym_escape_string_value(value);
+		if (*value == 'n') {
+			/* rust cfg does not support comments
+			bool skip_unset = (arg != NULL);
+
+			if (!skip_unset)
+				fprintf(fp, "# %s%s is not set\n",
+				    CONFIG_, sym->name);*/
+			return;
+		}
+		break;
+	default:
+		str = value;
+		break;
+	}
+
+	fprintf(fp, "--cfg=%s%s=%s\n", CONFIG_, sym->name, str);
+}
+
+static void
+rconfig_print_comment(FILE *fp, const char *value, void *arg)
+{
+	fprintf(stderr, "could not print commend\n");
+	return;
+}
+
+static struct conf_printer rconfig_printer_cb =
+{
+	.print_symbol = rconfig_print_symbol,
+	.print_comment = rconfig_print_comment,
+};
+
+/*
  * Header printer
  *
  * This printer is used when generating the `include/generated/autoconf.h' file.
@@ -1043,7 +1092,7 @@ int conf_write_autoconf(int overwrite)
 	struct symbol *sym;
 	const char *name;
 	const char *autoconf_name = conf_get_autoconfig_name();
-	FILE *out, *out_h;
+	FILE *out, *out_h, *out_r;
 	int i;
 
 	if (!overwrite && is_present(autoconf_name))
@@ -1064,6 +1113,13 @@ int conf_write_autoconf(int overwrite)
 		return 1;
 	}
 
+	out_r = fopen(".tmprconfig", "w");
+	if (!out_r) {
+		fclose(out);
+		fclose(out_h);
+		return 1;
+	}
+
 	conf_write_heading(out, &kconfig_printer_cb, NULL);
 	conf_write_heading(out_h, &header_printer_cb, NULL);
 
@@ -1075,9 +1131,11 @@ int conf_write_autoconf(int overwrite)
 		/* write symbols to auto.conf and autoconf.h */
 		conf_write_symbol(out, sym, &kconfig_printer_cb, (void *)1);
 		conf_write_symbol(out_h, sym, &header_printer_cb, NULL);
+		conf_write_symbol(out_r, sym, &rconfig_printer_cb, NULL);
 	}
 	fclose(out);
 	fclose(out_h);
+	fclose(out_r);
 
 	name = getenv("KCONFIG_AUTOHEADER");
 	if (!name)
@@ -1085,6 +1143,14 @@ int conf_write_autoconf(int overwrite)
 	if (make_parent_dir(name))
 		return 1;
 	if (rename(".tmpconfig.h", name))
+		return 1;
+
+	name = getenv("KCONFIG_RUSTCONFIG");
+	if (!name)
+		name = "include/generated/rust_cfg";
+	if (make_parent_dir(name))
+		return 1;
+	if (rename(".tmprconfig", name))
 		return 1;
 
 	if (make_parent_dir(autoconf_name))
