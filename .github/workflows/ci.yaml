@@ -13,9 +13,11 @@ jobs:
     steps:
       # Setup
       - uses: actions/checkout@v2
+      - run: sudo apt update
       - run: sudo apt install libelf-dev qemu-system-x86 busybox-static
       - run: rustup default nightly-2020-08-27
       - run: rustup component add rust-src
+      - run: cargo install bindgen
 
       # Build
       - run: cp .github/workflows/kernel-${{ matrix.mode }}.config .config
