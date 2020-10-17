@@ -229,9 +229,11 @@ c_flags        = -Wp,-MMD,$(depfile) $(NOSTDINC_FLAGS) $(LINUXINCLUDE)     \
 RUST_BINDGEN_CFLAGS = $(c_flags) $(KBUILD_CFLAGS_MODULE)
 export RUST_BINDGEN_CFLAGS
 
-rustc_cfg_flags = $(shell sed -nE 's/^(CONFIG_[^=]+)=(y|m)$$/--cfg \1/p' $(srctree)/include/config/auto.conf | xargs)
+KCONFIG_RUSTCONFIG ?= include/generated/rust_cfg
 
-rustc_flags     = $(_rustc_flags) $(modkern_rustcflags) $(rustc_cfg_flags)
+rustconfig_path = $(shell readlink -f $(KCONFIG_RUSTCONFIG))
+
+rustc_flags     = $(_rustc_flags) $(modkern_rustcflags) @$(rustconfig_path)
 
 # Passed by cargo
 RUSTFLAGS = $(rustc_flags)

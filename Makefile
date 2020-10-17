@@ -450,6 +450,7 @@ STRIP		= $(CROSS_COMPILE)strip
 endif
 RUSTC		= rustc
 CARGO		= cargo
+BINDGEN		= bindgen
 PAHOLE		= pahole
 RESOLVE_BTFIDS	= $(objtree)/tools/bpf/resolve_btfids/resolve_btfids
 LEX		= flex
@@ -513,8 +514,9 @@ KBUILD_RUSTCFLAGS :=
 # TODO: another option is using explicit target specs, e.g.
 # `--target=$(srctree)/arch/$(SRCARCH)/rust-target-spec.json`
 KBUILD_CARGOFLAGS := $(CARGO_VERBOSE) --locked \
-		    -Z build-std=core,alloc -Z unstable-options \
-		    --out-dir=out --target=x86_64-linux-kernel
+			-Z build-std=core,alloc \
+			-Z unstable-options \
+			--target=x86_64-linux-kernel
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_RUSTCFLAGS_KERNEL :=
@@ -528,7 +530,7 @@ export KBUILD_LDS_MODULE := $(srctree)/scripts/module-common.lds
 KBUILD_LDFLAGS :=
 CLANG_FLAGS :=
 
-export ARCH SRCARCH CONFIG_SHELL BASH HOSTCC KBUILD_HOSTCFLAGS CROSS_COMPILE LD CC RUSTC CARGO
+export ARCH SRCARCH CONFIG_SHELL BASH HOSTCC KBUILD_HOSTCFLAGS CROSS_COMPILE LD CC RUSTC CARGO BINDGEN
 export CPP AR NM STRIP OBJCOPY OBJDUMP OBJSIZE READELF PAHOLE RESOLVE_BTFIDS LEX YACC AWK INSTALLKERNEL
 export PERL PYTHON PYTHON3 CHECK CHECKFLAGS MAKE UTS_MACHINE HOSTCXX
 export KGZIP KBZIP2 KLZOP LZMA LZ4 XZ ZSTD
@@ -728,7 +730,7 @@ $(KCONFIG_CONFIG):
 # This exploits the 'multi-target pattern rule' trick.
 # The syncconfig should be executed only once to make all the targets.
 # (Note: use the grouped target '&:' when we bump to GNU Make 4.3)
-%/config/auto.conf %/config/auto.conf.cmd %/generated/autoconf.h: $(KCONFIG_CONFIG)
+%/config/auto.conf %/config/auto.conf.cmd %/generated/autoconf.h %/generated/rust_cfg: $(KCONFIG_CONFIG)
 	$(Q)$(MAKE) -f $(srctree)/Makefile syncconfig
 else # !may-sync-config
 # External modules and some install targets need include/generated/autoconf.h

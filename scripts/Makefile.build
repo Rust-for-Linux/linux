@@ -307,14 +307,18 @@ $(obj)/%.lst: $(src)/%.c FORCE
 # ---------------------------------------------------------------------------
 
 quiet_cmd_cargo = CARGO $(quiet_modtag) $@
-      cmd_cargo = cd $(src) && $(CARGO) build $(cargo_flags)
+      cmd_cargo = export RUST_BINDGEN_FILE=$(shell readlink -f rust_bindings.rs) && $(CARGO) build $(cargo_flags) -p $(shell basename $(basename $(src))) --out-dir $(src)
+
+rust_bindings.rs: FORCE
+	$(Q)$(BINDGEN) $(srctree)/rust/kernel/src/bindings_helper.h --opaque-type xregs_state --opaque-type desc_struct --use-core --ctypes-prefix c_types -o rust_bindings.rs --size_t-is-usize -- $(c_flags)
 
 # The .o from the Rust staticlib
-$(obj)/%.o: $(src)/out/lib%.a
+#$(obj)/%.o: $(src)/out/lib%.a
+$(obj)/%.o: $(obj)/lib%.a
 	$(Q)$(LD) -r -o $@ --whole-archive $<
 
 # The Rust staticlib from cargo
-$(obj)/out/lib%.a: FORCE
+$(obj)/lib%.a: FORCE rust_bindings.rs
 	$(call cmd,cargo)
 
 # Compile assembler sources (.S)

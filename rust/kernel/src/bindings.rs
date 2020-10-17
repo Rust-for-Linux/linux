@@ -9,7 +9,7 @@
 )]
 mod bindings_raw {
     use crate::c_types;
-    include!("bindings_gen.rs");
+    include!(env!("RUST_BINDGEN_FILE"));
 }
 pub use bindings_raw::*;
 
