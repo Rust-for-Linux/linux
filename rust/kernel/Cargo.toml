@@ -11,7 +11,3 @@ publish = false
 bitflags = "1"
 module = { path = "../module" }
 
-[build-dependencies]
-bindgen = "0.54"
-shlex = { path = "../shlex" }
-

@@ -514,8 +514,7 @@ KBUILD_RUSTCFLAGS :=
 KBUILD_CARGOFLAGS := $(CARGO_VERBOSE) --locked \
 			-Z build-std=core,alloc \
 			-Z unstable-options \
-			--target=$(PWD)/$(srctree)/arch/$(SRCARCH)/rust/target.json \
-	    --out-dir=out 
+			--target=$(srctree)/arch/$(SRCARCH)/rust/target.json
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_RUSTCFLAGS_KERNEL :=
