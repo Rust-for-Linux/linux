@@ -3,7 +3,7 @@
 //! The `kernel` crate
 
 #![no_std]
-#![feature(allocator_api, alloc_error_handler)]
+#![feature(allocator_api, alloc_error_handler, negative_impls)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
@@ -23,6 +23,8 @@ pub mod file_operations;
 pub mod prelude;
 pub mod printk;
 pub mod random;
+
+pub mod sync;
 
 #[cfg(CONFIG_SYSCTL)]
 pub mod sysctl;

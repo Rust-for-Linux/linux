@@ -4,6 +4,7 @@
 #![feature(global_asm)]
 
 use kernel::prelude::*;
+use kernel::sync::Mutex;
 
 module! {
     type: RustExample,
@@ -36,6 +37,14 @@ impl KernelModule for RustExample {
         println!("Parameters:");
         println!("  my_bool:  {}", my_bool.read());
         println!("  my_i32:   {}", my_i32.read());
+
+        let mutex = Mutex::new(1, "mutex");
+        println!("mutex: {:?}", mutex);
+        unsafe {
+            let guard = mutex.lock();
+            println!("data: {}", guard);
+        }
+
         Ok(RustExample {
             message: "on the heap!".to_owned(),
         })
