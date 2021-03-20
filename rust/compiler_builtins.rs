@@ -29,7 +29,7 @@
 #![deny(clippy::correctness)]
 #![deny(clippy::perf)]
 #![deny(clippy::style)]
-#![deny(missing_docs)]
+#![forbid(missing_docs)]
 
 macro_rules! define_panicking_intrinsics(
     ($reason: tt, { $($ident: ident, )* }) => {

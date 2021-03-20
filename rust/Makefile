@@ -22,25 +22,24 @@ quiet_cmd_rustdoc = RUSTDOC $<
 
 rustdoc: rustdoc-core rustdoc-module rustdoc-compiler_builtins rustdoc-alloc rustdoc-kernel
 
-rustdoc-core: private skip_clippy = 1
 rustdoc-core: $(rustc_src)/library/core/src/lib.rs FORCE
 	$(call if_changed,rustdoc)
 
 rustdoc-module: private rustdoc_target_flags = --crate-type proc-macro \
-    --extern proc_macro
+    --extern proc_macro -Fmissing-docs
 rustdoc-module: $(srctree)/rust/module.rs FORCE
 	$(call if_changed,rustdoc)
 
+rustdoc-compiler_builtins: private rustdoc_target_flags = -Fmissing-docs
 rustdoc-compiler_builtins: $(srctree)/rust/compiler_builtins.rs FORCE
 	$(call if_changed,rustdoc)
 
-rustdoc-alloc: private skip_clippy = 1
 rustdoc-alloc: $(rustc_src)/library/alloc/src/lib.rs \
     $(objtree)/rust/compiler_builtins.o FORCE
 	$(call if_changed,rustdoc)
 
 rustdoc-kernel: private rustdoc_target_flags = --extern alloc \
-    --extern module=$(objtree)/rust/libmodule.so
+    --extern module=$(objtree)/rust/libmodule.so -Fmissing-docs
 rustdoc-kernel: $(srctree)/rust/kernel/lib.rs rustdoc-module \
     $(objtree)/rust/libmodule.so $(objtree)/rust/bindings_generated.rs FORCE
 	$(call if_changed,rustdoc)
