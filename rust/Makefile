@@ -6,6 +6,10 @@ extra-$(CONFIG_RUST) += bindings_generated.rs libmodule.so
 extra-$(CONFIG_RUST) += exports_core_generated.h exports_alloc_generated.h
 extra-$(CONFIG_RUST) += exports_kernel_generated.h
 
+# `$(rustc_flags)` is passed in case the user added `--sysroot`.
+rustc_sysroot = $(shell $(RUSTC) $(rustc_flags) --print sysroot)
+rustc_src = $(rustc_sysroot)/lib/rustlib/src/rust
+
 RUSTDOC = rustdoc
 
 quiet_cmd_rustdoc = RUSTDOC $<
@@ -14,9 +18,13 @@ quiet_cmd_rustdoc = RUSTDOC $<
 	$(RUSTDOC) $(filter-out --emit=%, $(rustc_flags)) \
 		$(rustdoc_target_flags) -L $(objtree)/rust/ \
 		--output $(objtree)/rust/doc --crate-name $(subst rustdoc-,,$@) \
-		-Fmissing-docs @$(objtree)/include/generated/rustc_cfg $<
+		@$(objtree)/include/generated/rustc_cfg $<
 
-rustdoc: rustdoc-module rustdoc-compiler_builtins rustdoc-kernel
+rustdoc: rustdoc-core rustdoc-module rustdoc-compiler_builtins rustdoc-alloc rustdoc-kernel
+
+rustdoc-core: private skip_clippy = 1
+rustdoc-core: $(rustc_src)/library/core/src/lib.rs FORCE
+	$(call if_changed,rustdoc)
 
 rustdoc-module: private rustdoc_target_flags = --crate-type proc-macro \
     --extern proc_macro
@@ -24,6 +32,11 @@ rustdoc-module: $(srctree)/rust/module.rs FORCE
 	$(call if_changed,rustdoc)
 
 rustdoc-compiler_builtins: $(srctree)/rust/compiler_builtins.rs FORCE
+	$(call if_changed,rustdoc)
+
+rustdoc-alloc: private skip_clippy = 1
+rustdoc-alloc: $(rustc_src)/library/alloc/src/lib.rs \
+    $(objtree)/rust/compiler_builtins.o FORCE
 	$(call if_changed,rustdoc)
 
 rustdoc-kernel: private rustdoc_target_flags = --extern alloc \
@@ -114,10 +127,6 @@ quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L 
 	mv $(objtree)/rust/$(patsubst %.o,%,$(notdir $@)).d $(depfile); \
 	sed -i '/^\#/d' $(depfile) \
 	$(if $(rustc_objcopy),;$(OBJCOPY) $(rustc_objcopy) $@)
-
-# `$(rustc_flags)` is passed in case the user added `--sysroot`.
-rustc_sysroot = $(shell $(RUSTC) $(rustc_flags) --print sysroot)
-rustc_src = $(rustc_sysroot)/lib/rustlib/src/rust
 
 .SECONDEXPANSION:
 $(objtree)/rust/core.o: private skip_clippy = 1

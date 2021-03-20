@@ -8,6 +8,7 @@
 #![deny(clippy::correctness)]
 #![deny(clippy::perf)]
 #![deny(clippy::style)]
+#![deny(missing_docs)]
 
 use proc_macro::{token_stream, Delimiter, Group, TokenStream, TokenTree};
 
