@@ -34,6 +34,18 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
     /// `arg == None` indicates that the parameter was passed without an
     /// argument. If `NOARG_ALLOWED` is set to `false` then `arg` is guaranteed
     /// to always be `Some(_)`.
+    ///
+    /// Parameters passed at boot time will be set before [`kmalloc`] is
+    /// available (even if the module is loaded at a later time). However, in
+    /// this case, the argument buffer will be valid for the entire lifetime of
+    /// the kernel. So implementations of this method which need to allocate
+    /// should first check that the allocator is available (with
+    /// [`crate::bindings::slab_is_available`]) and when it is not available
+    /// provide an alternative implementation which doesn't allocate. In cases
+    /// where the allocator is not available it is safe to save references to
+    /// `arg` in `Self`, but in other cases a copy should be made.
+    ///
+    /// [`kmalloc`]: ../../../include/linux/slab.h
     fn try_from_param_arg(arg: Option<&'static [u8]>) -> Option<Self>;
 
     /// Get the current value of the parameter for use in the kernel module.
@@ -458,6 +470,7 @@ impl ModuleParam for StringParam {
         arg.map(|arg| {
             if slab_available {
                 let mut vec = alloc::vec::Vec::new();
+                vec.try_reserve(arg.len())?;
                 vec.extend_from_slice(arg);
                 StringParam::Owned(vec)
             } else {
