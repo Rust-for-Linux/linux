@@ -11,6 +11,7 @@
 #include <linux/miscdevice.h>
 #include <linux/poll.h>
 #include <linux/mm.h>
+#include <linux/spi/spi.h>
 #include <uapi/linux/android/binder.h>
 
 // `bindgen` gets confused at certain things
