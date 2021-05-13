@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+use core::fmt;
 use proc_macro::{token_stream, Delimiter, Group, TokenStream, TokenTree};
 
 fn try_ident(it: &mut token_stream::IntoIter) -> Option<String> {
@@ -110,93 +111,6 @@ fn get_byte_string(it: &mut token_stream::IntoIter, expected_name: &str) -> Stri
     byte_string
 }
 
-fn __build_modinfo_string_base(
-    module: &str,
-    field: &str,
-    content: &str,
-    variable: &str,
-    builtin: bool,
-) -> String {
-    let string = if builtin {
-        // Built-in modules prefix their modinfo strings by `module.`.
-        format!(
-            "{module}.{field}={content}",
-            module = module,
-            field = field,
-            content = content
-        )
-    } else {
-        // Loadable modules' modinfo strings go as-is.
-        format!("{field}={content}", field = field, content = content)
-    };
-
-    format!(
-        "
-            {cfg}
-            #[link_section = \".modinfo\"]
-            #[used]
-            pub static {variable}: [u8; {length}] = *b\"{string}\\0\";
-        ",
-        cfg = if builtin {
-            "#[cfg(not(MODULE))]"
-        } else {
-            "#[cfg(MODULE)]"
-        },
-        variable = variable,
-        length = string.len() + 1,
-        string = string,
-    )
-}
-
-fn __build_modinfo_string_variable(module: &str, field: &str) -> String {
-    format!("__{module}_{field}", module = module, field = field)
-}
-
-fn build_modinfo_string_only_builtin(module: &str, field: &str, content: &str) -> String {
-    __build_modinfo_string_base(
-        module,
-        field,
-        content,
-        &__build_modinfo_string_variable(module, field),
-        true,
-    )
-}
-
-fn build_modinfo_string_only_loadable(module: &str, field: &str, content: &str) -> String {
-    __build_modinfo_string_base(
-        module,
-        field,
-        content,
-        &__build_modinfo_string_variable(module, field),
-        false,
-    )
-}
-
-fn build_modinfo_string(module: &str, field: &str, content: &str) -> String {
-    build_modinfo_string_only_builtin(module, field, content)
-        + &build_modinfo_string_only_loadable(module, field, content)
-}
-
-fn build_modinfo_string_optional(module: &str, field: &str, content: Option<&str>) -> String {
-    if let Some(content) = content {
-        build_modinfo_string(module, field, content)
-    } else {
-        "".to_string()
-    }
-}
-
-fn build_modinfo_string_param(module: &str, field: &str, param: &str, content: &str) -> String {
-    let variable = format!(
-        "__{module}_{field}_{param}",
-        module = module,
-        field = field,
-        param = param
-    );
-    let content = format!("{param}:{content}", param = param, content = content);
-    __build_modinfo_string_base(module, field, &content, &variable, true)
-        + &__build_modinfo_string_base(module, field, &content, &variable, false)
-}
-
 fn permissions_are_readonly(perms: &str) -> bool {
     let (radix, digits) = if let Some(n) = perms.strip_prefix("0x") {
         (16, n)
@@ -298,6 +212,118 @@ fn generated_array_ops_name(vals: &str, max_length: usize) -> String {
     )
 }
 
+struct ModuleInfoStringBuilder<'a> {
+    counter: usize,
+    module: &'a str,
+}
+
+impl<'a> ModuleInfoStringBuilder<'a> {
+    fn new(module_str: &'a str) -> ModuleInfoStringBuilder<'a> {
+        ModuleInfoStringBuilder {
+            module: module_str,
+            counter: 0,
+        }
+    }
+
+    fn build_modinfo_string_base(
+        &self,
+        field: &str,
+        content: &str,
+        variable: &str,
+        builtin: bool,
+    ) -> String {
+        let string = if builtin {
+            // Built-in modules prefix their modinfo strings by `module.`.
+            format!(
+                "{module}.{field}={content}",
+                module = self.module,
+                field = field,
+                content = content
+            )
+        } else {
+            // Loadable modules' modinfo strings go as-is.
+            format!("{field}={content}", field = field, content = content)
+        };
+
+        format!(
+            "
+                {cfg}
+                #[link_section = \".modinfo\"]
+                #[used]
+                pub static {variable}: [u8; {length}] = *b\"{string}\\0\";
+            ",
+            cfg = if builtin {
+                "#[cfg(not(MODULE))]"
+            } else {
+                "#[cfg(MODULE)]"
+            },
+            variable = variable,
+            length = string.len() + 1,
+            string = string,
+        )
+    }
+
+    fn build_modinfo_string_variable(&mut self, field: &str) -> String {
+        self.counter += 1;
+        format!(
+            "__{module}_{field}{counter}",
+            module = self.module,
+            field = field,
+            counter = self.counter,
+        )
+    }
+
+    fn build_modinfo_string_only_builtin(&mut self, field: &str, content: &str) -> String {
+        let str_var = self.build_modinfo_string_variable(field);
+        self.build_modinfo_string_base(field, content, &str_var, true)
+    }
+
+    fn build_modinfo_string_only_loadable(&mut self, field: &str, content: &str) -> String {
+        let str_var = self.build_modinfo_string_variable(field);
+        self.build_modinfo_string_base(field, content, &str_var, false)
+    }
+
+    fn build_modinfo_string(&mut self, field: &str, content: &str) -> String {
+        self.build_modinfo_string_only_builtin(field, content)
+            + &self.build_modinfo_string_only_loadable(field, content)
+    }
+
+    fn build_modinfo_string_optional(&mut self, field: &str, content: Option<&str>) -> String {
+        if let Some(content) = content {
+            self.build_modinfo_string(field, content)
+        } else {
+            "".to_string()
+        }
+    }
+
+    fn build_modinfo_string_param(&mut self, field: &str, param: &str, content: &str) -> String {
+        let variable = format!(
+            "__{module}_{field}_{param}",
+            module = self.module,
+            field = field,
+            param = param
+        );
+        let content = format!("{param}:{content}", param = param, content = content);
+        self.build_modinfo_string_base(field, &content, &variable, true)
+            + &self.build_modinfo_string_base(field, &content, &variable, false)
+    }
+}
+
+#[derive(Debug)]
+enum Softdep {
+    Pre(String),
+    Post(String),
+}
+
+impl fmt::Display for Softdep {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Softdep::Pre(ref module) => write!(f, "pre: {}", module),
+            Softdep::Post(ref module) => write!(f, "post: {}", module),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct ModuleInfo {
     type_: String,
@@ -307,6 +333,7 @@ struct ModuleInfo {
     description: Option<String>,
     alias: Option<String>,
     params: Option<Group>,
+    softdeps: Option<Vec<Softdep>>,
 }
 
 impl ModuleInfo {
@@ -322,6 +349,7 @@ impl ModuleInfo {
             "alias",
             "alias_rtnl_link",
             "params",
+            "softdeps",
         ];
         const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
         let mut seen_keys = Vec::new();
@@ -353,6 +381,9 @@ impl ModuleInfo {
                     info.alias = Some(format!("rtnl-link-{}", expect_byte_string(it)))
                 }
                 "params" => info.params = Some(expect_group(it)),
+                "softdeps" => {
+                    info.softdeps = Some(Self::parse_softdeps(expect_group(it)));
+                }
                 _ => panic!(
                     "Unknown key \"{}\". Valid keys are: {:?}.",
                     key, EXPECTED_KEYS
@@ -388,17 +419,58 @@ impl ModuleInfo {
 
         info
     }
+
+    fn parse_softdeps(group: Group) -> Vec<Softdep> {
+        assert_eq!(group.delimiter(), Delimiter::Brace);
+
+        let mut it = group.stream().into_iter();
+
+        let mut res = vec![];
+
+        while let Some(order) = try_ident(&mut it) {
+            res.push(Self::parse_softdep(&mut it, &order));
+        }
+
+        expect_end(&mut it);
+
+        res
+    }
+
+    fn parse_softdep(it: &mut token_stream::IntoIter, order: &str) -> Softdep {
+        assert_eq!(expect_punct(it), ':');
+        let module = expect_ident(it);
+        let softdep = match &*order {
+            "pre" => Softdep::Pre(module),
+            "post" => Softdep::Post(module),
+            _ => panic!("failed to parse invalid softdep '{}: {}", order, module),
+        };
+        assert_eq!(expect_punct(it), ',');
+        softdep
+    }
+
+    fn encode_softdeps<'a>(&self, str_builder: &mut ModuleInfoStringBuilder<'a>) -> String {
+        match self.softdeps {
+            Some(ref softdeps) => softdeps.iter().fold(String::new(), |mut acc, new| {
+                acc.push_str(&str_builder.build_modinfo_string("softdep", &format!("{}", new)));
+                acc
+            }),
+            None => String::new(),
+        }
+    }
 }
 
 pub fn module(ts: TokenStream) -> TokenStream {
     let mut it = ts.into_iter();
 
     let info = ModuleInfo::parse(&mut it);
+    let mut str_builder = ModuleInfoStringBuilder::new(&info.name);
 
     let name = info.name.clone();
 
     let mut array_types_to_generate = Vec::new();
     let mut params_modinfo = String::new();
+    let softdeps = info.encode_softdeps(&mut str_builder);
+
     if let Some(params) = info.params {
         assert_eq!(params.delimiter(), Delimiter::Brace);
 
@@ -443,14 +515,12 @@ pub fn module(ts: TokenStream) -> TokenStream {
                 }
             };
 
-            params_modinfo.push_str(&build_modinfo_string_param(
-                &name,
+            params_modinfo.push_str(&str_builder.build_modinfo_string_param(
                 "parmtype",
                 &param_name,
                 &param_kernel_type,
             ));
-            params_modinfo.push_str(&build_modinfo_string_param(
-                &name,
+            params_modinfo.push_str(&str_builder.build_modinfo_string_param(
                 "parm",
                 &param_name,
                 &param_description,
@@ -672,16 +742,18 @@ pub fn module(ts: TokenStream) -> TokenStream {
             {params_modinfo}
 
             {generated_array_types}
+            {softdeps}
         ",
         type_ = info.type_,
         name = info.name,
-        author = &build_modinfo_string_optional(&name, "author", info.author.as_deref()),
-        description = &build_modinfo_string_optional(&name, "description", info.description.as_deref()),
-        license = &build_modinfo_string(&name, "license", &info.license),
-        alias = &build_modinfo_string_optional(&name, "alias", info.alias.as_deref()),
-        file = &build_modinfo_string_only_builtin(&name, "file", &file),
+        author = &str_builder.build_modinfo_string_optional("author", info.author.as_deref()),
+        description = &str_builder.build_modinfo_string_optional("description", info.description.as_deref()),
+        license = &str_builder.build_modinfo_string("license", &info.license),
+        alias = &str_builder.build_modinfo_string_optional("alias", info.alias.as_deref()),
+        file = &str_builder.build_modinfo_string_only_builtin("file", &file),
         params_modinfo = params_modinfo,
         generated_array_types = generated_array_types,
+        softdeps = softdeps,
         initcall_section = ".initcall6.init"
     ).parse().expect("Error parsing formatted string into token stream.")
 }
