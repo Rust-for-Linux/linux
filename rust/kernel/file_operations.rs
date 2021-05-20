@@ -112,7 +112,7 @@ unsafe extern "C" fn read_callback<T: FileOperations>(
 ) -> c_types::c_ssize_t {
     from_kernel_result! {
         let file = NonNull::new_unchecked(file);
-        let offset = NonNull::new_unchecked(offset).as_mut();
+        let offset = &mut *offset;
 
         let mut data = UserSlicePtr::new(buf as *mut c_types::c_void, len).writer();
         let f: &T = get_file_private_data(file);
@@ -130,7 +130,7 @@ unsafe extern "C" fn read_iter_callback<T: FileOperations>(
 ) -> isize {
     from_kernel_result! {
         let raw_iter = NonNull::new_unchecked(raw_iter);
-        let iocb = NonNull::new_unchecked(iocb).as_mut();
+        let iocb = &mut *iocb;
         let file = NonNull::new_unchecked(iocb.ki_filp);
 
         let mut iter = IovIter::from_ptr(raw_iter);
@@ -150,7 +150,7 @@ unsafe extern "C" fn write_callback<T: FileOperations>(
 ) -> c_types::c_ssize_t {
     from_kernel_result! {
         let file = NonNull::new_unchecked(file);
-        let offset = NonNull::new_unchecked(offset).as_mut();
+        let offset = &mut *offset;
 
         // TODO: why is it okay to upgrade the mutability of `buf` here?
         let mut data = UserSlicePtr::new(buf as *mut c_types::c_void, len).reader();
@@ -169,7 +169,7 @@ unsafe extern "C" fn write_iter_callback<T: FileOperations>(
 ) -> isize {
     from_kernel_result! {
         let raw_iter = NonNull::new_unchecked(raw_iter);
-        let iocb = NonNull::new_unchecked(iocb).as_mut();
+        let iocb = &mut *iocb;
 
         let file = NonNull::new_unchecked(iocb.ki_filp);
         let mut iter = IovIter::from_ptr(raw_iter);
