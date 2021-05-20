@@ -10,6 +10,7 @@ use crate::{
     io_buffer::{IoBufferReader, IoBufferWriter},
     Result,
 };
+use core::ptr::NonNull;
 
 extern "C" {
     fn rust_helper_copy_to_iter(
@@ -29,23 +30,23 @@ extern "C" {
 ///
 /// # Invariants
 ///
-/// The pointer [`IovIter::ptr`] is non-null and valid.
+/// The pointer [`IovIter::ptr`] is valid.
 pub struct IovIter {
-    ptr: *mut bindings::iov_iter,
+    ptr: NonNull<bindings::iov_iter>,
 }
 
 impl IovIter {
     fn common_len(&self) -> usize {
         // SAFETY: `IovIter::ptr` is guaranteed to be valid by the type invariants.
-        unsafe { (*self.ptr).count }
+        unsafe { self.ptr.as_ref().count }
     }
 
     /// Constructs a new [`struct iov_iter`] wrapper.
     ///
     /// # Safety
     ///
-    /// The pointer `ptr` must be non-null and valid for the lifetime of the object.
-    pub(crate) unsafe fn from_ptr(ptr: *mut bindings::iov_iter) -> Self {
+    /// The pointer `ptr` must be valid for the lifetime of the object.
+    pub(crate) unsafe fn from_ptr(ptr: NonNull<bindings::iov_iter>) -> Self {
         // INVARIANTS: the safety contract ensures the type invariant will hold.
         Self { ptr }
     }
@@ -59,7 +60,7 @@ impl IoBufferWriter for IovIter {
     fn clear(&mut self, mut len: usize) -> Result {
         while len > 0 {
             // SAFETY: `IovIter::ptr` is guaranteed to be valid by the type invariants.
-            let written = unsafe { bindings::iov_iter_zero(len, self.ptr) };
+            let written = unsafe { bindings::iov_iter_zero(len, self.ptr.as_ptr()) };
             if written == 0 {
                 return Err(Error::EFAULT);
             }
@@ -70,7 +71,7 @@ impl IoBufferWriter for IovIter {
     }
 
     unsafe fn write_raw(&mut self, data: *const u8, len: usize) -> Result {
-        let res = rust_helper_copy_to_iter(data as _, len, self.ptr);
+        let res = rust_helper_copy_to_iter(data as _, len, self.ptr.as_ptr());
         if res != len {
             Err(Error::EFAULT)
         } else {
@@ -85,7 +86,7 @@ impl IoBufferReader for IovIter {
     }
 
     unsafe fn read_raw(&mut self, out: *mut u8, len: usize) -> Result {
-        let res = rust_helper_copy_from_iter(out as _, len, self.ptr);
+        let res = rust_helper_copy_from_iter(out as _, len, self.ptr.as_ptr());
         if res != len {
             Err(Error::EFAULT)
         } else {

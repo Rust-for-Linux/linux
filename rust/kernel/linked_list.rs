@@ -29,7 +29,7 @@ pub trait Wrapper<T: ?Sized> {
 
 impl<T: ?Sized> Wrapper<T> for Box<T> {
     fn into_pointer(self) -> NonNull<T> {
-        NonNull::new(Box::into_raw(self)).unwrap()
+        NonNull::from(Box::leak(self))
     }
 
     unsafe fn from_pointer(ptr: NonNull<T>) -> Self {
@@ -43,7 +43,8 @@ impl<T: ?Sized> Wrapper<T> for Box<T> {
 
 impl<T: ?Sized> Wrapper<T> for Arc<T> {
     fn into_pointer(self) -> NonNull<T> {
-        NonNull::new(Arc::into_raw(self) as _).unwrap()
+        // SAFETY: `Arc::into_raw` can't return a null pointer
+        unsafe { NonNull::new_unchecked(Arc::into_raw(self) as *mut _) }
     }
 
     unsafe fn from_pointer(ptr: NonNull<T>) -> Self {

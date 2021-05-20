@@ -4,7 +4,9 @@
 //!
 //! C header: [`include/linux/moduleparam.h`](../../../include/linux/moduleparam.h)
 
+use crate::error::Error;
 use core::fmt::Write;
+use core::ptr::NonNull;
 
 /// Types that can be used for module parameters.
 ///
@@ -67,18 +69,17 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
         val: *const crate::c_types::c_char,
         param: *const crate::bindings::kernel_param,
     ) -> crate::c_types::c_int {
-        let arg = if val.is_null() {
-            None
-        } else {
-            Some(crate::c_types::c_string_bytes(val))
-        };
-        match Self::try_from_param_arg(arg) {
-            Some(new_value) => {
-                let old_value = (*param).__bindgen_anon_1.arg as *mut Self;
-                let _ = core::ptr::replace(old_value, new_value);
-                0
-            }
-            None => crate::error::Error::EINVAL.to_kernel_errno(),
+        crate::from_kernel_result! {
+            let param = NonNull::new_unchecked(param as *mut crate::bindings::kernel_param);
+            let arg = NonNull::new(val as *mut crate::c_types::c_char)
+                .map(|val| crate::c_types::c_string_bytes(val.as_ptr()));
+
+            let new_value = Self::try_from_param_arg(arg).ok_or(Error::EINVAL)?;
+
+            let old_value = param.as_ref().__bindgen_anon_1.arg as *mut Self;
+            *old_value = new_value;
+
+            Ok(0)
         }
     }
 
@@ -94,11 +95,17 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
         buf: *mut crate::c_types::c_char,
         param: *const crate::bindings::kernel_param,
     ) -> crate::c_types::c_int {
-        let slice = core::slice::from_raw_parts_mut(buf as *mut u8, crate::PAGE_SIZE);
+        let param = NonNull::new_unchecked(param as *mut crate::bindings::kernel_param);
+        let buf = NonNull::new_unchecked(buf);
+
+        let slice = core::slice::from_raw_parts_mut(buf.as_ptr().cast::<u8>(), crate::PAGE_SIZE);
         let mut buf = crate::buffer::Buffer::new(slice);
-        match write!(buf, "{}\0", *((*param).__bindgen_anon_1.arg as *mut Self)) {
-            Err(_) => crate::error::Error::EINVAL.to_kernel_errno(),
-            Ok(()) => buf.bytes_written() as crate::c_types::c_int,
+
+        crate::from_kernel_result! {
+            let value = &*(param.as_ref().__bindgen_anon_1.arg as *mut Self);
+            write!(buf, "{}\0", value).map_err(|_| Error::EINVAL)?;
+
+            Ok(buf.bytes_written() as crate::c_types::c_int)
         }
     }
 
@@ -354,6 +361,7 @@ impl<T, const N: usize> ArrayParam<T, { N }> {
     fn values(&self) -> &[T] {
         // SAFETY: The invariant maintained by `ArrayParam` allows us to cast
         // the first `self.used` elements to `T`.
+        // TODO: use `MaybeUninit::slice_assume_init_ref` once stable?
         unsafe {
             &*(&self.values[0..self.used] as *const [core::mem::MaybeUninit<T>] as *const [T])
         }

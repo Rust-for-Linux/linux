@@ -8,7 +8,10 @@ use crate::{
     bindings, c_types, io_buffer::IoBufferReader, user_ptr::UserSlicePtrReader, Error, Result,
     PAGE_SIZE,
 };
-use core::{marker::PhantomData, ptr};
+use core::{
+    marker::PhantomData,
+    ptr::{self, NonNull},
+};
 
 extern "C" {
     #[allow(improper_ctypes)]
@@ -33,7 +36,7 @@ extern "C" {
 ///
 /// The pointer [`Pages::pages`] is valid and points to 2^ORDER pages.
 pub struct Pages<const ORDER: u32> {
-    pages: *mut bindings::page,
+    pages: NonNull<bindings::page>,
 }
 
 impl<const ORDER: u32> Pages<ORDER> {
@@ -47,9 +50,8 @@ impl<const ORDER: u32> Pages<ORDER> {
                 ORDER,
             )
         };
-        if pages.is_null() {
-            return Err(Error::ENOMEM);
-        }
+        let pages = NonNull::new(pages).ok_or(Error::ENOMEM)?;
+
         // INVARIANTS: We checked that the allocation above succeeded>
         Ok(Self { pages })
     }
@@ -64,7 +66,7 @@ impl<const ORDER: u32> Pages<ORDER> {
 
         // SAFETY: We check above that the allocation is of order 0. The range of `address` is
         // already checked by `vm_insert_page`.
-        let ret = unsafe { bindings::vm_insert_page(vma, address as _, self.pages) };
+        let ret = unsafe { bindings::vm_insert_page(vma, address as _, self.pages.as_ptr()) };
         if ret != 0 {
             Err(Error::from_kernel_errno(ret))
         } else {
@@ -88,7 +90,11 @@ impl<const ORDER: u32> Pages<ORDER> {
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
 
         // SAFETY: We ensured that the buffer was valid with the check above.
-        unsafe { reader.read_raw((mapping.ptr as usize + offset) as _, len) }?;
+        unsafe {
+            let dst = mapping.ptr.as_ptr().cast::<u8>().add(offset);
+            reader.read_raw(dst, len)?;
+        }
+
         Ok(())
     }
 
@@ -107,7 +113,10 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
-        ptr::copy((mapping.ptr as *mut u8).add(offset), dest, len);
+
+        // TODO: this can probably be `ptr::copy_nonoverlapping`
+        let src = mapping.ptr.as_ptr().cast::<u8>().add(offset);
+        ptr::copy(src, dest, len);
         Ok(())
     }
 
@@ -127,7 +136,10 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
-        ptr::copy(src, (mapping.ptr as *mut u8).add(offset), len);
+
+        // TODO: this can probably be `ptr::copy_nonoverlapping`
+        let dest = mapping.ptr.as_ptr().cast::<u8>().add(offset);
+        ptr::copy(src, dest, len);
         Ok(())
     }
 
@@ -138,15 +150,16 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         // SAFETY: We checked above that `index` is within range.
-        let page = unsafe { self.pages.add(index) };
+        let page = unsafe { self.pages.as_ptr().add(index) };
+
+        // SAFETY: Since `index` is within rangel the pointer can not have wrapped
+        //         and is thus still `NonNull`.
+        let page = unsafe { NonNull::new_unchecked(page) };
 
         // SAFETY: `page` is valid based on the checks above.
-        let ptr = unsafe { rust_helper_kmap(page) };
-        if ptr.is_null() {
-            return None;
-        }
+        let ptr = unsafe { rust_helper_kmap(page.as_ptr()) };
 
-        Some(PageMapping {
+        NonNull::new(ptr).map(|ptr| PageMapping {
             page,
             ptr,
             _phantom: PhantomData,
@@ -157,13 +170,13 @@ impl<const ORDER: u32> Pages<ORDER> {
 impl<const ORDER: u32> Drop for Pages<ORDER> {
     fn drop(&mut self) {
         // SAFETY: By the type invariants, we know the pages are allocated with the given order.
-        unsafe { bindings::__free_pages(self.pages, ORDER) };
+        unsafe { bindings::__free_pages(self.pages.as_ptr(), ORDER) };
     }
 }
 
 struct PageMapping<'a> {
-    page: *mut bindings::page,
-    ptr: *mut c_types::c_void,
+    page: NonNull<bindings::page>,
+    ptr: NonNull<c_types::c_void>,
     _phantom: PhantomData<&'a i32>,
 }
 
@@ -171,6 +184,6 @@ impl Drop for PageMapping<'_> {
     fn drop(&mut self) {
         // SAFETY: An instance of `PageMapping` is created only when `kmap` succeeded for the given
         // page, so it is safe to unmap it here.
-        unsafe { rust_helper_kunmap(self.page) };
+        unsafe { rust_helper_kunmap(self.page.as_ptr()) };
     }
 }
