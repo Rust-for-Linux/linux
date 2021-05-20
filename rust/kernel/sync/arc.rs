@@ -105,7 +105,13 @@ impl<T: RefCounted + ?Sized> Ref<T> {
     /// can only be called once for each previous call to [``Ref::into_raw`].
     pub unsafe fn from_raw(ptr: *const T) -> Self {
         Ref {
-            ptr: NonNull::new(ptr as _).unwrap(),
+            ptr: if cfg!(debug_assertions) {
+                NonNull::new(ptr as _).unwrap()
+            } else {
+                // SAFETY: since `ptr` must have been returned by a previous call to `Ref::into_raw`
+                // it cannot be null.
+                NonNull::new_unchecked(ptr as _)
+            },
         }
     }
 }

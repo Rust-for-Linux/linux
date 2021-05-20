@@ -9,7 +9,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use core::mem;
-use core::ptr;
+use core::ptr::{self, NonNull};
 use core::sync::atomic;
 
 use crate::{
@@ -86,7 +86,7 @@ pub struct Sysctl<T: SysctlStorage> {
     inner: Box<T>,
     // Responsible for keeping the `ctl_table` alive.
     _table: Box<[bindings::ctl_table]>,
-    header: *mut bindings::ctl_table_header,
+    header: NonNull<bindings::ctl_table_header>,
 }
 
 // SAFETY: The only public method we have is `get()`, which returns `&T`, and
@@ -159,14 +159,13 @@ impl<T: SysctlStorage> Sysctl<T> {
 
         let result =
             unsafe { bindings::register_sysctl(path.as_ptr() as *const i8, table.as_mut_ptr()) };
-        if result.is_null() {
-            return Err(error::Error::ENOMEM);
-        }
+
+        let header = NonNull::new(result).ok_or(error::Error::ENOMEM)?;
 
         Ok(Sysctl {
             inner: storage,
             _table: table,
-            header: result,
+            header,
         })
     }
 
@@ -179,8 +178,9 @@ impl<T: SysctlStorage> Sysctl<T> {
 impl<T: SysctlStorage> Drop for Sysctl<T> {
     fn drop(&mut self) {
         unsafe {
-            bindings::unregister_sysctl_table(self.header);
+            bindings::unregister_sysctl_table(self.header.as_ptr());
         }
-        self.header = ptr::null_mut();
+        // TODO: this previously set `self.header` to `NULL` here without an apparent reason why.
+        // `self.header` should not be accessible after droping it.
     }
 }
