@@ -9,35 +9,35 @@ use kernel::prelude::*;
 
 module! {
     type: RustModuleParameters,
-    name: b"rust_module_parameters",
-    author: b"Rust for Linux Contributors",
-    description: b"Rust module parameters sample",
-    license: b"GPL v2",
+    name: "rust_module_parameters",
+    author: "Rust for Linux Contributors",
+    description: "Rust module parameters sample",
+    license: "GPL v2",
     params: {
         my_bool: bool {
             default: true,
             permissions: 0,
-            description: b"Example of bool",
+            description: "Example of bool",
         },
         my_i32: i32 {
             default: 42,
             permissions: 0o644,
-            description: b"Example of i32",
+            description: "Example of i32",
         },
         my_str: str {
-            default: b"default str val",
+            default: "default str val",
             permissions: 0o644,
-            description: b"Example of a string param",
+            description: "Example of a string param",
         },
         my_usize: usize {
             default: 42,
             permissions: 0o644,
-            description: b"Example of usize",
+            description: "Example of usize",
         },
         my_array: ArrayParam<i32, 3> {
             default: [0, 1],
             permissions: 0,
-            description: b"Example of array",
+            description: "Example of array",
         },
     },
 }

@@ -15,10 +15,10 @@ use kernel::{
 
 module! {
     type: RustSync,
-    name: b"rust_sync",
-    author: b"Rust for Linux Contributors",
-    description: b"Rust synchronisation primitives sample",
-    license: b"GPL v2",
+    name: "rust_sync",
+    author: "Rust for Linux Contributors",
+    description: "Rust synchronisation primitives sample",
+    license: "GPL v2",
 }
 
 struct RustSync;

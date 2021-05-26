@@ -12,10 +12,10 @@ use kernel::{c_str, chrdev, file_operations::FileOperations};
 
 module! {
     type: RustChrdev,
-    name: b"rust_chrdev",
-    author: b"Rust for Linux Contributors",
-    description: b"Rust character device sample",
-    license: b"GPL v2",
+    name: "rust_chrdev",
+    author: "Rust for Linux Contributors",
+    description: "Rust character device sample",
+    license: "GPL v2",
 }
 
 #[derive(Default)]

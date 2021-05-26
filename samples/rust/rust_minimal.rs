@@ -9,10 +9,10 @@ use kernel::prelude::*;
 
 module! {
     type: RustMinimal,
-    name: b"rust_minimal",
-    author: b"Rust for Linux Contributors",
-    description: b"Rust minimal sample",
-    license: b"GPL v2",
+    name: "rust_minimal",
+    author: "Rust for Linux Contributors",
+    description: "Rust minimal sample",
+    license: "GPL v2",
 }
 
 struct RustMinimal {

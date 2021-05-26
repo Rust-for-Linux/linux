@@ -3,7 +3,7 @@
 obj-$(CONFIG_RUST) += core.o compiler_builtins.o helpers.o
 extra-$(CONFIG_RUST) += exports_core_generated.h
 
-extra-$(CONFIG_RUST) += libmodule.so
+extra-$(CONFIG_RUST) += libmacros.so
 
 extra-$(CONFIG_RUST) += bindings_generated.rs
 obj-$(CONFIG_RUST) += alloc.o kernel.o
@@ -35,11 +35,11 @@ quiet_cmd_rustdoc = RUSTDOC $<
 		--output $(objtree)/rust/doc --crate-name $(subst rustdoc-,,$@) \
 		-Fmissing-docs @$(objtree)/include/generated/rustc_cfg $<
 
-rustdoc: rustdoc-module rustdoc-compiler_builtins rustdoc-kernel
+rustdoc: rustdoc-macros rustdoc-compiler_builtins rustdoc-kernel
 
-rustdoc-module: private rustdoc_target_flags = --crate-type proc-macro \
+rustdoc-macros: private rustdoc_target_flags = --crate-type proc-macro \
     --extern proc_macro
-rustdoc-module: $(srctree)/rust/module.rs FORCE
+rustdoc-macros: $(srctree)/rust/macros/lib.rs FORCE
 	$(call if_changed,rustdoc_host)
 
 rustdoc-compiler_builtins: $(srctree)/rust/compiler_builtins.rs FORCE
@@ -47,9 +47,9 @@ rustdoc-compiler_builtins: $(srctree)/rust/compiler_builtins.rs FORCE
 
 rustdoc-kernel: private rustdoc_target_flags = --extern alloc \
     --extern build_error \
-    --extern module=$(objtree)/rust/libmodule.so
-rustdoc-kernel: $(srctree)/rust/kernel/lib.rs rustdoc-module \
-    $(objtree)/rust/libmodule.so $(objtree)/rust/bindings_generated.rs FORCE
+    --extern macros=$(objtree)/rust/libmacros.so
+rustdoc-kernel: $(srctree)/rust/kernel/lib.rs rustdoc-macros \
+    $(objtree)/rust/libmacros.so $(objtree)/rust/bindings_generated.rs FORCE
 	$(call if_changed,rustdoc)
 
 ifdef CONFIG_CC_IS_CLANG
@@ -126,7 +126,7 @@ quiet_cmd_rustc_procmacro = $(RUSTC_OR_CLIPPY_QUIET) P $@
 	mv $(objtree)/rust/$(patsubst lib%.so,%,$(notdir $@)).d $(depfile); \
 	sed -i '/^\#/d' $(depfile)
 
-$(objtree)/rust/libmodule.so: $(srctree)/rust/module.rs FORCE
+$(objtree)/rust/libmacros.so: $(srctree)/rust/macros/lib.rs FORCE
 	$(call if_changed_dep,rustc_procmacro)
 
 quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L $@
@@ -166,11 +166,11 @@ $(objtree)/rust/build_error.o: $(srctree)/rust/build_error.rs \
     $(objtree)/rust/compiler_builtins.o FORCE
 	$(call if_changed_dep,rustc_library)
 
-# ICE on `--extern module`: https://github.com/rust-lang/rust/issues/56935
+# ICE on `--extern macros`: https://github.com/rust-lang/rust/issues/56935
 $(objtree)/rust/kernel.o: private rustc_target_flags = --extern alloc \
     --extern build_error \
-    --extern module=$(objtree)/rust/libmodule.so
+    --extern macros=$(objtree)/rust/libmacros.so
 $(objtree)/rust/kernel.o: $(srctree)/rust/kernel/lib.rs $(objtree)/rust/alloc.o \
     $(objtree)/rust/build_error.o \
-    $(objtree)/rust/libmodule.so $(objtree)/rust/bindings_generated.rs FORCE
+    $(objtree)/rust/libmacros.so $(objtree)/rust/bindings_generated.rs FORCE
 	$(call if_changed_dep,rustc_library)

@@ -63,13 +63,13 @@ def generate_crates(srctree, objtree, sysroot_src, bindings_file):
     )
 
     append_crate(
-        "module",
-        srctree / "rust" / "module.rs",
+        "macros",
+        srctree / "rust" / "macros" / "lib.rs",
         True,
         [],
         [],
     )
-    crates[-1]["proc_macro_dylib_path"] = "rust/libmodule.so"
+    crates[-1]["proc_macro_dylib_path"] = "rust/libmacros.so"
 
     append_crate(
         "build_error",
@@ -83,7 +83,7 @@ def generate_crates(srctree, objtree, sysroot_src, bindings_file):
         "kernel",
         srctree / "rust" / "kernel" / "lib.rs",
         True,
-        ["core", "alloc", "module", "build_error"],
+        ["core", "alloc", "macros", "build_error"],
         cfg,
     )
     crates[-1]["env"]["RUST_BINDINGS_FILE"] = str(bindings_file.resolve(True))

@@ -20,10 +20,10 @@ use kernel::{
 
 module! {
     type: RustMiscdev,
-    name: b"rust_miscdev",
-    author: b"Rust for Linux Contributors",
-    description: b"Rust miscellaneous device sample",
-    license: b"GPL v2",
+    name: "rust_miscdev",
+    author: "Rust for Linux Contributors",
+    description: "Rust miscellaneous device sample",
+    license: "GPL v2",
 }
 
 const MAX_TOKENS: usize = 3;

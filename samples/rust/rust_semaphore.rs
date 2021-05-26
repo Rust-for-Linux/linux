@@ -36,10 +36,10 @@ use kernel::{
 
 module! {
     type: RustSemaphore,
-    name: b"rust_semaphore",
-    author: b"Rust for Linux Contributors",
-    description: b"Rust semaphore sample",
-    license: b"GPL v2",
+    name: "rust_semaphore",
+    author: "Rust for Linux Contributors",
+    description: "Rust semaphore sample",
+    license: "GPL v2",
 }
 
 struct SemaphoreInner {

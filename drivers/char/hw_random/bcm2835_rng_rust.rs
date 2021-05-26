@@ -13,10 +13,10 @@ use kernel::{c_str, platdev};
 
 module! {
     type: RngModule,
-    name: b"bcm2835_rng_rust",
-    author: b"Rust for Linux Contributors",
-    description: b"BCM2835 Random Number Generator (RNG) driver",
-    license: b"GPL v2",
+    name: "bcm2835_rng_rust",
+    author: "Rust for Linux Contributors",
+    description: "BCM2835 Random Number Generator (RNG) driver",
+    license: "GPL v2",
 }
 
 struct RngModule {
