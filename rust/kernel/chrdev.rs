@@ -15,7 +15,7 @@ use core::pin::Pin;
 
 use crate::bindings;
 use crate::c_types;
-use crate::error::{Error, Result};
+use crate::error::{from_kernel_int_result, Error, Result};
 use crate::file_operations;
 use crate::str::CStr;
 
@@ -60,10 +60,9 @@ impl Cdev {
         // - [`(*self.0).owner`] will live at least as long as the
         //   module, which is an implicit requirement.
         let rc = unsafe { bindings::cdev_add(self.0, dev, count) };
-        if rc != 0 {
-            return Err(Error::from_kernel_errno(rc));
-        }
-        Ok(())
+        // SAFETY: `bindings::cdev_add()` returns zero on success,
+        // or a valid negative `errno` on error.
+        unsafe { from_kernel_int_result(rc) }
     }
 }
 
@@ -149,8 +148,10 @@ impl<const N: usize> Registration<{ N }> {
                     this.name.as_char_ptr(),
                 )
             };
-            if res != 0 {
-                return Err(Error::from_kernel_errno(res));
+            // SAFETY: `bindings::alloc_chrdev_region()` returns zero on
+            // success, or a valid negative `errno` on error.
+            unsafe {
+                from_kernel_int_result(res)?;
             }
             const NONE: Option<Cdev> = None;
             this.inner = Some(RegistrationInner {

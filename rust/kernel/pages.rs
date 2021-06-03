@@ -5,8 +5,8 @@
 //! TODO: This module is a work in progress.
 
 use crate::{
-    bindings, c_types, io_buffer::IoBufferReader, user_ptr::UserSlicePtrReader, Error, Result,
-    PAGE_SIZE,
+    bindings, c_types, error::from_kernel_int_result, io_buffer::IoBufferReader,
+    user_ptr::UserSlicePtrReader, Error, Result, PAGE_SIZE,
 };
 use core::{marker::PhantomData, ptr};
 
@@ -65,11 +65,9 @@ impl<const ORDER: u32> Pages<ORDER> {
         // SAFETY: We check above that the allocation is of order 0. The range of `address` is
         // already checked by `vm_insert_page`.
         let ret = unsafe { bindings::vm_insert_page(vma, address as _, self.pages) };
-        if ret != 0 {
-            Err(Error::from_kernel_errno(ret))
-        } else {
-            Ok(())
-        }
+        // SAFETY: `bindings::vm_insert_page()` returns zero on success,
+        // or a valid negative `errno` on error.
+        unsafe { from_kernel_int_result(ret) }
     }
 
     /// Copies data from the given [`UserSlicePtrReader`] into the pages.

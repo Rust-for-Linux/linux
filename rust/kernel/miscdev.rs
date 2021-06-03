@@ -7,7 +7,7 @@
 //! Reference: <https://www.kernel.org/doc/html/latest/driver-api/misc_devices.html>
 
 use crate::bindings;
-use crate::error::{Error, Result};
+use crate::error::{from_kernel_int_result, Error, Result};
 use crate::file_operations::{FileOpenAdapter, FileOpener, FileOperationsVtable};
 use crate::str::CStr;
 use alloc::boxed::Box;
@@ -73,8 +73,10 @@ impl<T: Sync> Registration<T> {
         this.mdev.minor = minor.unwrap_or(bindings::MISC_DYNAMIC_MINOR as i32);
 
         let ret = unsafe { bindings::misc_register(&mut this.mdev) };
-        if ret < 0 {
-            return Err(Error::from_kernel_errno(ret));
+        // SAFETY: `bindings::alloc_chrdev_region()` returns zero on
+        // success, or a valid negative `errno` on error.
+        unsafe {
+            from_kernel_int_result(ret)?;
         }
         this.registered = true;
         Ok(())

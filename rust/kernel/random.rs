@@ -6,7 +6,10 @@
 
 use core::convert::TryInto;
 
-use crate::{bindings, c_types, error};
+use crate::{
+    bindings, c_types,
+    error::{self, from_kernel_int_result},
+};
 
 /// Fills a byte slice with random bytes generated from the kernel's CSPRNG.
 ///
@@ -14,8 +17,10 @@ use crate::{bindings, c_types, error};
 /// and will block until it is ready.
 pub fn getrandom(dest: &mut [u8]) -> error::Result {
     let res = unsafe { bindings::wait_for_random_bytes() };
-    if res != 0 {
-        return Err(error::Error::from_kernel_errno(res));
+    // SAFETY: `bindings::wait_for_random_bytes()` returns zero on success,
+    // or a valid negative `errno` on error.
+    unsafe {
+        from_kernel_int_result(res)?;
     }
 
     unsafe {

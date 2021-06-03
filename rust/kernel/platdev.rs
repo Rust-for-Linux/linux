@@ -8,7 +8,7 @@
 
 use crate::{
     bindings, c_types,
-    error::{Error, Result},
+    error::{from_kernel_int_result, Error, Result},
     from_kernel_result,
     of::OfMatchTable,
     str::CStr,
@@ -83,8 +83,10 @@ impl Registration {
         //       `bindings::platform_driver_unregister()`, or
         //      - null.
         let ret = unsafe { bindings::__platform_driver_register(&mut this.pdrv, module.0) };
-        if ret < 0 {
-            return Err(Error::from_kernel_errno(ret));
+        // SAFETY: `bindings::__platform_driver_register()` returns zero on
+        // success, or a valid negative `errno` on error.
+        unsafe {
+            from_kernel_int_result(ret)?;
         }
         this.registered = true;
         Ok(())
