@@ -5,7 +5,11 @@
 //! C headers: [`include/linux/fs.h`](../../../../include/linux/fs.h) and
 //! [`include/linux/file.h`](../../../../include/linux/file.h)
 
-use crate::{bindings, error::Error, Result};
+use crate::{
+    bindings,
+    error::{from_kernel_int_result_uint, Error},
+    Result,
+};
 use core::{mem::ManuallyDrop, ops::Deref};
 
 /// Wraps the kernel's `struct file`.
@@ -96,9 +100,9 @@ impl FileDescriptorReservation {
     /// Creates a new file descriptor reservation.
     pub fn new(flags: u32) -> Result<Self> {
         let fd = unsafe { bindings::get_unused_fd_flags(flags) };
-        if fd < 0 {
-            return Err(Error::from_kernel_errno(fd));
-        }
+        // SAFETY: `bindings::get_unused_fd_flags()` returns a non-negative
+        // `fd` on success, or a valid negative `errno` on error.
+        let fd = unsafe { from_kernel_int_result_uint(fd)? };
         Ok(Self { fd: fd as _ })
     }
 
