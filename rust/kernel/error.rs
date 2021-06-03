@@ -64,6 +64,8 @@ impl Error {
     ///
     /// It is a bug to pass an out-of-range `errno`. `EINVAL` would
     /// be returned in such a case.
+    // TODO: remove `dead_code` marker once an in-kernel client is available.
+    #[allow(dead_code)]
     pub(crate) fn from_kernel_errno(errno: c_types::c_int) -> Error {
         if errno < -(bindings::MAX_ERRNO as i32) || errno >= 0 {
             // TODO: make it a `WARN_ONCE` once available.
