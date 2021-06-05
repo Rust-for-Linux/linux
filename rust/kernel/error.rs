@@ -24,8 +24,23 @@ use core::str::{self, Utf8Error};
 pub struct Error(c_types::c_int);
 
 impl Error {
-    /// Invalid argument.
-    pub const EINVAL: Self = Error(-(bindings::EINVAL as i32));
+    /// Operation not permitted.
+    pub const EPERM: Self = Error(-(bindings::EPERM as i32));
+
+    /// No such file or directory.
+    pub const ENOENT: Self = Error(-(bindings::ENOENT as i32));
+
+    /// No such process.
+    pub const ESRCH: Self = Error(-(bindings::ESRCH as i32));
+
+    /// Interrupted system call.
+    pub const EINTR: Self = Error(-(bindings::EINTR as i32));
+
+    /// Bad file number.
+    pub const EBADF: Self = Error(-(bindings::EBADF as i32));
+
+    /// Try again.
+    pub const EAGAIN: Self = Error(-(bindings::EAGAIN as i32));
 
     /// Out of memory.
     pub const ENOMEM: Self = Error(-(bindings::ENOMEM as i32));
@@ -33,32 +48,17 @@ impl Error {
     /// Bad address.
     pub const EFAULT: Self = Error(-(bindings::EFAULT as i32));
 
-    /// Illegal seek.
-    pub const ESPIPE: Self = Error(-(bindings::ESPIPE as i32));
-
-    /// Try again.
-    pub const EAGAIN: Self = Error(-(bindings::EAGAIN as i32));
-
     /// Device or resource busy.
     pub const EBUSY: Self = Error(-(bindings::EBUSY as i32));
 
+    /// Invalid argument.
+    pub const EINVAL: Self = Error(-(bindings::EINVAL as i32));
+
+    /// Illegal seek.
+    pub const ESPIPE: Self = Error(-(bindings::ESPIPE as i32));
+
     /// Restart the system call.
     pub const ERESTARTSYS: Self = Error(-(bindings::ERESTARTSYS as i32));
-
-    /// Operation not permitted.
-    pub const EPERM: Self = Error(-(bindings::EPERM as i32));
-
-    /// No such process.
-    pub const ESRCH: Self = Error(-(bindings::ESRCH as i32));
-
-    /// No such file or directory.
-    pub const ENOENT: Self = Error(-(bindings::ENOENT as i32));
-
-    /// Interrupted system call.
-    pub const EINTR: Self = Error(-(bindings::EINTR as i32));
-
-    /// Bad file number.
-    pub const EBADF: Self = Error(-(bindings::EBADF as i32));
 
     /// Creates an [`Error`] from a kernel error code.
     ///
