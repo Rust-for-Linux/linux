@@ -3,6 +3,12 @@
 #include <linux/cdev.h>
 #include <linux/errname.h>
 #include <linux/fs.h>
+#include <linux/netdevice.h>
+#include <linux/ethtool.h>
+#include <linux/etherdevice.h>
+#include <linux/netdev_features.h>
+#include <linux/rtnetlink.h>
+#include <net/rtnetlink.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/slab.h>
@@ -21,3 +27,5 @@
 // `bindgen` gets confused at certain things
 const gfp_t BINDINGS_GFP_KERNEL = GFP_KERNEL;
 const gfp_t BINDINGS___GFP_ZERO = __GFP_ZERO;
+
+const int BINDINGS_NLA_HDRLEN = NLA_HDRLEN;

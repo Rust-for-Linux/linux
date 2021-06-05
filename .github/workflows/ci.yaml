@@ -137,7 +137,11 @@ jobs:
 
       # Setup: LLVM
       - run: curl https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-      - run: sudo add-apt-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-12 main'
+      # Retry to be resilient to intermittent network issues
+      - run: |
+          sudo add-apt-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-12 main' ||
+            sudo add-apt-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-12 main' ||
+            sudo add-apt-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-12 main'
       - run: sudo apt-get update -y
       - run: sudo apt-get install -y llvm-12 clang-12 lld-12
       - run: echo $(llvm-config-12 --bindir) >> $GITHUB_PATH

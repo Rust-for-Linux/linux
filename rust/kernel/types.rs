@@ -158,3 +158,41 @@ impl<T: FnOnce()> Drop for ScopeGuard<T> {
         }
     }
 }
+
+/// Trait for wrappers which are holding a direct pointer that they are getting from a C side interface.
+pub trait SavedAsPointer {
+    /// The underlying C type from [`crate::bindings`] which this Wrapper is containing.
+    type InternalType;
+
+    /// Returns the raw pointer stored in the wrapper.
+    fn get_pointer(&self) -> *const Self::InternalType;
+
+    /// Returns the instance back which contains the raw pointer `ptr`.
+    ///
+    /// # Safety
+    ///
+    /// The passed pointer must be valid and of type `*const [`Self::InternalType`]`.
+    unsafe fn from_pointer(ptr: *const Self::InternalType) -> Self;
+
+    /// Returns a reference to to the internal struct
+    fn get_internal(&self) -> &Self::InternalType {
+        let ptr = self.get_pointer();
+
+        unsafe { ptr.as_ref() }.unwrap()
+    }
+}
+
+/// Trait for [`SavedAsPointer`] types which also can be accesed in a mutable way.
+pub trait SavedAsPointerMut: SavedAsPointer {
+    /// Return a mutable pointer to the underlying struct.
+    fn get_pointer_mut(&self) -> *mut Self::InternalType {
+        self.get_pointer() as *mut Self::InternalType
+    }
+
+    /// Returns a mutable referecne to the internal struct.
+    fn get_internal_mut(&mut self) -> &mut Self::InternalType {
+        let ptr = self.get_pointer() as *mut Self::InternalType;
+
+        unsafe { ptr.as_mut() }.unwrap()
+    }
+}

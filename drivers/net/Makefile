@@ -10,6 +10,7 @@ obj-$(CONFIG_BONDING) += bonding/
 obj-$(CONFIG_IPVLAN) += ipvlan/
 obj-$(CONFIG_IPVTAP) += ipvlan/
 obj-$(CONFIG_DUMMY) += dummy.o
+obj-$(CONFIG_DUMMY_RS) += dummy_rs.o
 obj-$(CONFIG_WIREGUARD) += wireguard/
 obj-$(CONFIG_EQUALIZER) += eql.o
 obj-$(CONFIG_IFB) += ifb.o

@@ -46,6 +46,7 @@ mod error;
 pub mod file;
 pub mod file_operations;
 pub mod miscdev;
+pub mod net;
 pub mod pages;
 pub mod str;
 pub mod traits;
@@ -75,6 +76,9 @@ pub mod user_ptr;
 
 #[doc(hidden)]
 pub use build_error::build_error;
+
+#[doc(hidden)]
+pub use crate::error::from_kernel_result_helper;
 
 pub use crate::error::{Error, Result};
 pub use crate::types::{Mode, ScopeGuard};
