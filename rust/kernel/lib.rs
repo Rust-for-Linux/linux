@@ -48,6 +48,7 @@ pub mod chrdev;
 mod error;
 pub mod file;
 pub mod file_operations;
+pub mod fs;
 pub mod miscdev;
 pub mod pages;
 pub mod str;

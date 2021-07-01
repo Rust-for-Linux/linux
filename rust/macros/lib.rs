@@ -130,3 +130,37 @@ pub fn module(ts: TokenStream) -> TokenStream {
 pub fn module_misc_device(ts: TokenStream) -> TokenStream {
     module::module_misc_device(ts)
 }
+
+/// Declares a kernel module that implements a file system.
+///
+/// The `type` argument should be a type which implements the [`FileSystem`] trait.
+///
+/// C header: [`include/linux/moduleparam.h`](../../../include/linux/moduleparam.h)
+///
+/// [`FileSystem`]: ../kernel/fs/trait.FileSystem.html
+///
+/// # Examples
+///
+/// ```ignore
+/// use kernel::prelude::*;
+///
+/// module! {
+///    type: MyFs,
+///    name: b"my_fs",
+///    author: b"Rust for Linux Contributors",
+///    description: b"My very own fs",
+///    license: b"GPL v2",
+/// }
+/// }
+///
+/// #[derive(Default)]
+/// struct MyFs;
+///
+/// impl kernel::fs::FileSystem for MyFile {
+///     <implement functions as needed here>
+/// }
+/// ```
+#[proc_macro]
+pub fn module_fs(ts: TokenStream) -> TokenStream {
+    module::module_fs(ts)
+}

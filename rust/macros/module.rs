@@ -742,6 +742,71 @@ pub fn module_misc_device(ts: TokenStream) -> TokenStream {
     .expect("Error parsing formatted string into token stream.")
 }
 
+pub fn module_fs(ts: TokenStream) -> TokenStream {
+    let mut it = ts.into_iter();
+
+    let info = ModuleInfo::parse(&mut it);
+
+    let module = format!("__internal_fs_module_{}", info.type_);
+
+    format!(
+        "
+            #[doc(hidden)]
+            struct {module} {{
+            }}
+
+            static mut FS_HANDLE: Option<FSHandle> = None;
+
+            impl kernel::KernelModule for {module} {{
+                fn init() -> kernel::Result<Self> {{
+                    unsafe {{ FS_HANDLE = Some({type_}::register_self(c_str!(\"{name}\"), &THIS_MODULE)?) }};
+                    Ok(Self {{}})
+                }}
+            }}
+
+            impl Drop for Ramfs {{
+                fn drop(&mut self) {{
+                    unsafe {{
+                        if let Some(fshd) = &mut FS_HANDLE {{
+                            let rs = {type_}::unregister_self(fshd);
+                            if rs.is_err() {{
+                                pr_err!(\"unregister fs {type_} failed\");
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+
+            kernel::prelude::module! {{
+                type: {module},
+                name: b\"{name}\",
+                {author}
+                {description}
+                license: b\"{license}\",
+                {alias}
+            }}
+        ",
+        module = module,
+        type_ = info.type_,
+        name = info.name,
+        author = info
+            .author
+            .map(|v| format!("author: b\"{}\",", v))
+            .unwrap_or_else(|| "".to_string()),
+        description = info
+            .description
+            .map(|v| format!("description: b\"{}\",", v))
+            .unwrap_or_else(|| "".to_string()),
+        alias = info
+            .alias
+            .map(|v| format!("alias: b\"{}\",", v))
+            .unwrap_or_else(|| "".to_string()),
+        license = info.license
+    )
+    .parse()
+    .expect("Error parsing formatted string into token stream.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

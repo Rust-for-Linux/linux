@@ -15,7 +15,7 @@ pub use alloc::{borrow::ToOwned, string::String};
 
 pub use super::build_assert;
 
-pub use macros::{module, module_misc_device};
+pub use macros::{module, module_fs, module_misc_device};
 
 pub use super::{pr_alert, pr_crit, pr_emerg, pr_err, pr_info, pr_notice, pr_warn};
 
