@@ -2,7 +2,14 @@
 
 //! Crate for all kernel procedural macros.
 
+/// helper functions
+mod helpers;
+
+/// generic module/driver macros
 mod module;
+
+/// network module/driver macros
+mod net;
 
 use proc_macro::TokenStream;
 
@@ -124,4 +131,60 @@ pub fn module(ts: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn module_misc_device(ts: TokenStream) -> TokenStream {
     module::module_misc_device(ts)
+}
+
+/// Declares a rtnl link operation table.
+///
+/// The `type` argument should match the type used for `T` in `NetDevice`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use kernel::prelude::*;
+/// use kernel::net::prelude::*;
+///
+/// fn setup(dev: &mut NetDevice<DummyRsDev>) {
+///     dev.ether_setup();
+///
+///     dev.set_ops();
+///     // ...
+/// }
+///
+/// rtnl_link_ops! {
+///     kind: b"dummy_rs",
+///     type: DummyRsDev,
+///     setup: setup,
+///     maxtype: 20,
+/// }
+///
+/// struct DummyRsDev;
+///
+/// impl NetDeviceOps<Self> for DummyRsDev {
+///     kernel::declare_net_device_ops!();
+///
+///     fn init(dev: &NetDevice<Self>) -> KernelResult<()> {
+///        Ok(())
+///     }
+///
+///     fn uninit(dev: &NetDevice<Self>) {
+///
+///     }
+/// }
+///
+/// impl EthToolOps<Self> for DummyRsDev {
+///     kernel::declare_eth_tool_ops!();
+/// }
+///
+/// fn call_from_module_init() -> KernelResult<()> {
+///     let mut dev = NetDevice::new(DummyRsDev, kernel::cstr!("dummyrs%d"), kernel::net::device::NetNameAssingType::Enum, 1, 1)?;
+///
+///     dev.register();
+///     dev.set_rtnl_ops(dummy_rs_rtnl_link_ops);
+///
+///     Ok(())
+/// }
+/// ```
+#[proc_macro]
+pub fn rtnl_link_ops(ts: TokenStream) -> TokenStream {
+    net::rtnl_link_ops(ts)
 }

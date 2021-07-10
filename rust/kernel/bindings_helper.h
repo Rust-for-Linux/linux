@@ -18,7 +18,15 @@
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
 #include <linux/security.h>
+#include <linux/netdevice.h>
+#include <linux/ethtool.h>
+#include <linux/etherdevice.h>
+#include <linux/netdev_features.h>
+#include <linux/rtnetlink.h>
+#include <net/rtnetlink.h>
 
 // `bindgen` gets confused at certain things
 const gfp_t BINDINGS_GFP_KERNEL = GFP_KERNEL;
 const gfp_t BINDINGS___GFP_ZERO = __GFP_ZERO;
+
+const int BINDINGS_NLA_HDRLEN = NLA_HDRLEN;
