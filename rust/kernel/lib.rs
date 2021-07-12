@@ -146,6 +146,7 @@ impl ThisModule {
 /// Scoped lock on the kernel parameters of [`ThisModule`].
 ///
 /// Lock will be released when this struct is dropped.
+#[allow(dead_code)]
 pub struct KParamGuard<'a> {
     this_module: &'a ThisModule,
 }
