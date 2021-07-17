@@ -5,6 +5,7 @@
 use core::ops::{self, Deref, Index};
 
 use crate::bindings;
+use crate::build_assert;
 use crate::c_types;
 
 /// Byte string without UTF-8 validity guarantee.
@@ -33,9 +34,13 @@ macro_rules! b_str {
     }};
 }
 
-/// Possible errors when using conversion functions in [`CStr`].
+/// Possible errors when using conversion functions in [`CStr`] and [`CBoundedStr`].
 #[derive(Debug, Clone, Copy)]
 pub enum CStrConvertError {
+    /// Supplied string length exceeds the specified bound. Only happens when
+    /// constructing a [`CBoundedStr`].
+    BoundExceeded,
+
     /// Supplied bytes contain an interior `NUL`.
     InteriorNul,
 
@@ -254,6 +259,191 @@ macro_rules! c_str {
     ($str:literal) => {{
         const S: &str = concat!($str, "\0");
         const C: &$crate::str::CStr = $crate::str::CStr::from_bytes_with_nul_unwrap(S.as_bytes());
+        C
+    }};
+}
+
+/// A `NUL`-terminated string that is guaranteed to be shorter than a given
+/// length. This type is useful because the C side usually imposes a maximum length
+/// on types.
+///
+/// The size parameter `N` represents the maximum number of bytes including `NUL`.
+/// This implies that even though `CBoundedStr<0>` is a well-formed type it cannot
+/// be safely created.
+#[repr(transparent)]
+pub struct CBoundedStr<const N: usize>(CStr);
+
+impl<const N: usize> CBoundedStr<N> {
+    /// Creates a [`CBoundedStr`] from a [`CStr`].
+    ///
+    /// The provided [`CStr`] must be shorter than `N`.
+    #[inline]
+    pub const fn from_c_str(c_str: &CStr) -> Result<&Self, CStrConvertError> {
+        if c_str.len_with_nul() > N {
+            return Err(CStrConvertError::BoundExceeded);
+        }
+
+        // SAFETY: We just checked that all properties hold.
+        Ok(unsafe { Self::from_c_str_unchecked(c_str) })
+    }
+
+    /// Creates a [`CBoundedStr`] from a [`CStr`] without performing any sanity
+    /// checks.
+    ///
+    /// # Safety
+    ///
+    /// The provided [`CStr`] must be shorter than `N`.
+    #[inline]
+    pub const unsafe fn from_c_str_unchecked(c_str: &CStr) -> &Self {
+        &*(c_str as *const CStr as *const Self)
+    }
+
+    /// Creates a [`CBoundedStr`] from a `[u8]`.
+    ///
+    /// The provided slice must be `NUL`-terminated, must not contain any
+    /// interior `NUL` bytes and must be shorter than `N`.
+    #[inline]
+    pub fn from_bytes_with_nul(bytes: &[u8]) -> Result<&Self, CStrConvertError> {
+        Self::from_c_str(CStr::from_bytes_with_nul(bytes)?)
+    }
+
+    /// Creates a [`CBoundedStr`] from a `[u8]` without performing any sanity
+    /// checks.
+    ///
+    /// # Safety
+    ///
+    /// The provided slice must be `NUL`-terminated, must not contain any
+    /// interior `NUL` bytes and must be shorter than `N`.
+    #[inline]
+    pub const unsafe fn from_bytes_with_nul_unchecked(bytes: &[u8]) -> &Self {
+        Self::from_c_str_unchecked(CStr::from_bytes_with_nul_unchecked(bytes))
+    }
+
+    /// Creates a [`CBoundedStr`] from a `[u8; N]` without performing any sanity
+    /// checks.
+    ///
+    /// # Safety
+    ///
+    /// The provided slice must be `NUL`-terminated.
+    #[inline]
+    pub const unsafe fn from_exact_bytes_with_nul_unchecked(bytes: &[u8; N]) -> &Self {
+        Self::from_bytes_with_nul_unchecked(bytes)
+    }
+
+    /// Relaxes the bound from `N` to `M`.
+    ///
+    /// `M` must be no less than the bound `N`.
+    #[inline]
+    pub const fn relax_bound<const M: usize>(&self) -> &CBoundedStr<M> {
+        build_assert!(N <= M, "relaxed bound should be no less than current bound");
+        unsafe { CBoundedStr::<M>::from_c_str_unchecked(&self.0) }
+    }
+
+    /// Converts the string to a `c_char` array of the same bound, filling
+    /// the remaining bytes with zero.
+    #[inline]
+    pub const fn to_char_array(&self) -> [c_types::c_char; N] {
+        let mut ret: [c_types::c_char; N] = [0; N];
+        let mut i = 0;
+        while i < self.0 .0.len() {
+            ret[i] = self.0 .0[i] as _;
+            i += 1;
+        }
+        ret
+    }
+
+    /// Expands the string to a `c_char` array of higher bound, filling
+    /// the remaining bytes with zero.
+    ///
+    /// `M` must be no less than the bound `N`.
+    #[inline]
+    pub const fn expand_to_char_array<const M: usize>(&self) -> [c_types::c_char; M] {
+        self.relax_bound().to_char_array()
+    }
+}
+
+impl<const N: usize> AsRef<BStr> for CBoundedStr<N> {
+    #[inline]
+    fn as_ref(&self) -> &BStr {
+        self.as_bytes()
+    }
+}
+
+impl<const N: usize> AsRef<CStr> for CBoundedStr<N> {
+    #[inline]
+    fn as_ref(&self) -> &CStr {
+        &self.0
+    }
+}
+
+impl<const N: usize> Deref for CBoundedStr<N> {
+    type Target = CStr;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<Idx, const N: usize> Index<Idx> for CBoundedStr<N>
+where
+    CStr: Index<Idx>,
+{
+    type Output = <CStr as Index<Idx>>::Output;
+
+    #[inline]
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+/// Creates a new [`CBoundedStr`] from a string literal.
+///
+/// The string literal should not contain any `NUL` bytes, and its length with `NUL` should not
+/// exceed the bound supplied.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// // If no bound is specified, the tighest bound will be inferred:
+/// const MY_CSTR: &'static CBoundedStr<17> = c_bounded_str!("My awesome CStr!");
+/// ```
+///
+/// ```rust,compile_fail
+/// // This does not compile as the inferred type is `CBoundedStr<17>`.
+/// const MY_CSTR: &'static CBoundedStr<100> = c_bounded_str!("My awesome CStr!");
+/// ```
+///
+/// ```rust,no_run
+/// // You can relax the bound using the `relax_bound` method.
+/// const MY_CSTR: &'static CBoundedStr<100> = c_bounded_str!("My awesome CStr!").relax_bound();
+///
+/// // Or alternatively specify a bound.
+/// // In this case the supplied bound must be a constant expression.
+/// const MY_CSTR2: &'static CBoundedStr<100> = c_bounded_str!(100, "My awesome CStr!");
+///
+/// // Or let the compiler infer the bound for you.
+/// const MY_CSTR3: &'static CBoundedStr<100> = c_bounded_str!(_, "My awesome CStr!");
+/// ```
+///
+/// ```rust,compile_fail
+/// // These do not compile as the string is longer than the specified bound.
+/// const MY_CSTR: &'static CBoundedStr<4> = c_bounded_str!(4, "My awesome CStr!");
+/// const MY_CSTR2: &'static CBoundedStr<4> = c_bounded_str!(_, "My awesome CStr!");
+/// ```
+#[macro_export]
+macro_rules! c_bounded_str {
+    ($str:literal) => {{
+        const S: &$crate::str::CStr = $crate::c_str!($str);
+        const C: &$crate::str::CBoundedStr<{ S.len_with_nul() }> =
+            unsafe { $crate::str::CBoundedStr::from_c_str_unchecked(S) };
+        C
+    }};
+    (_, $str:literal) => {{
+        $crate::c_bounded_str!($str).relax_bound()
+    }};
+    ($bound:expr, $str:literal) => {{
+        const C: &$crate::str::CBoundedStr<{ $bound }> = $crate::c_bounded_str!($str).relax_bound();
         C
     }};
 }
