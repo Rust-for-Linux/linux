@@ -14,10 +14,14 @@ unsafe impl GlobalAlloc for KernelAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // `krealloc()` is used instead of `kmalloc()` because the latter is
         // an inline function and cannot be bound to as a result.
+        // SAFETY: FFI call.
         unsafe { bindings::krealloc(ptr::null(), layout.size(), bindings::GFP_KERNEL) as *mut u8 }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        // SAFETY: the caller must guarantee that `ptr` and `layout` denote memory
+        // allocated by this allocator, so allocated with `kmalloc`.
+        // FFI call.
         unsafe {
             bindings::kfree(ptr as *const c_types::c_void);
         }
@@ -32,16 +36,21 @@ static ALLOCATOR: KernelAllocator = KernelAllocator;
 // let's generate them ourselves instead.
 #[no_mangle]
 pub fn __rust_alloc(size: usize, _align: usize) -> *mut u8 {
+    // SAFETY: FFI call.
     unsafe { bindings::krealloc(core::ptr::null(), size, bindings::GFP_KERNEL) as *mut u8 }
 }
 
 #[no_mangle]
 pub fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
+    // SAFETY: the caller must guarantee that `ptr` and `layout` denote memory
+    // allocated by this allocator, so allocated with `kmalloc`.
+    // FFI call.
     unsafe { bindings::kfree(ptr as *const c_types::c_void) };
 }
 
 #[no_mangle]
 pub fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: usize) -> *mut u8 {
+    // SAFETY: FFI call.
     unsafe {
         bindings::krealloc(
             ptr as *const c_types::c_void,
@@ -53,6 +62,7 @@ pub fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: u
 
 #[no_mangle]
 pub fn __rust_alloc_zeroed(size: usize, _align: usize) -> *mut u8 {
+    // SAFETY: FFI call.
     unsafe {
         bindings::krealloc(
             core::ptr::null(),
