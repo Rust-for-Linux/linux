@@ -126,6 +126,9 @@ impl Error {
     /// Math result not representable.
     pub const ERANGE: Self = Error(-(bindings::ERANGE as i32));
 
+    /// Cannot assign requested address
+    pub const EADDRNOTAVAIL: Self = Error(-(bindings::EADDRNOTAVAIL as i32));
+
     /// Restart the system call.
     pub const ERESTARTSYS: Self = Error(-(bindings::ERESTARTSYS as i32));
 
@@ -276,7 +279,7 @@ where
 #[macro_export]
 macro_rules! from_kernel_result {
     ($($tt:tt)*) => {{
-        $crate::error::from_kernel_result_helper((|| {
+        $crate::from_kernel_result_helper((|| {
             $($tt)*
         })())
     }};

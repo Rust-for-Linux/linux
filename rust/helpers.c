@@ -11,6 +11,9 @@
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/security.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+#include <linux/rtnetlink.h>
 
 void rust_helper_BUG(void)
 {
@@ -211,6 +214,34 @@ int rust_helper_security_binder_transfer_file(struct task_struct *from,
 	return security_binder_transfer_file(from, to, file);
 }
 EXPORT_SYMBOL_GPL(rust_helper_security_binder_transfer_file);
+
+void *rust_helper_netdev_priv(struct net_device *dev)
+{
+	return netdev_priv(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_netdev_priv);
+
+void rust_helper_eth_hw_addr_random(struct net_device *dev)
+{
+	eth_hw_addr_random(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_eth_hw_addr_random);
+
+int rust_helper_net_device_set_new_lstats(struct net_device *dev)
+{
+	dev->lstats = netdev_alloc_pcpu_stats(struct pcpu_lstats);
+	if (!dev->lstats)
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(rust_helper_net_device_set_new_lstats);
+
+void rust_helper_dev_lstats_add(struct net_device *dev, unsigned int len)
+{
+	dev_lstats_add(dev, len);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dev_lstats_add);
 
 /* We use bindgen's --size_t-is-usize option to bind the C size_t type
  * as the Rust usize type, so we can use it in contexts where Rust

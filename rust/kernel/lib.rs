@@ -22,7 +22,8 @@
     const_unreachable_unchecked,
     doc_cfg,
     receiver_trait,
-    try_reserve
+    try_reserve,
+    doc_cfg
 )]
 
 // Ensure conditional compilation based on the kernel configuration works;
@@ -44,6 +45,11 @@ mod error;
 pub mod file;
 pub mod file_operations;
 pub mod miscdev;
+
+#[cfg(any(CONFIG_NET, doc))]
+#[doc(cfg(CONFIG_NET))]
+pub mod net;
+
 pub mod pages;
 pub mod security;
 pub mod str;
@@ -78,8 +84,11 @@ pub mod user_ptr;
 #[doc(hidden)]
 pub use build_error::build_error;
 
+#[doc(hidden)]
+pub use crate::error::from_kernel_result_helper;
+
 pub use crate::error::{Error, Result};
-pub use crate::types::{Mode, ScopeGuard};
+pub use crate::types::{Mode, SavedAsPointer, SavedAsPointerMut, ScopeGuard};
 
 /// Page size defined in terms of the `PAGE_SHIFT` macro from C.
 ///
@@ -138,6 +147,7 @@ impl ThisModule {
 /// Scoped lock on the kernel parameters of [`ThisModule`].
 ///
 /// Lock will be released when this struct is dropped.
+#[allow(dead_code)]
 pub struct KParamGuard<'a> {
     this_module: &'a ThisModule,
 }
