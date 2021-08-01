@@ -82,7 +82,7 @@ impl<const ORDER: u32> Pages<ORDER> {
     ///
     /// # Safety
     ///
-    /// Callers must ensure that the destination buffer is valid for the given length.
+    /// Callers must ensure that the destination buffer is valid for writes for the given length.
     /// Additionally, if the raw buffer is intended to be recast, they must ensure that the data
     /// can be safely cast; [`crate::io_buffer::ReadableFromBytes`] has more details about it.
     pub unsafe fn read(&self, dest: *mut u8, offset: usize, len: usize) -> Result {
@@ -93,7 +93,15 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
-        unsafe { ptr::copy((mapping.ptr as *mut u8).add(offset), dest, len) };
+        // SAFETY: we just checked that `offset + len <= PAGE_SIZE`, so `mapping.ptr` and
+        // `mapping.ptr + offset` are in the same allocated object, the page we're
+        // reading from, with no overflow. Also, `offset <= PAGE_LEN < isize::MAX`
+        // so `offset` can't overflow an `isize`.
+        let src = unsafe { (mapping.ptr as *mut u8).add(offset) };
+        // SAFETY: `src` is valid for reads from the type invariants, and `dest` is
+        // guaranteed by the caller to be valid for writes. Because we're copying `u8`s
+        // which have an alignment of 1, `src` and `dest` are always properly aligned.
+        unsafe { ptr::copy(src, dest, len) };
         Ok(())
     }
 
@@ -101,7 +109,7 @@ impl<const ORDER: u32> Pages<ORDER> {
     ///
     /// # Safety
     ///
-    /// Callers must ensure that the buffer is valid for the given length. Additionally, if the
+    /// Callers must ensure that the source buffer is valid for reads for the given length. Additionally, if the
     /// page is (or will be) mapped by userspace, they must ensure that no kernel data is leaked
     /// through padding if it was cast from another type; [`crate::io_buffer::WritableToBytes`] has
     /// more details about it.
@@ -113,7 +121,15 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
-        unsafe { ptr::copy(src, (mapping.ptr as *mut u8).add(offset), len) };
+        // SAFETY: we just checked that `offset + len <= PAGE_SIZE`, so `mapping.ptr` and
+        // `mapping.ptr + offset` are in the same allocated object, the page we're
+        // reading from, with no overflow. Also, `offset <= PAGE_LEN < isize::MAX`
+        // so `offset` can't overflow an `isize`.
+        let dest = unsafe { (mapping.ptr as *mut u8).add(offset) };
+        // SAFETY: `src` is guaranteed by the caller to be valid for reads, and `dest` is
+        //valid for writes from the type invariants. Because we're copying `u8`s
+        // which have an alignment of 1, `src` and `dest` are always properly aligned.
+        unsafe { ptr::copy(src, dest, len) };
         Ok(())
     }
 

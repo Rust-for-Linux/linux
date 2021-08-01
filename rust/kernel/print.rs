@@ -33,7 +33,7 @@ unsafe fn rust_fmt_argument(buf: *mut c_char, end: *mut c_char, ptr: *const c_vo
             // `buf` goes past `end`.
             let len_to_copy = cmp::min(buf_new, self.end).saturating_sub(self.buf);
 
-            // SAFETY: In any case, `buf` is non-null and properly aligned.
+            // SAFETY: The caller guarantees `buf` is non-null and properly aligned.
             // If `len_to_copy` is non-zero, then we know `buf` has not past
             // `end` yet and so is valid.
             unsafe {
@@ -53,6 +53,7 @@ unsafe fn rust_fmt_argument(buf: *mut c_char, end: *mut c_char, ptr: *const c_vo
         buf: buf as _,
         end: end as _,
     };
+    // SAFETY: the caller must guarantee that `ptr` is valid.
     let _ = w.write_fmt(unsafe { *(ptr as *const fmt::Arguments<'_>) });
     w.buf as _
 }
@@ -132,6 +133,7 @@ pub unsafe fn call_printk(
     args: fmt::Arguments<'_>,
 ) {
     // `_printk` does not seem to fail in any path.
+    // SAFETY: FFI call.
     unsafe {
         bindings::_printk(
             format_string.as_ptr() as _,

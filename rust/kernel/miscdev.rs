@@ -147,7 +147,7 @@ impl<T: FileOperations> Registration<T> {
         open_data: T::OpenData,
         opts: &Options<'_>,
     ) -> Result {
-        // SAFETY: We must ensure that we never move out of `this`.
+        // SAFETY: we don't move out of `this`.
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
             // Already registered.
@@ -170,6 +170,7 @@ impl<T: FileOperations> Registration<T> {
         this.registered = true;
         this.open_data.write(open_data);
 
+        // SAFETY: FFI call.
         let ret = unsafe { bindings::misc_register(&mut this.mdev) };
         if ret < 0 {
             // INVARIANT: `registered` is set back to `false` and the `open_data` is destructued.
