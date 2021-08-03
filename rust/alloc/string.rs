@@ -3004,3 +3004,107 @@ impl From<char> for String {
         c.to_string()
     }
 }
+
+/// A helper type implementing non-panicking version of [`Write`] trait for [`String`].
+///
+/// The `StringWriter` type is a helper type, that implements [`Write`] trait
+/// for a [`String`] type in a way that never panics during memory allocation.
+/// Instead, if any memory allocation during all writing and formatting
+/// operations executed on the `StringWriter` fail, it saves the error and
+/// returns it as a result when the result of the writing and formatting
+/// is requested.
+///
+/// [`Write`]: fmt::Write
+///
+/// # Panics
+///
+/// `Write` trait implementation for `StringWriter` panics if a formatting
+/// trait implementation returns an error. This indicates an incorrect
+/// implementation since `fmt::Write for String` never returns an error itself.
+///
+/// # Examples
+///
+/// Basic usage:
+/// ```
+/// use alloc::collections::TryReserveError;
+/// use core::fmt::Write;
+///
+/// fn write_hello_world() -> Result<String, TryReserveError> {
+///     let mut writer = StringWriter::try_with_capacity(0)?;
+///     writer.write_fmt(format_args!("Hello, {}!", "world")).unwrap();
+///     writer.into_string()
+/// }
+///
+/// assert_eq!(write_hello_world().unwrap(), "Hello, World!");
+/// ```
+#[stable(feature = "kernel", since = "1.0.0")]
+#[derive(Debug)]
+pub struct StringWriter {
+    buffer: String,
+    error: Option<TryReserveError>,
+}
+
+impl StringWriter {
+    /// Tries to create a new empty `StringWriter` with a particular capacity.
+    ///
+    /// The underlying string, used as a result buffer, will be created with
+    /// given capacity. Please see the [`try_with_capacity`] for `String`.
+    ///
+    /// [`try_with_capacity`]: String::try_with_capacity
+    ///
+    /// If the given capacity is `0`, no allocation will occur.
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError> {
+        Ok(Self {
+            buffer: String::try_with_capacity(capacity)?,
+            error: None,
+        })
+    }
+
+    /// Retrieves the result from the `StringWriter`.
+    ///
+    /// Consumes the `StringWriter` and returns the result of preceding
+    /// writing and formatting operations executed on the `StringWriter`.
+    ///
+    /// # Errors
+    ///
+    /// If during all the preceding writing and formatting operations executed
+    /// on the `StringWriter` instance the capacity of the internal buffer
+    /// overflows, or the allocator reports a failure, then an error is returned.
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn into_string(self) -> Result<String, TryReserveError> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+
+        Ok(self.buffer)
+    }
+}
+
+#[stable(feature = "kernel", since = "1.0.0")]
+impl fmt::Write for StringWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        if self.error.is_none() {
+            if let Err(error) = self.buffer.try_push_str(s) {
+                self.error = Some(error);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_char(&mut self, c: char) -> fmt::Result {
+        if self.error.is_none() {
+            if let Err(error) = self.buffer.try_push(c) {
+                self.error = Some(error);
+            }
+        }
+
+        Ok(())
+    }
+}
