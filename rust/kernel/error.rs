@@ -224,7 +224,7 @@ impl From<TryReserveError> for Error {
 /// Note that even if a function does not return anything when it succeeds,
 /// it should still be modeled as returning a `Result` rather than
 /// just an [`Error`].
-pub type Result<T = ()> = core::result::Result<T, Error>;
+pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
 impl From<AllocError> for Error {
     fn from(_: AllocError) -> Error {
