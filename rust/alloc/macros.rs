@@ -117,6 +117,41 @@ macro_rules! format {
     }}
 }
 
+/// Tries to create a `String` using interpolation of runtime expressions.
+///
+/// The `try_format!` is an equivalent of [`format!`] macro, that will never
+/// panic on memory allocation failure. See [`format!`] for functionality details.
+///
+/// [`format!`]: crate::format
+///
+/// # Errors
+///
+/// If the capacity overflows, or the allocator reports a failure, then an error
+/// is returned.
+///
+/// # Panics
+///
+/// `try_format!` panics if a formatting trait implementation returns an error.
+/// This indicates an incorrect implementation
+/// since `fmt::Write for String` never returns an error itself.
+/// Never panics on memory allocation failure.
+///
+/// # Examples
+///
+/// ```
+/// try_format!("test").unwrap();
+/// try_format!("hello {}", "world!").unwrap();
+/// try_format!("x = {}, y = {y}", 10, y = 30).unwrap();
+/// ```
+#[macro_export]
+#[stable(feature = "kernel", since = "1.0.0")]
+macro_rules! try_format {
+    ($($arg:tt)*) => {{
+        let res = $crate::fmt::try_format($crate::__export::format_args!($($arg)*));
+        res
+    }}
+}
+
 /// Force AST node to an expression to improve diagnostics in pattern position.
 #[doc(hidden)]
 #[macro_export]
