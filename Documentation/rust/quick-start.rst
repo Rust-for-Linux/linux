@@ -179,6 +179,7 @@ Afterwards, go to::
 
 And enable some sample modules either as built-in or as loadable.
 
+Note: Rust options are also dependent on (``CONFIG_MODVERSIONS``) being disabled.
 
 Building
 --------
