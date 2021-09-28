@@ -503,7 +503,7 @@ pub fn module(ts: TokenStream) -> TokenStream {
             /// The module name.
             ///
             /// Used by the printing macros, e.g. [`info!`].
-            const __LOG_PREFIX: &[u8] = b\"{name}\\0\";
+            const __LOG_PREFIX: &kernel::str::CStr = kernel::c_str!(\"{name}\");
 
             static mut __MOD: Option<{type_}> = None;
 

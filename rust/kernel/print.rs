@@ -10,7 +10,10 @@ use core::cmp;
 use core::fmt;
 
 use crate::bindings;
+#[cfg(not(testlib))]
+use crate::c_str;
 use crate::c_types::{c_char, c_void};
+use crate::str::CStr;
 
 // Called from `vsprintf` with format specifier `%pA`.
 #[no_mangle]
@@ -57,146 +60,133 @@ unsafe fn rust_fmt_argument(buf: *mut c_char, end: *mut c_char, ptr: *const c_vo
     w.buf as _
 }
 
-/// Format strings.
-///
-/// Public but hidden since it should only be used from public macros.
-#[doc(hidden)]
-pub mod format_strings {
-    use crate::bindings;
-
-    /// The length we copy from the `KERN_*` kernel prefixes.
-    const LENGTH_PREFIX: usize = 2;
-
-    /// The length of the fixed format strings.
-    pub const LENGTH: usize = 10;
-
-    /// Generates a fixed format string for the kernel's [`printk`].
-    ///
-    /// The format string is always the same for a given level, i.e. for a
-    /// given `prefix`, which are the kernel's `KERN_*` constants.
-    ///
-    /// [`printk`]: ../../../../include/linux/printk.h
-    const fn generate(is_cont: bool, prefix: &[u8; 3]) -> [u8; LENGTH] {
-        // Ensure the `KERN_*` macros are what we expect.
-        assert!(prefix[0] == b'\x01');
-        if is_cont {
-            assert!(prefix[1] == b'c');
-        } else {
-            assert!(prefix[1] >= b'0' && prefix[1] <= b'7');
-        }
-        assert!(prefix[2] == b'\x00');
-
-        let suffix: &[u8; LENGTH - LENGTH_PREFIX] = if is_cont {
-            b"%pA\0\0\0\0\0"
-        } else {
-            b"%s: %pA\0"
-        };
-
-        [
-            prefix[0], prefix[1], suffix[0], suffix[1], suffix[2], suffix[3], suffix[4], suffix[5],
-            suffix[6], suffix[7],
-        ]
-    }
-
-    // Generate the format strings at compile-time.
-    //
-    // This avoids the compiler generating the contents on the fly in the stack.
-    //
-    // Furthermore, `static` instead of `const` is used to share the strings
-    // for all the kernel.
-    pub static EMERG: [u8; LENGTH] = generate(false, bindings::KERN_EMERG);
-    pub static ALERT: [u8; LENGTH] = generate(false, bindings::KERN_ALERT);
-    pub static CRIT: [u8; LENGTH] = generate(false, bindings::KERN_CRIT);
-    pub static ERR: [u8; LENGTH] = generate(false, bindings::KERN_ERR);
-    pub static WARNING: [u8; LENGTH] = generate(false, bindings::KERN_WARNING);
-    pub static NOTICE: [u8; LENGTH] = generate(false, bindings::KERN_NOTICE);
-    pub static INFO: [u8; LENGTH] = generate(false, bindings::KERN_INFO);
-    pub static DEBUG: [u8; LENGTH] = generate(false, bindings::KERN_DEBUG);
-    pub static CONT: [u8; LENGTH] = generate(true, bindings::KERN_CONT);
-}
-
-/// Prints a message via the kernel's [`printk`].
-///
-/// Public but hidden since it should only be used from public macros.
-///
-/// # Safety
-///
-/// The format string must be one of the ones in [`format_strings`], and
-/// the module name must be null-terminated.
+/// Log level of the kernel's [`printk`].
 ///
 /// [`printk`]: ../../../../include/linux/printk.h
-#[doc(hidden)]
-pub unsafe fn call_printk(
-    format_string: &[u8; format_strings::LENGTH],
-    module_name: &[u8],
-    args: fmt::Arguments<'_>,
-) {
-    // `printk` does not seem to fail in any path.
-    unsafe {
-        bindings::printk(
-            format_string.as_ptr() as _,
-            module_name.as_ptr(),
-            &args as *const _ as *const c_void,
-        );
+#[derive(Clone, Copy)]
+pub struct LogLevel(&'static [u8]);
+
+impl LogLevel {
+    /// Correspond to kernel's `KERN_EMERG` log level.
+    pub const EMERG: Self = Self(bindings::KERN_EMERG);
+
+    /// Correspond to kernel's `KERN_ALERT` log level.
+    pub const ALERT: Self = Self(bindings::KERN_ALERT);
+
+    /// Correspond to kernel's `KERN_CRIT` log level.
+    pub const CRIT: Self = Self(bindings::KERN_CRIT);
+
+    /// Correspond to kernel's `KERN_ERR` log level.
+    pub const ERR: Self = Self(bindings::KERN_ERR);
+
+    /// Correspond to kernel's `KERN_WARNING` log level.
+    pub const WARNING: Self = Self(bindings::KERN_WARNING);
+
+    /// Correspond to kernel's `KERN_NOTICE` log level.
+    pub const NOTICE: Self = Self(bindings::KERN_NOTICE);
+
+    /// Correspond to kernel's `KERN_INFO` log level.
+    pub const INFO: Self = Self(bindings::KERN_INFO);
+
+    /// Correspond to kernel's `KERN_DEBUG` log level.
+    pub const DEBUG: Self = Self(bindings::KERN_DEBUG);
+
+    /// Correspond to kernel's `KERN_CONT` log level.
+    pub const CONT: Self = Self(bindings::KERN_CONT);
+}
+
+/// Trait for types that can be used as the `target` field or printk macro family.
+pub trait LogTarget {
+    /// Log with this target.
+    fn printk(&self, lvl: LogLevel, args: fmt::Arguments<'_>);
+}
+
+impl<T: ?Sized + LogTarget> LogTarget for &T {
+    #[inline]
+    fn printk(&self, lvl: LogLevel, args: fmt::Arguments<'_>) {
+        (*self).printk(lvl, args);
     }
 }
 
-/// Prints a message via the kernel's [`printk`] for the `CONT` level.
-///
-/// Public but hidden since it should only be used from public macros.
-///
-/// [`printk`]: ../../../../include/linux/printk.h
-#[doc(hidden)]
-pub fn call_printk_cont(args: fmt::Arguments<'_>) {
-    // `printk` does not seem to fail in any path.
-    //
-    // SAFETY: The format string is fixed.
-    unsafe {
-        bindings::printk(
-            format_strings::CONT.as_ptr() as _,
-            &args as *const _ as *const c_void,
-        );
-    }
-}
-
-/// Performs formatting and forwards the string to [`call_printk`].
-///
-/// Public but hidden since it should only be used from public macros.
-#[doc(hidden)]
-#[cfg(not(testlib))]
-#[macro_export]
-macro_rules! print_macro (
-    // The non-continuation cases (most of them, e.g. `INFO`).
-    ($format_string:path, false, $($arg:tt)+) => (
-        // SAFETY: This hidden macro should only be called by the documented
-        // printing macros which ensure the format string is one of the fixed
-        // ones. All `__LOG_PREFIX`s are null-terminated as they are generated
-        // by the `module!` proc macro or fixed values defined in a kernel
-        // crate.
+impl LogTarget for () {
+    #[inline]
+    #[cfg(not(testlib))]
+    fn printk(&self, lvl: LogLevel, args: fmt::Arguments<'_>) {
+        // SAFETY: The format string is fixed.
         unsafe {
-            $crate::print::call_printk(
-                &$format_string,
-                crate::__LOG_PREFIX,
-                format_args!($($arg)+),
+            bindings::printk(c_str!("%s%pA").as_char_ptr(), lvl.0.as_ptr(), &args);
+        }
+    }
+
+    #[cfg(testlib)]
+    fn printk(&self, _lvl: LogLevel, _args: fmt::Arguments<'_>) {}
+}
+
+impl LogTarget for CStr {
+    #[inline]
+    #[cfg(not(testlib))]
+    fn printk(&self, lvl: LogLevel, args: fmt::Arguments<'_>) {
+        // SAFETY: The format string is fixed.
+        unsafe {
+            bindings::printk(
+                c_str!("%s%s: %pA").as_char_ptr(),
+                lvl.0.as_ptr(),
+                self.as_char_ptr(),
+                &args,
             );
         }
-    );
+    }
 
-    // The `CONT` case.
-    ($format_string:path, true, $($arg:tt)+) => (
-        $crate::print::call_printk_cont(
-            format_args!($($arg)+),
-        );
-    );
+    #[cfg(testlib)]
+    fn printk(&self, _lvl: LogLevel, _args: fmt::Arguments<'_>) {}
+}
+
+/// Prints a message with the specified log level.
+///
+/// Equivalent to the kernel's [`printk`].
+///
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
+///
+/// [`printk`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.printk
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
+///
+/// # Examples
+///
+/// ```
+/// # use kernel::print::*;
+/// # use kernel::printk;
+/// printk!(LogLevel::NOTICE, "hello {}\n", "there");
+/// ```
+#[cfg(not(testlib))]
+#[macro_export]
+macro_rules! printk (
+    (target: $target:expr, $lvl:expr, $($arg:tt)+) => {{
+        $crate::print::LogTarget::printk(
+            &($target),
+            $lvl,
+            format_args!($($arg)*)
+        )
+    }};
+    ($lvl:expr, $($arg:tt)+) => {{
+        $crate::printk!(target: crate::__LOG_PREFIX, $lvl, $($arg)*)
+    }}
 );
 
 /// Stub for doctests
 #[cfg(testlib)]
 #[macro_export]
-macro_rules! print_macro (
-    ($format_string:path, $e:expr, $($arg:tt)+) => (
-        ()
-    );
+macro_rules! printk (
+    (target: $target:expr, $lvl:expr, $($arg:tt)+) => {{
+        $crate::print::LogTarget::printk(
+            &($target),
+            $lvl,
+            format_args!($($arg)*)
+        )
+    }};
+    ($lvl:expr, $($arg:tt)+) => {{
+        $crate::printk!(target: $crate::c_str!(""), $lvl, $($arg)*)
+    }}
 );
 
 // We could use a macro to generate these macros. However, doing so ends
@@ -204,7 +194,7 @@ macro_rules! print_macro (
 // well as playing with the `doc` attribute. Furthermore, they cannot be easily
 // imported in the prelude due to [1]. So, for the moment, we just write them
 // manually, like in the C side; while keeping most of the logic in another
-// macro, i.e. [`print_macro`].
+// macro, i.e. [`printk`].
 //
 // [1]: https://github.com/rust-lang/rust/issues/52234
 
@@ -214,11 +204,11 @@ macro_rules! print_macro (
 ///
 /// Equivalent to the kernel's [`pr_emerg`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_emerg`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_emerg
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -228,8 +218,11 @@ macro_rules! print_macro (
 /// ```
 #[macro_export]
 macro_rules! pr_emerg (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::EMERG, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::EMERG, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::EMERG, $($arg)+)
     )
 );
 
@@ -239,11 +232,11 @@ macro_rules! pr_emerg (
 ///
 /// Equivalent to the kernel's [`pr_alert`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_alert`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_alert
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -253,8 +246,11 @@ macro_rules! pr_emerg (
 /// ```
 #[macro_export]
 macro_rules! pr_alert (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::ALERT, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::ALERT, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::ALERT, $($arg)+)
     )
 );
 
@@ -264,11 +260,11 @@ macro_rules! pr_alert (
 ///
 /// Equivalent to the kernel's [`pr_crit`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_crit`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_crit
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -278,8 +274,11 @@ macro_rules! pr_alert (
 /// ```
 #[macro_export]
 macro_rules! pr_crit (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::CRIT, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::CRIT, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::CRIT, $($arg)+)
     )
 );
 
@@ -289,11 +288,11 @@ macro_rules! pr_crit (
 ///
 /// Equivalent to the kernel's [`pr_err`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_err`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_err
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -303,8 +302,11 @@ macro_rules! pr_crit (
 /// ```
 #[macro_export]
 macro_rules! pr_err (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::ERR, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::ERR, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::ERR, $($arg)+)
     )
 );
 
@@ -314,11 +316,11 @@ macro_rules! pr_err (
 ///
 /// Equivalent to the kernel's [`pr_warn`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_warn`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_warn
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -328,8 +330,11 @@ macro_rules! pr_err (
 /// ```
 #[macro_export]
 macro_rules! pr_warn (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::WARNING, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::WARNING, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::WARNING, $($arg)+)
     )
 );
 
@@ -339,11 +344,11 @@ macro_rules! pr_warn (
 ///
 /// Equivalent to the kernel's [`pr_notice`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_notice`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_notice
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -353,8 +358,11 @@ macro_rules! pr_warn (
 /// ```
 #[macro_export]
 macro_rules! pr_notice (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::NOTICE, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::NOTICE, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::NOTICE, $($arg)+)
     )
 );
 
@@ -364,11 +372,11 @@ macro_rules! pr_notice (
 ///
 /// Equivalent to the kernel's [`pr_info`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_info`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_info
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -379,8 +387,11 @@ macro_rules! pr_notice (
 #[macro_export]
 #[doc(alias = "print")]
 macro_rules! pr_info (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::INFO, false, $($arg)*)
+    (target: $target:expr, $($arg:tt)+) => (
+        $crate::printk!(target: $target, $crate::print::LogLevel::INFO, $($arg)+)
+    );
+    ($($arg:tt)+) => (
+        $crate::printk!($crate::print::LogLevel::INFO, $($arg)+)
     )
 );
 
@@ -406,9 +417,14 @@ macro_rules! pr_info (
 #[macro_export]
 #[doc(alias = "print")]
 macro_rules! pr_debug (
-    ($($arg:tt)*) => (
+    (target: $target:expr, $($arg:tt)+) => (
         if cfg!(debug_assertions) {
-            $crate::print_macro!($crate::print::format_strings::DEBUG, false, $($arg)*)
+            $crate::printk!(target: $target, $crate::print::LogLevel::DEBUG, $($arg)+)
+        }
+    );
+    ($($arg:tt)+) => (
+        if cfg!(debug_assertions) {
+            $crate::printk!($crate::print::LogLevel::DEBUG, $($arg)+)
         }
     )
 );
@@ -419,11 +435,11 @@ macro_rules! pr_debug (
 ///
 /// Equivalent to the kernel's [`pr_cont`] macro.
 ///
-/// Mimics the interface of [`std::print!`]. See [`core::fmt`] and
-/// [`alloc::format!`] for information about the formatting syntax.
+/// Use the [`format!`] syntax. See [`std::fmt`] for more information.
 ///
 /// [`pr_cont`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html#c.pr_cont
-/// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
+/// [`format!`]: alloc::format!
+/// [`std::fmt`]: https://doc.rust-lang.org/std/fmt/index.html
 ///
 /// # Examples
 ///
@@ -435,7 +451,7 @@ macro_rules! pr_debug (
 /// ```
 #[macro_export]
 macro_rules! pr_cont (
-    ($($arg:tt)*) => (
-        $crate::print_macro!($crate::print::format_strings::CONT, true, $($arg)*)
-    )
+    ($($arg:tt)*) => {{
+        $crate::print::LogTarget::printk(&(), $crate::print::LogLevel::CONT, format_args!($($arg)*))
+    }}
 );

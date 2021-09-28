@@ -26,3 +26,7 @@ pub use super::static_assert;
 pub use super::{Error, KernelModule, Result};
 
 pub use crate::traits::TryPin;
+
+// Default log prefix to none so crates without `module!` can use printk macros.
+#[doc(hidden)]
+pub const __LOG_PREFIX: () = ();
