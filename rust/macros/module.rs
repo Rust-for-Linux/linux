@@ -4,7 +4,7 @@ use proc_macro::{token_stream, Delimiter, Group, Literal, TokenStream, TokenTree
 
 use crate::helpers::*;
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ParamType {
     Ident(String),
     Array { vals: String, max_length: usize },
@@ -211,6 +211,44 @@ fn generated_array_ops_name(vals: &str, max_length: usize) -> String {
     )
 }
 
+#[derive(Debug)]
+struct ParamInfo {
+    name: String,
+    type_: ParamType,
+    default: String,
+    permission: String,
+    description: String,
+}
+
+impl ParamInfo {
+    fn try_parse(it: &mut token_stream::IntoIter) -> Option<Self> {
+        let param_name = match it.next() {
+            Some(TokenTree::Ident(ident)) => ident.to_string(),
+            Some(_) => panic!("Expected Ident or end"),
+            None => return None,
+        };
+
+        assert_eq!(expect_punct(it), ':');
+        let param_type = expect_type(it);
+        let group = expect_group(it);
+        assert_eq!(group.delimiter(), Delimiter::Brace);
+
+        let mut param_it = group.stream().into_iter();
+        let param_default = get_default(&param_type, &mut param_it);
+        let param_permissions = get_literal(&mut param_it, "permissions");
+        let param_description = get_byte_string(&mut param_it, "description");
+        expect_end(&mut param_it);
+
+        Some(ParamInfo {
+            name: param_name,
+            type_: param_type,
+            default: param_default,
+            permission: param_permissions,
+            description: param_description,
+        })
+    }
+}
+
 #[derive(Debug, Default)]
 struct ModuleInfo {
     type_: String,
@@ -219,7 +257,7 @@ struct ModuleInfo {
     author: Option<String>,
     description: Option<String>,
     alias: Option<String>,
-    params: Option<Group>,
+    params: Vec<ParamInfo>,
 }
 
 impl ModuleInfo {
@@ -265,7 +303,17 @@ impl ModuleInfo {
                 "alias_rtnl_link" => {
                     info.alias = Some(format!("rtnl-link-{}", expect_byte_string(it)))
                 }
-                "params" => info.params = Some(expect_group(it)),
+                "params" => {
+                    let group = expect_group(it);
+                    assert_eq!(group.delimiter(), Delimiter::Brace);
+                    let mut inner_it = group.stream().into_iter();
+                    let mut params = Vec::new();
+                    while let Some(param) = ParamInfo::try_parse(&mut inner_it) {
+                        assert_eq!(expect_punct(&mut inner_it), ',');
+                        params.push(param);
+                    }
+                    info.params = params;
+                }
                 _ => panic!(
                     "Unknown key \"{}\". Valid keys are: {:?}.",
                     key, EXPECTED_KEYS
@@ -301,79 +349,52 @@ impl ModuleInfo {
 
         info
     }
-}
 
-pub fn module(ts: TokenStream) -> TokenStream {
-    let mut it = ts.into_iter();
+    fn generate(&self) -> TokenStream {
+        let name = &self.name;
+        let mut modinfo = ModInfoBuilder::new(name);
+        if let Some(author) = &self.author {
+            modinfo.emit("author", author);
+        }
+        if let Some(description) = &self.description {
+            modinfo.emit("description", description);
+        }
+        modinfo.emit("license", &self.license);
+        if let Some(alias) = &self.alias {
+            modinfo.emit("alias", alias);
+        }
 
-    let info = ModuleInfo::parse(&mut it);
+        // Built-in modules also export the `file` modinfo string
+        let file = std::env::var("RUST_MODFILE")
+            .expect("Unable to fetch RUST_MODFILE environmental variable");
+        modinfo.emit_only_builtin("file", &file);
 
-    let name = info.name.clone();
-
-    let mut modinfo = ModInfoBuilder::new(&name);
-    if let Some(author) = info.author {
-        modinfo.emit("author", &author);
-    }
-    if let Some(description) = info.description {
-        modinfo.emit("description", &description);
-    }
-    modinfo.emit("license", &info.license);
-    if let Some(alias) = info.alias {
-        modinfo.emit("alias", &alias);
-    }
-
-    // Built-in modules also export the `file` modinfo string
-    let file =
-        std::env::var("RUST_MODFILE").expect("Unable to fetch RUST_MODFILE environmental variable");
-    modinfo.emit_only_builtin("file", &file);
-
-    let mut array_types_to_generate = Vec::new();
-    if let Some(params) = info.params {
-        assert_eq!(params.delimiter(), Delimiter::Brace);
-
-        let mut it = params.stream().into_iter();
-
-        loop {
-            let param_name = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
-            };
-
-            assert_eq!(expect_punct(&mut it), ':');
-            let param_type = expect_type(&mut it);
-            let group = expect_group(&mut it);
-            assert_eq!(expect_punct(&mut it), ',');
-
-            assert_eq!(group.delimiter(), Delimiter::Brace);
-
-            let mut param_it = group.stream().into_iter();
-            let param_default = get_default(&param_type, &mut param_it);
-            let param_permissions = get_literal(&mut param_it, "permissions");
-            let param_description = get_byte_string(&mut param_it, "description");
-            expect_end(&mut param_it);
+        let mut array_types_to_generate = Vec::new();
+        for param in self.params.iter() {
+            let param_name = &param.name;
+            let param_type = &param.type_;
+            let param_default = &param.default;
+            let param_permissions = &param.permission;
+            let param_description = &param.description;
 
             // TODO: more primitive types
             // TODO: other kinds: unsafes, etc.
             let (param_kernel_type, ops): (String, _) = match param_type {
-                ParamType::Ident(ref param_type) => (
+                ParamType::Ident(param_type) => (
                     param_type.to_string(),
                     param_ops_path(param_type).to_string(),
                 ),
-                ParamType::Array {
-                    ref vals,
-                    max_length,
-                } => {
-                    array_types_to_generate.push((vals.clone(), max_length));
+                ParamType::Array { vals, max_length } => {
+                    array_types_to_generate.push((vals.clone(), *max_length));
                     (
                         format!("__rust_array_param_{}_{}", vals, max_length),
-                        generated_array_ops_name(vals, max_length),
+                        generated_array_ops_name(vals, *max_length),
                     )
                 }
             };
 
-            modinfo.emit_param("parmtype", &param_name, &param_kernel_type);
-            modinfo.emit_param("parm", &param_name, &param_description);
+            modinfo.emit_param("parmtype", param_name, &param_kernel_type);
+            modinfo.emit_param("parm", param_name, param_description);
             let param_type_internal = match param_type {
                 ParamType::Ident(ref param_type) => match param_type.as_ref() {
                     "str" => "kernel::module_param::StringParam".to_string(),
@@ -388,7 +409,7 @@ pub fn module(ts: TokenStream) -> TokenStream {
                     max_length = max_length
                 ),
             };
-            let read_func = if permissions_are_readonly(&param_permissions) {
+            let read_func = if permissions_are_readonly(param_permissions) {
                 format!(
                     "
                         fn read(&self) -> &<{param_type_internal} as kernel::module_param::ModuleParam>::Value {{
@@ -479,27 +500,26 @@ pub fn module(ts: TokenStream) -> TokenStream {
                 )
             );
         }
-    }
 
-    let mut generated_array_types = String::new();
+        let mut generated_array_types = String::new();
 
-    for (vals, max_length) in array_types_to_generate {
-        let ops_name = generated_array_ops_name(&vals, max_length);
-        generated_array_types.push_str(&format!(
-            "
+        for (vals, max_length) in array_types_to_generate {
+            let ops_name = generated_array_ops_name(&vals, max_length);
+            generated_array_types.push_str(&format!(
+                "
                 kernel::make_param_ops!(
                     {ops_name},
                     kernel::module_param::ArrayParam<{vals}, {{ {max_length} }}>
                 );
-            ",
-            ops_name = ops_name,
-            vals = vals,
-            max_length = max_length,
-        ));
-    }
+                ",
+                ops_name = ops_name,
+                vals = vals,
+                max_length = max_length,
+            ));
+        }
 
-    format!(
-        "
+        format!(
+            "
             /// The module name.
             ///
             /// Used by the printing macros, e.g. [`info!`].
@@ -585,23 +605,32 @@ pub fn module(ts: TokenStream) -> TokenStream {
             {modinfo}
 
             {generated_array_types}
-        ",
-        type_ = info.type_,
-        name = info.name,
-        modinfo = modinfo.buffer,
-        generated_array_types = generated_array_types,
-        initcall_section = ".initcall6.init"
-    ).parse().expect("Error parsing formatted string into token stream.")
+            ",
+            type_ = self.type_,
+            name = self.name,
+            modinfo = modinfo.buffer,
+            generated_array_types = generated_array_types,
+            initcall_section = ".initcall6.init"
+        ).parse().expect("Error parsing formatted string into token stream.")
+    }
+}
+
+pub fn module(ts: TokenStream) -> TokenStream {
+    let mut it = ts.into_iter();
+    let info = ModuleInfo::parse(&mut it);
+    info.generate()
 }
 
 pub fn module_misc_device(ts: TokenStream) -> TokenStream {
     let mut it = ts.into_iter();
 
-    let info = ModuleInfo::parse(&mut it);
+    let mut info = ModuleInfo::parse(&mut it);
+    let type_ = info.type_;
 
-    let module = format!("__internal_ModuleFor{}", info.type_);
+    let module = format!("__internal_ModuleFor{}", type_);
+    info.type_ = module.clone();
 
-    format!(
+    let extra = format!(
         "
             #[doc(hidden)]
             struct {module} {{
@@ -619,35 +648,15 @@ pub fn module_misc_device(ts: TokenStream) -> TokenStream {
                     }})
                 }}
             }}
-
-            kernel::prelude::module! {{
-                type: {module},
-                name: b\"{name}\",
-                {author}
-                {description}
-                license: b\"{license}\",
-                {alias}
-            }}
         ",
         module = module,
-        type_ = info.type_,
+        type_ = type_,
         name = info.name,
-        author = info
-            .author
-            .map(|v| format!("author: b\"{}\",", v))
-            .unwrap_or_else(|| "".to_string()),
-        description = info
-            .description
-            .map(|v| format!("description: b\"{}\",", v))
-            .unwrap_or_else(|| "".to_string()),
-        alias = info
-            .alias
-            .map(|v| format!("alias: b\"{}\",", v))
-            .unwrap_or_else(|| "".to_string()),
-        license = info.license
     )
     .parse()
-    .expect("Error parsing formatted string into token stream.")
+    .expect("Error parsing formatted string into token stream.");
+
+    vec![extra, info.generate()].into_iter().collect()
 }
 
 #[cfg(test)]
