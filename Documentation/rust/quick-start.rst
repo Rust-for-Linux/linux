@@ -78,11 +78,11 @@ bindgen
 *******
 
 The bindings to the C side of the kernel are generated at build time using
-the ``bindgen`` tool. The version we currently support is ``0.56.0``.
+the ``bindgen`` tool. The version we currently support is ``0.59.1``.
 
 Install it via (this will build the tool from source)::
 
-    cargo install --locked --version 0.56.0 bindgen
+    cargo install --locked --version 0.59.1 bindgen
 
 
 Requirements: Developing
