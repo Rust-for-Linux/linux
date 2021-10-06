@@ -176,7 +176,7 @@ jobs:
         run: sudo apt-get install -y qemu-system-ppc
       - if: matrix.arch == 'riscv64'
         run: |
-          curl -o bin/qemu-system-riscv64 https://raw.githubusercontent.com/Rust-for-Linux/ci-bin/master/qemu-6.0.0/bin/qemu-system-riscv64
+          curl -o bin/qemu-system-riscv64 https://raw.githubusercontent.com/Rust-for-Linux/ci-bin/master/qemu-6.1.0/bin/qemu-system-riscv64
           chmod u+x bin/qemu-system-riscv64
 
       # Setup: rustc
@@ -211,7 +211,7 @@ jobs:
 
       # Setup: bindgen
       - run: |
-          curl -o bin/bindgen https://raw.githubusercontent.com/Rust-for-Linux/ci-bin/master/bindgen-0.56.0/bin/bindgen
+          curl -o bin/bindgen https://raw.githubusercontent.com/Rust-for-Linux/ci-bin/master/bindgen-0.59.1/bin/bindgen
           chmod u+x bin/bindgen
       
       # Setup: ccache
