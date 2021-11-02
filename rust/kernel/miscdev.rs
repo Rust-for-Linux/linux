@@ -170,7 +170,9 @@ impl<T: FileOperations> Registration<T> {
         this.registered = true;
         this.open_data.write(open_data);
 
-        // SAFETY: FFI call.
+        // SAFETY: the `fops`, `name` and `minor` fields of `this.mdev` have
+        // been properly initialized above (the other fields are zeroed and will be
+        // initialized by `misc_register`).
         let ret = unsafe { bindings::misc_register(&mut this.mdev) };
         if ret < 0 {
             // INVARIANT: `registered` is set back to `false` and the `open_data` is destructued.

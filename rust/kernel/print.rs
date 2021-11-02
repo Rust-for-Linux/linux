@@ -133,7 +133,9 @@ pub unsafe fn call_printk(
     args: fmt::Arguments<'_>,
 ) {
     // `_printk` does not seem to fail in any path.
-    // SAFETY: FFI call.
+    // SAFETY: references are guaranteed to be valid for reads.
+    // The caller guarantees that `format_string` is a valid format
+    // specifier and that `module_name` is null-terminated.
     unsafe {
         bindings::_printk(
             format_string.as_ptr() as _,

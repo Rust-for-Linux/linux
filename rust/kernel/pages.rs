@@ -95,7 +95,7 @@ impl<const ORDER: u32> Pages<ORDER> {
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
         // SAFETY: we just checked that `offset + len <= PAGE_SIZE`, so `mapping.ptr` and
         // `mapping.ptr + offset` are in the same allocated object, the page we're
-        // reading from, with no overflow. Also, `offset <= PAGE_LEN < isize::MAX`
+        // reading from, with no overflow. Also, `offset <= PAGE_SIZE < isize::MAX`
         // so `offset` can't overflow an `isize`.
         let src = unsafe { (mapping.ptr as *mut u8).add(offset) };
         // SAFETY: `src` is valid for reads from the type invariants, and `dest` is
@@ -123,7 +123,7 @@ impl<const ORDER: u32> Pages<ORDER> {
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
         // SAFETY: we just checked that `offset + len <= PAGE_SIZE`, so `mapping.ptr` and
         // `mapping.ptr + offset` are in the same allocated object, the page we're
-        // reading from, with no overflow. Also, `offset <= PAGE_LEN < isize::MAX`
+        // reading from, with no overflow. Also, `offset <= PAGE_SIZE < isize::MAX`
         // so `offset` can't overflow an `isize`.
         let dest = unsafe { (mapping.ptr as *mut u8).add(offset) };
         // SAFETY: `src` is guaranteed by the caller to be valid for reads, and `dest` is
