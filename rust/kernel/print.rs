@@ -12,7 +12,12 @@ use core::fmt;
 use crate::bindings;
 use crate::c_types::{c_char, c_void};
 
-// Called from `vsprintf` with format specifier `%pA`.
+/// Called from `vsprintf` with format specifier `%pA`.
+///
+/// # Safety
+///
+/// The region between `buf` and `end` must be valid for writes.
+/// `ptr` must point to a valid instance of `fmt::Arguments`.
 #[no_mangle]
 unsafe fn rust_fmt_argument(buf: *mut c_char, end: *mut c_char, ptr: *const c_void) -> *mut c_char {
     use fmt::Write;
