@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/security.h>
 #include <asm/io.h>
+#include <linux/printk.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -277,6 +278,13 @@ void *rust_helper_dev_get_drvdata(struct device *dev)
 	return dev_get_drvdata(dev);
 }
 EXPORT_SYMBOL_GPL(rust_helper_dev_get_drvdata);
+
+void rust_helper_ratelimit_state_init(struct ratelimit_state *rs)
+{
+	static DEFINE_RATELIMIT_STATE(rs_tmpl, DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
+	*rs = rs_tmpl;
+}
+EXPORT_SYMBOL_GPL(rust_helper_ratelimit_state_init);
 
 /* We use bindgen's --size_t-is-usize option to bind the C size_t type
  * as the Rust usize type, so we can use it in contexts where Rust

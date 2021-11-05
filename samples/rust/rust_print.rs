@@ -46,6 +46,20 @@ impl KernelModule for RustPrint {
         pr_cont!(" is {}", "continued");
         pr_cont!(" with {}\n", "args");
 
+        for i in 0..100 {
+            pr_emerg_ratelimited!("RustPrint::init", "Repetitive Emergency message {}", i);
+            pr_alert_ratelimited!("RustPrint::init", "Repetitive Alert message {}", i);
+            pr_crit_ratelimited!("RustPrint::init", "Repetitive Critical message {}", i);
+            pr_err_ratelimited!("RustPrint::init", "Repetitive Error message {}", i);
+            pr_warn_ratelimited!("RustPrint::init", "Repetitive Warning message {}", i);
+            pr_notice_ratelimited!("RustPrint::init", "Repetitive Notice message {}", i);
+            pr_info_ratelimited!("RustPrint::init", "Repetitive Info message {}", i);
+
+            if printk_ratelimit!("RustPrint::init") {
+                pr_warn!("Inside printk_ratelimit {}", i);
+            }
+        }
+
         Ok(RustPrint)
     }
 }
