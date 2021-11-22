@@ -63,7 +63,8 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
     /// # Safety
     ///
     /// If `val` is non-null then it must point to a valid null-terminated
-    /// string. The `arg` field of `param` must be an instance of `Self`.
+    /// string that will not be mutated for the lifetime of `param.arg`. The
+    /// `arg` field of `param` must be an instance of `Self`.
     unsafe extern "C" fn set_param(
         val: *const crate::c_types::c_char,
         param: *const crate::bindings::kernel_param,
@@ -71,11 +72,20 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
         let arg = if val.is_null() {
             None
         } else {
+            // SAFETY: `val` is non-null due to the check above, and is a valid
+            // null-terminated string by the safety requirements of this
+            // function. `val` will not be mutated for the lifetime of
+            // `param.arg` due to the safety requirements of this function.
             Some(unsafe { CStr::from_char_ptr(val).as_bytes() })
         };
         match Self::try_from_param_arg(arg) {
             Some(new_value) => {
+                // SAFETY: `param.arg` is a valid `Self` by the safety
+                // requirements of this function.
                 let old_value = unsafe { (*param).__bindgen_anon_1.arg as *mut Self };
+                // SAFETY: `old_value` is a valid `Self` by the safety
+                // requirements of this function. `new_value` is a valid `Self`
+                // due to the check above.
                 let _ = unsafe { core::ptr::replace(old_value, new_value) };
                 0
             }
@@ -95,8 +105,12 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
         buf: *mut crate::c_types::c_char,
         param: *const crate::bindings::kernel_param,
     ) -> crate::c_types::c_int {
+        // SAFETY: `buf` is valid and writable for atleast `kernel::PAGE_SIZE`
+        // by the safety requirements of this function.
         let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, crate::PAGE_SIZE) };
         let mut buf = crate::buffer::Buffer::new(slice);
+        // SAFETY: `param.arg` is a valid `Self` by the safety requirements of
+        // this function.
         match unsafe { write!(buf, "{}\0", *((*param).__bindgen_anon_1.arg as *mut Self)) } {
             Err(_) => crate::error::Error::EINVAL.to_kernel_errno(),
             Ok(()) => buf.bytes_written() as crate::c_types::c_int,
@@ -111,6 +125,8 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
     ///
     /// The `arg` field of `param` must be an instance of `Self`.
     unsafe extern "C" fn free(arg: *mut crate::c_types::c_void) {
+        // SAFETY: `arg` is a valid `Self` by the safety requirements of this
+        // function.
         unsafe { core::ptr::drop_in_place(arg as *mut Self) };
     }
 }

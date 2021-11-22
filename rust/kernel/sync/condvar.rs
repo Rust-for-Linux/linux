@@ -132,6 +132,11 @@ impl NeedsLockClass for CondVar {
         key: *mut bindings::lock_class_key,
         _: *mut bindings::lock_class_key,
     ) {
+        // SAFETY:
+        // `wait_list` is a valid uninitialised C `wait_list`.
+        // `name` is a valid NUL-Terminated `CStr`.
+        // `key` The safety requirements of `init` require that it is
+        //  valid and will remain valid for the lifetime for the lock.
         unsafe { bindings::__init_waitqueue_head(self.wait_list.get(), name.as_char_ptr(), key) };
     }
 }

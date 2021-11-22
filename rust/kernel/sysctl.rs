@@ -94,6 +94,14 @@ pub struct Sysctl<T: SysctlStorage> {
 // `T: Sync`. Any new methods must adhere to this requirement.
 unsafe impl<T: SysctlStorage> Sync for Sysctl<T> {}
 
+/// # Safety
+///
+/// The caller must ensure the following guarentees are met
+///
+/// * `ctl` points to a valid `ctl_table`.
+/// * `buffer` is non-null and is valid for at least 'len' bytes.
+/// * `len` points to a valid `usize`.
+/// * `ppos` points to a valid `loff_t`.
 unsafe extern "C" fn proc_handler<T: SysctlStorage>(
     ctl: *mut bindings::ctl_table,
     write: c_types::c_int,
@@ -103,12 +111,18 @@ unsafe extern "C" fn proc_handler<T: SysctlStorage>(
 ) -> c_types::c_int {
     // If we are reading from some offset other than the beginning of the file,
     // return an empty read to signal EOF.
+    //
+    // SAFETY: `ppos` is valid by the safety requirements of this function.
     if unsafe { *ppos } != 0 && write == 0 {
+        // SAFETY: `len` is valid by the safety requirements of this function.
         unsafe { *len = 0 };
         return 0;
     }
 
+    // SAFETY: The safety contract for `UserSlicePtr::new()` is upheld by the
+    // safety requirements of this function.
     let data = unsafe { UserSlicePtr::new(buffer, *len) };
+    // SAFETY: `ctl` is valid by the safety requirements of this function.
     let storage = unsafe { &*((*ctl).data as *const T) };
     let (bytes_processed, result) = if write != 0 {
         let data = match data.read_all() {
@@ -120,7 +134,10 @@ unsafe extern "C" fn proc_handler<T: SysctlStorage>(
         let mut writer = data.writer();
         storage.read_value(&mut writer)
     };
+    // SAFETY: `len` is valid by the safety requirements of this function.
     unsafe { *len = bytes_processed };
+    // SAFETY: `ppos` and `len` are valid by the safety requirements of this
+    // function.
     unsafe { *ppos += *len as bindings::loff_t };
     match result {
         Ok(()) => 0,

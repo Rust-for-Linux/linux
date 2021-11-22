@@ -141,6 +141,11 @@ impl<T> CreatableLock for SpinLock<T> {
         name: &'static CStr,
         key: *mut bindings::lock_class_key,
     ) {
+        // SAFETY:
+        // `spin_lock` is a valid uninitialised C `spin_lock`.
+        // `name` is a valid `NUL`-Terminated `CStr`.
+        // `key` The safety requirements of `init_lock` require that it is
+        //  valid and will remain valid for the lifetime for the lock.
         unsafe { bindings::__spin_lock_init(self.spin_lock.get(), name.as_char_ptr(), key) };
     }
 }

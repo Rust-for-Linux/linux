@@ -93,6 +93,14 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
+        // SAFETY:
+        // (*mut u8).add(): `dest.add(offset)` is guarenteed to not overflow an
+        // `isize` due to the check above, assuming `PAGE_SIZE` is less than or
+        // equal to `isize::MAX`.
+        // ptr::copy(): The safety contract of this function guarentees that
+        // the `dest` buffer is valid for atleast `len` bytes. The invariant
+        // guarentee of this struct, and the checks guarentees that the
+        // 'mapping.ptr' buffer is valid for atleast `len` bytes.
         unsafe { ptr::copy((mapping.ptr as *mut u8).add(offset), dest, len) };
         Ok(())
     }
@@ -113,6 +121,14 @@ impl<const ORDER: u32> Pages<ORDER> {
         }
 
         let mapping = self.kmap(0).ok_or(Error::EINVAL)?;
+        // SAFETY:
+        // (*mut u8).add(): `dest.add(offset)` is guarenteed to not overflow an
+        // `isize` due to the check above, assuming `PAGE_SIZE` is less than or
+        // equal to `isize::MAX`.
+        // ptr::copy(): The safety contract of this function guarentees that
+        // the `dest` buffer is valid for at least `len` bytes. The invariant
+        // guarentee of this struct, and the checks guarentees that the
+        // 'mapping.ptr' buffer is valid for at least `len` bytes.
         unsafe { ptr::copy(src, (mapping.ptr as *mut u8).add(offset), len) };
         Ok(())
     }

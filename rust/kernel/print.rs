@@ -12,7 +12,15 @@ use core::fmt;
 use crate::bindings;
 use crate::c_types::{c_char, c_void};
 
-// Called from `vsprintf` with format specifier `%pA`.
+/// Called from `vsprintf` with format specifier `%pA`.
+///
+/// # Safety
+///
+/// The caller must ensure the following guarentees are met.
+///
+/// * `buf` is non-null and is valid until `end`.
+/// * `end` is non-null and is greater than `buf`.
+/// * `ptr` is non-null and points to a valid [`fmt::Arguments`].
 #[no_mangle]
 unsafe fn rust_fmt_argument(buf: *mut c_char, end: *mut c_char, ptr: *const c_void) -> *mut c_char {
     use fmt::Write;
@@ -53,6 +61,7 @@ unsafe fn rust_fmt_argument(buf: *mut c_char, end: *mut c_char, ptr: *const c_vo
         buf: buf as _,
         end: end as _,
     };
+    // SAFETY: `ptr` is valid by the safety requirements of this function.
     let _ = w.write_fmt(unsafe { *(ptr as *const fmt::Arguments<'_>) });
     w.buf as _
 }

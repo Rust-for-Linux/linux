@@ -82,6 +82,11 @@ impl<T> CreatableLock for Mutex<T> {
         name: &'static CStr,
         key: *mut bindings::lock_class_key,
     ) {
+        // SAFETY:
+        // `mutex` is a valid uninitialised C `mutex`.
+        // `name` is a valid NUL-Terminated `CStr`.
+        // `key` The safety requirements of `init_lock` require that it is
+        //  valid and will remain valid for the lifetime for the lock.
         unsafe { bindings::__mutex_init(self.mutex.get(), name.as_char_ptr(), key) };
     }
 }
