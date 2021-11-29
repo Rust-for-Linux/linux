@@ -47,12 +47,15 @@ pub mod amba;
 pub mod buffer;
 pub mod c_types;
 pub mod chrdev;
+pub mod clk;
 pub mod device;
 pub mod driver;
 mod error;
 pub mod file;
 pub mod file_operations;
 pub mod gpio;
+pub mod hw_random;
+pub mod iopoll;
 pub mod irq;
 pub mod miscdev;
 pub mod pages;
@@ -173,6 +176,17 @@ impl<'a> Drop for KParamGuard<'a> {
         // guarantees that the lock is held.
         unsafe { bindings::kernel_param_unlock(self.this_module.0) }
     }
+}
+
+#[macro_export]
+macro_rules! might_sleep_if {
+    ($cond:expr) => {
+        if $cond {
+            unsafe {
+                bindings::might_sleep();
+            }
+        }
+    };
 }
 
 /// Calculates the offset of a field from the beginning of the struct it belongs to.

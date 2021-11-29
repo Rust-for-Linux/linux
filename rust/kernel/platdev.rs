@@ -7,14 +7,39 @@
 //! C header: [`include/linux/platform_device.h`](../../../../include/linux/platform_device.h)
 
 use crate::{
-    bindings, c_types,
-    error::{from_kernel_result, Error, Result},
+    bindings, c_types, device,
+    error::{from_kernel_err_ptr, from_kernel_result, Error, Result},
     of::OfMatchTable,
     str::CStr,
     types::PointerWrapper,
 };
+
 use alloc::boxed::Box;
 use core::{marker::PhantomPinned, pin::Pin};
+
+/// Platform device, corresponds to `struct platform_device`.
+///
+/// # Invariants
+///
+/// The pointer is valid.
+pub struct PlatformDevice(*mut bindings::platform_device);
+
+// SAFETY: The device returned by `raw_device` is the PlatformDevice.
+unsafe impl device::RawDevice for PlatformDevice {
+    fn raw_device(&self) -> *mut bindings::device {
+        // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid.
+        unsafe { &mut (*self.0).dev }
+    }
+}
+
+/// Ioremaps resources of a platform device.
+pub fn devm_platform_ioremap_resource(
+    pdev: &mut PlatformDevice,
+    index: u32,
+) -> Result<*mut c_types::c_void> {
+    // SAFETY: `pdev` is valid by the type invariant.
+    unsafe { from_kernel_err_ptr(bindings::devm_platform_ioremap_resource(pdev.0, index)) }
+}
 
 /// A registration of a platform device.
 #[derive(Default)]
@@ -33,8 +58,8 @@ extern "C" fn probe_callback<P: PlatformDriver>(
 ) -> c_types::c_int {
     from_kernel_result! {
         // SAFETY: `pdev` is guaranteed to be a valid, non-null pointer.
-        let device_id = unsafe { (*pdev).id };
-        let drv_data = P::probe(device_id)?;
+        let mut platdev = PlatformDevice(pdev);
+        let drv_data = P::probe(&mut platdev)?;
         let drv_data = drv_data.into_pointer() as *mut c_types::c_void;
         // SAFETY: `pdev` is guaranteed to be a valid, non-null pointer.
         unsafe {
@@ -49,7 +74,7 @@ extern "C" fn remove_callback<P: PlatformDriver>(
 ) -> c_types::c_int {
     from_kernel_result! {
         // SAFETY: `pdev` is guaranteed to be a valid, non-null pointer.
-        let device_id = unsafe { (*pdev).id };
+        let mut platdev = PlatformDevice(pdev);
         // SAFETY: `pdev` is guaranteed to be a valid, non-null pointer.
         let ptr = unsafe { bindings::platform_get_drvdata(pdev) };
         // SAFETY:
@@ -59,7 +84,7 @@ extern "C" fn remove_callback<P: PlatformDriver>(
         //     `remove` is the canonical kernel location to free driver data. so OK
         //     to convert the pointer back to a Rust structure here.
         let drv_data = unsafe { P::DrvData::from_pointer(ptr) };
-        P::remove(device_id, drv_data)?;
+        P::remove(&mut platdev, drv_data)?;
         Ok(0)
     }
 }
@@ -142,11 +167,11 @@ pub trait PlatformDriver {
     ///
     /// Called when a new platform device is added or discovered.
     /// Implementers should attempt to initialize the device here.
-    fn probe(device_id: i32) -> Result<Self::DrvData>;
+    fn probe(pdev: &mut PlatformDevice) -> Result<Self::DrvData>;
 
     /// Platform driver remove.
     ///
     /// Called when a platform device is removed.
     /// Implementers should prepare the device for complete removal here.
-    fn remove(device_id: i32, drv_data: Self::DrvData) -> Result;
+    fn remove(pdev: &mut PlatformDevice, drv_data: Self::DrvData) -> Result;
 }

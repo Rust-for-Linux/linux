@@ -6,7 +6,11 @@
 
 #![allow(dead_code)]
 
-use crate::{bindings, Error, Result};
+use crate::{
+    bindings, iopoll,
+    platdev::{self, PlatformDevice},
+    Error, Result,
+};
 use core::convert::TryInto;
 
 /// Represents a memory resource.
@@ -127,6 +131,32 @@ macro_rules! define_write {
     };
 }
 
+macro_rules! define_readx_poll_timeout {
+    ($(#[$attr:meta])* $fname:ident, $callback_name:ident, $type_name:ty) => {
+        /// Polls IO data from the given offset known, at compile time.
+        ///
+        /// The IO data is polled until it matches specific condition or fails
+        /// at timeout.
+        ///
+        /// If the offset is not known at compile time, the build will fail.
+        $(#[$attr])*
+        pub fn $fname<F: Fn(&$type_name) -> bool>(
+            &self,
+            offset: usize,
+            cond: F,
+            sleep_us: u32,
+            timeout_us: u64,
+        ) -> Result<$type_name> {
+            Self::check_offset::<$type_name>(offset);
+            let ptr = self.ptr.wrapping_add(offset);
+            // SAFETY: The type invariants guarantee that `ptr` is a valid pointer. The check above
+            // guarantees that the code won't build if `offset` makes the read go out of bounds
+            // (including the type size).
+            unsafe { iopoll::readx_poll_timeout(bindings::$callback_name, cond, sleep_us, timeout_us, ptr as _) }
+        }
+    };
+}
+
 impl<const SIZE: usize> IoMem<SIZE> {
     /// Tries to create a new instance of a memory block.
     ///
@@ -164,6 +194,14 @@ impl<const SIZE: usize> IoMem<SIZE> {
         }
     }
 
+    // TODO: Handle Drop properly
+    pub fn try_platform_ioremap_resource(pdev: &mut PlatformDevice, index: u32) -> Result<Self> {
+        let raw_ptr = platdev::devm_platform_ioremap_resource(pdev, index)?;
+        Ok(Self {
+            ptr: raw_ptr as usize,
+        })
+    }
+
     const fn offset_ok<T>(offset: usize) -> bool {
         let type_size = core::mem::size_of::<T>();
         if let Some(end) = offset.checked_add(type_size) {
@@ -177,6 +215,16 @@ impl<const SIZE: usize> IoMem<SIZE> {
         crate::build_assert!(Self::offset_ok::<T>(offset), "IoMem offset overflow");
     }
 
+    define_readx_poll_timeout!(readb_poll_timeout, readb, u8);
+    define_readx_poll_timeout!(readw_poll_timeout, readw, u16);
+    define_readx_poll_timeout!(readl_poll_timeout, readl, u32);
+    define_readx_poll_timeout!(
+        #[cfg(CONFIG_64BIT)]
+        readq_poll_timeout,
+        readq,
+        u64
+    );
+
     define_read!(readb, try_readb, u8);
     define_read!(readw, try_readw, u16);
     define_read!(readl, try_readl, u32);
@@ -184,6 +232,16 @@ impl<const SIZE: usize> IoMem<SIZE> {
         #[cfg(CONFIG_64BIT)]
         readq,
         try_readq,
+        u64
+    );
+
+    define_read!(readb_relaxed, try_readb_relaxed, u8);
+    define_read!(readw_relaxed, try_readw_relaxed, u16);
+    define_read!(readl_relaxed, try_readl_relaxed, u32);
+    define_read!(
+        #[cfg(CONFIG_64BIT)]
+        readq_relaxed,
+        try_readq_relaxed,
         u64
     );
 
@@ -196,6 +254,60 @@ impl<const SIZE: usize> IoMem<SIZE> {
         try_writeq,
         u64
     );
+
+    define_write!(writeb_relaxed, try_writeb_relaxed, u8);
+    define_write!(writew_relaxed, try_writew_relaxed, u16);
+    define_write!(writel_relaxed, try_writel_relaxed, u32);
+    define_write!(
+        #[cfg(CONFIG_64BIT)]
+        writeq_relaxed,
+        try_writeq_relaxed,
+        u64
+    );
+}
+
+/// Copy memory block from IO memory into buffer.
+///
+/// # Examples
+/// ```
+/// use kernel::io_mem::{self, IoMem, Resource};
+///
+/// fn test(res: Resource) -> Result {
+///     // Create an io mem block of at least 100 bytes.
+///     let mem = unsafe { IoMem::<100>::try_new(res) }?;
+///
+///     let buffer: [i8; 32] = [0; 32];
+///
+///     // Memcpy 16 bytes from offset 10 of io mem block into the buffer.
+///     io_mem::try_memcpy_fromio(mem, buffer, 10, 16)?;
+///
+///     Ok(())
+/// ```
+pub fn try_memcpy_fromio<const SIZE: usize>(
+    iomem: &IoMem<SIZE>,
+    data: &mut [i8],
+    offset: usize,
+    count: usize,
+) -> Result {
+    if !IoMem::<SIZE>::offset_ok::<u8>(offset) {
+        return Err(Error::EINVAL);
+    }
+
+    // Check if memory block can be copied from io region
+    // and also whether it will fit into data buffer.
+    if count > data.len() || count > SIZE - offset {
+        return Err(Error::EINVAL);
+    }
+
+    let ptr = iomem.ptr.wrapping_add(offset);
+
+    // SAFETY:
+    //   - The type invariants guarantee that `ptr` is a valid pointer.
+    //   - The `offset_ok` check returns an error if `offset` would make the write
+    //     go out of bounds (including the type size).
+    //   - the sizes of from/to buffers are asserted whether they match `count` above.
+    unsafe { bindings::memcpy_fromio(data.as_mut_ptr() as _, ptr as _, count.try_into()?) };
+    Ok(())
 }
 
 impl<const SIZE: usize> Drop for IoMem<SIZE> {

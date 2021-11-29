@@ -488,17 +488,12 @@ pub(crate) use from_kernel_result;
 /// # use kernel::from_kernel_err_ptr;
 /// # use kernel::c_types;
 /// # use kernel::bindings;
-/// fn devm_platform_ioremap_resource(
+/// pub fn devm_platform_ioremap_resource(
 ///     pdev: &mut PlatformDevice,
 ///     index: u32,
 /// ) -> Result<*mut c_types::c_void> {
-///     // SAFETY: FFI call.
-///     unsafe {
-///         from_kernel_err_ptr(bindings::devm_platform_ioremap_resource(
-///             pdev.to_ptr(),
-///             index,
-///         ))
-///     }
+///     // SAFETY: `pdev` is valid by the type invariant.
+///     unsafe { from_kernel_err_ptr(bindings::devm_platform_ioremap_resource(pdev.0, index)) }
 /// }
 /// ```
 // TODO: remove `dead_code` marker once an in-kernel client is available.

@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 #include <linux/cdev.h>
+#include <linux/clk.h>
 #include <linux/errname.h>
 #include <linux/fs.h>
+#include <linux/hw_random.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/slab.h>

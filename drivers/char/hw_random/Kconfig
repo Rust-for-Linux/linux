@@ -479,6 +479,19 @@ config HW_RANDOM_EXYNOS
 
 	  If unsure, say Y.
 
+config HW_RANDOM_EXYNOS_RUST
+	tristate "Rust version of Samsung Exynos True Random Number Generator support"
+	depends on HAS_RUST && ARCH_EXYNOS
+	default HW_RANDOM
+	help
+	  This driver provides support for the True Random Number
+	  Generator available in Exynos SoCs.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called exynos_trng_rust.
+
+	  If unsure, say Y.
+
 config HW_RANDOM_OPTEE
 	tristate "OP-TEE based Random Number Generator support"
 	depends on OPTEE

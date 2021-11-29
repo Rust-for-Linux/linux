@@ -2,6 +2,10 @@
 
 #include <linux/bug.h>
 #include <linux/build_bug.h>
+#include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/ktime.h>
+#include <linux/kernel.h>
 #include <linux/uaccess.h>
 #include <linux/sched/signal.h>
 #include <linux/gfp.h>
@@ -21,6 +25,32 @@ __noreturn void rust_helper_BUG(void)
 {
 	BUG();
 }
+
+void rust_helper_usleep_range(unsigned long min, unsigned long max)
+{
+	usleep_range(min, max);
+}
+
+void rust_helper_might_sleep(void)
+{
+	might_sleep();
+}
+
+int rust_helper_ktime_compare(const ktime_t cmp1, const ktime_t cmp2)
+{
+	return ktime_compare(cmp1, cmp2);
+}
+
+ktime_t rust_helper_ktime_add_us(const ktime_t kt, const u64 usec)
+{
+	return ktime_add_us(kt, usec);
+}
+
+int rust_helper_clk_prepare_enable(struct clk *clk)
+{
+	return clk_prepare_enable(clk);
+}
+EXPORT_SYMBOL_GPL(rust_helper_clk_prepare_enable);
 
 unsigned long rust_helper_copy_from_user(void *to, const void __user *from, unsigned long n)
 {
@@ -94,6 +124,63 @@ void rust_helper_writeq(u64 value, volatile void __iomem *addr)
 }
 EXPORT_SYMBOL_GPL(rust_helper_writeq);
 #endif
+
+u8 rust_helper_readb_relaxed(const volatile void __iomem *addr)
+{
+	return readb_relaxed(addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_readb_relaxed);
+
+u16 rust_helper_readw_relaxed(const volatile void __iomem *addr)
+{
+	return readw_relaxed(addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_readw_relaxed);
+
+u32 rust_helper_readl_relaxed(const volatile void __iomem *addr)
+{
+	return readl_relaxed(addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_readl_relaxed);
+
+#ifdef CONFIG_64BIT
+u64 rust_helper_readq_relaxed(const volatile void __iomem *addr)
+{
+	return readq_relaxed(addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_readq_relaxed);
+#endif
+
+void rust_helper_writeb_relaxed(u8 value, volatile void __iomem *addr)
+{
+        writeb_relaxed(value, addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_writeb_relaxed);
+
+void rust_helper_writew_relaxed(u16 value, volatile void __iomem *addr)
+{
+        writew_relaxed(value, addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_writew_relaxed);
+
+void rust_helper_writel_relaxed(u32 value, volatile void __iomem *addr)
+{
+        writel_relaxed(value, addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_writel_relaxed);
+
+#ifdef CONFIG_64BIT
+void rust_helper_writeq_relaxed(u64 value, volatile void __iomem *addr)
+{
+        writeq_relaxed(value, addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_writeq_relaxed);
+#endif
+
+void rust_helper_memcpy_fromio(void *to, const volatile void __iomem *from, long count)
+{
+	memcpy_fromio(to, from, count);
+}
 
 void rust_helper___spin_lock_init(spinlock_t *lock, const char *name,
 				  struct lock_class_key *key)

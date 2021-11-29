@@ -52,15 +52,15 @@ struct RngDriver;
 impl PlatformDriver for RngDriver {
     type DrvData = Pin<Box<miscdev::Registration<()>>>;
 
-    fn probe(device_id: i32) -> Result<Self::DrvData> {
-        pr_info!("probing discovered hwrng with id {}\n", device_id);
+    fn probe(pdev: &mut PlatformDevice) -> Result<Self::DrvData> {
+        pr_info!("probing discovered pdev with name {}\n", pdev.name());
         let drv_data =
             miscdev::Registration::new_pinned::<RngDevice>(c_str!("rust_hwrng"), None, ())?;
         Ok(drv_data)
     }
 
-    fn remove(device_id: i32, _drv_data: Self::DrvData) -> Result {
-        pr_info!("removing hwrng with id {}\n", device_id);
+    fn remove(pdev: &mut PlatformDevice, _drv_data: Self::DrvData) -> Result {
+        pr_info!("removing pdev with name {}\n", pdev.name());
         Ok(())
     }
 }
