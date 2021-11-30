@@ -4,7 +4,7 @@
 
 use kernel::{
     device, file::File, file_operations::FileOperations, io_buffer::IoBufferWriter, miscdev,
-    module_platform_driver, of, platform, prelude::*, sync::Ref,
+    module_platform_driver, of, platform, prelude::*, sync::Ref, str::BStr, b_str,
 };
 
 module_platform_driver! {
@@ -42,7 +42,7 @@ impl platform::Driver for RngDriver {
     type Data = Ref<DeviceData>;
 
     kernel::define_of_id_table! {(), [
-        (of::DeviceId::Compatible(b"brcm,bcm2835-rng"), None),
+        (of::DeviceId::Compatible(b_str!("brcm,bcm2835-rng")), None),
     ]}
 
     fn probe(dev: &mut platform::Device, _id_info: Option<&Self::IdInfo>) -> Result<Self::Data> {

@@ -22,11 +22,13 @@ pub enum DeviceId {
 ///
 /// ```
 /// # use kernel::define_of_id_table;
+/// # use kernel::b_str;
+/// # use kernel::str::BStr;
 /// use kernel::of;
 ///
 /// define_of_id_table! {u32, [
-///     (of::DeviceId::Compatible(b"test-device1,test-device2"), Some(0xff)),
-///     (of::DeviceId::Compatible(b"test-device3"), None),
+///     (of::DeviceId::Compatible(b_str!("test-device1,test-device2")), Some(0xff)),
+///     (of::DeviceId::Compatible(b_str!("test-device3")), None),
 /// ]};
 /// ```
 #[macro_export]
@@ -53,7 +55,7 @@ unsafe impl const driver::RawDeviceId for DeviceId {
         while i < compatible.len() {
             // If `compatible` does not fit in `id.compatible`, an "index out of bounds" build time
             // error will be triggered.
-            id.compatible[i] = compatible[i] as _;
+            id.compatible[i] = compatible.as_bytes()[i] as _;
             i += 1;
         }
         id.compatible[i] = b'\0' as _;

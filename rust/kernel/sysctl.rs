@@ -136,7 +136,7 @@ impl<T: SysctlStorage> Sysctl<T> {
         storage: T,
         mode: types::Mode,
     ) -> error::Result<Sysctl<T>> {
-        if name.contains(&b'/') {
+        if name.as_bytes().contains(&b'/') {
             return Err(error::Error::EINVAL);
         }
 

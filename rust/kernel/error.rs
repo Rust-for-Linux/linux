@@ -384,7 +384,7 @@ impl fmt::Debug for Error {
             None => f.debug_tuple("Error").field(&-self.0).finish(),
             // SAFETY: These strings are ASCII-only.
             Some(name) => f
-                .debug_tuple(unsafe { str::from_utf8_unchecked(name) })
+                .debug_tuple(unsafe { str::from_utf8_unchecked(name.as_bytes()) })
                 .finish(),
         }
     }
