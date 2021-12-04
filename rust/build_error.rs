@@ -13,7 +13,6 @@
 //! functions could still be called in the runtime).
 
 #![no_std]
-#![feature(const_panic, core_panic)]
 
 /// Panics if executed in const context, or triggers a build error if not.
 #[inline(never)]
@@ -21,10 +20,7 @@
 #[no_mangle]
 #[track_caller]
 pub const fn build_error(msg: &'static str) -> ! {
-    // Could also be `panic!(msg)` to avoid using unstable feature `core_panic`,
-    // but it is not allowed in Rust 2021, while `panic!("{}", msg)` could not
-    // yet be used in const context.
-    core::panicking::panic(msg);
+    panic!("{}", msg);
 }
 
 #[cfg(CONFIG_RUST_BUILD_ASSERT_WARN)]

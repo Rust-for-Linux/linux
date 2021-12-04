@@ -335,7 +335,7 @@ quiet_cmd_rustc_o_rs = $(RUSTC_OR_CLIPPY_QUIET) $(quiet_modtag) $@
       cmd_rustc_o_rs = \
 	RUST_MODFILE=$(modfile) \
 	$(RUSTC_OR_CLIPPY) $(rust_flags) $(rust_cross_flags) \
-		-Zallow-features=allocator_api,bench_black_box,concat_idents,global_asm,try_reserve,generic_associated_types \
+		-Zallow-features=allocator_api,bench_black_box,concat_idents,generic_associated_types,global_asm \
 		--extern alloc --extern kernel \
 		--crate-type rlib --out-dir $(obj) -L $(objtree)/rust/ \
 		--crate-name $(patsubst %.o,%,$(notdir $@)) $<; \

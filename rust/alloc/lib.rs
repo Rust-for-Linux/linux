@@ -69,6 +69,17 @@
     issue_tracker_base_url = "https://github.com/rust-lang/rust/issues/",
     test(no_crate_inject, attr(allow(unused_variables), deny(warnings)))
 )]
+#![cfg_attr(
+    not(bootstrap),
+    doc(cfg_hide(
+        not(test),
+        not(any(test, bootstrap)),
+        any(not(feature = "miri-test-libstd"), test, doctest),
+        no_global_oom_handling,
+        not(no_global_oom_handling),
+        target_has_atomic = "ptr"
+    ))
+)]
 #![no_std]
 #![needs_allocator]
 #![warn(deprecated_in_future)]
@@ -87,7 +98,6 @@
 #![feature(allow_internal_unstable)]
 #![feature(arbitrary_self_types)]
 #![feature(async_stream)]
-#![cfg_attr(bootstrap, feature(bindings_after_at))]
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(cfg_sanitize)]
@@ -114,6 +124,7 @@
 // that the feature-gate isn't enabled. Ideally, it wouldn't check for the feature gate for docs
 // from other crates, but since this can only appear for lang items, it doesn't seem worth fixing.
 #![feature(intra_doc_pointers)]
+#![feature(iter_advance_by)]
 #![feature(iter_zip)]
 #![feature(lang_items)]
 #![feature(layout_for_ptr)]
@@ -145,11 +156,11 @@
 #![feature(alloc_layout_extra)]
 #![feature(trusted_random_access)]
 #![feature(try_trait_v2)]
-#![cfg_attr(bootstrap, feature(min_type_alias_impl_trait))]
-#![cfg_attr(not(bootstrap), feature(type_alias_impl_trait))]
 #![feature(associated_type_bounds)]
 #![feature(slice_group_by)]
 #![feature(decl_macro)]
+#![feature(doc_cfg)]
+#![cfg_attr(not(bootstrap), feature(doc_cfg_hide))]
 // Allow testing this library
 
 #[cfg(test)]
@@ -180,7 +191,6 @@ mod boxed {
 pub mod borrow;
 pub mod collections;
 pub mod fmt;
-pub mod prelude;
 pub mod raw_vec;
 #[cfg(not(no_rc))]
 pub mod rc;

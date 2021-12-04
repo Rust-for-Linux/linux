@@ -18,16 +18,13 @@
     concat_idents,
     const_fn_trait_bound,
     const_mut_refs,
-    const_panic,
-    const_unreachable_unchecked,
     doc_cfg,
     generic_associated_types,
     ptr_metadata,
     receiver_trait,
     coerce_unsized,
     dispatch_from_dyn,
-    unsize,
-    try_reserve
+    unsize
 )]
 
 // Ensure conditional compilation based on the kernel configuration works;

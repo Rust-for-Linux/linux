@@ -3,8 +3,8 @@
 //! A contiguous growable array type with heap-allocated contents, written
 //! `Vec<T>`.
 //!
-//! Vectors have `O(1)` indexing, amortized `O(1)` push (to the end) and
-//! `O(1)` pop (from the end).
+//! Vectors have *O*(1) indexing, amortized *O*(1) push (to the end) and
+//! *O*(1) pop (from the end).
 //!
 //! Vectors ensure they never allocate more than `isize::MAX` bytes.
 //!
@@ -297,8 +297,8 @@ mod spec_extend;
 /// on an empty Vec, it will not allocate memory. Similarly, if you store zero-sized
 /// types inside a `Vec`, it will not allocate space for them. *Note that in this case
 /// the `Vec` might not report a [`capacity`] of 0*. `Vec` will allocate if and only
-/// if [`mem::size_of::<T>`]`() * capacity() > 0`. In general, `Vec`'s allocation
-/// details are very subtle &mdash; if you intend to allocate memory using a `Vec`
+/// if <code>[mem::size_of::\<T>]\() * [capacity]\() > 0</code>. In general, `Vec`'s allocation
+/// details are very subtle --- if you intend to allocate memory using a `Vec`
 /// and use it for something else (either to pass to unsafe code, or to build your
 /// own memory-backed collection), be sure to deallocate this memory by using
 /// `from_raw_parts` to recover the `Vec` and then dropping it.
@@ -306,8 +306,8 @@ mod spec_extend;
 /// If a `Vec` *has* allocated memory, then the memory it points to is on the heap
 /// (as defined by the allocator Rust is configured to use by default), and its
 /// pointer points to [`len`] initialized, contiguous elements in order (what
-/// you would see if you coerced it to a slice), followed by [`capacity`]` -
-/// `[`len`] logically uninitialized, contiguous elements.
+/// you would see if you coerced it to a slice), followed by <code>[capacity] - [len]</code>
+/// logically uninitialized, contiguous elements.
 ///
 /// A vector containing the elements `'a'` and `'b'` with capacity 4 can be
 /// visualized as below. The top part is the `Vec` struct, it contains a
@@ -349,7 +349,7 @@ mod spec_extend;
 ///
 /// [`push`] and [`insert`] will never (re)allocate if the reported capacity is
 /// sufficient. [`push`] and [`insert`] *will* (re)allocate if
-/// [`len`]` == `[`capacity`]. That is, the reported capacity is completely
+/// <code>[len] == [capacity]</code>. That is, the reported capacity is completely
 /// accurate, and can be relied on. It can even be used to manually free the memory
 /// allocated by a `Vec` if desired. Bulk insertion methods *may* reallocate, even
 /// when not necessary.
@@ -361,7 +361,7 @@ mod spec_extend;
 ///
 /// `vec![x; n]`, `vec![a, b, c, d]`, and
 /// [`Vec::with_capacity(n)`][`Vec::with_capacity`], will all produce a `Vec`
-/// with exactly the requested capacity. If [`len`]` == `[`capacity`],
+/// with exactly the requested capacity. If <code>[len] == [capacity]</code>,
 /// (as is the case for the [`vec!`] macro), then a `Vec<T>` can be converted to
 /// and from a [`Box<[T]>`][owned slice] without reallocating or moving the elements.
 ///
@@ -370,7 +370,7 @@ mod spec_extend;
 /// scratch space that it may use however it wants. It will generally just do
 /// whatever is most efficient or otherwise easy to implement. Do not rely on
 /// removed data to be erased for security purposes. Even if you drop a `Vec`, its
-/// buffer may simply be reused by another `Vec`. Even if you zero a `Vec`'s memory
+/// buffer may simply be reused by another allocation. Even if you zero a `Vec`'s memory
 /// first, that might not actually happen because the optimizer does not consider
 /// this a side-effect that must be preserved. There is one case which we will
 /// not break, however: using `unsafe` code to write to the excess capacity,
@@ -385,8 +385,10 @@ mod spec_extend;
 /// [`&str`]: type@str
 /// [`shrink_to_fit`]: Vec::shrink_to_fit
 /// [`shrink_to`]: Vec::shrink_to
+/// [capacity]: Vec::capacity
 /// [`capacity`]: Vec::capacity
-/// [`mem::size_of::<T>`]: core::mem::size_of
+/// [mem::size_of::\<T>]: core::mem::size_of
+/// [len]: Vec::len
 /// [`len`]: Vec::len
 /// [`push`]: Vec::push
 /// [`insert`]: Vec::insert
@@ -394,7 +396,7 @@ mod spec_extend;
 /// [`MaybeUninit`]: core::mem::MaybeUninit
 /// [owned slice]: Box
 #[stable(feature = "rust1", since = "1.0.0")]
-#[cfg_attr(not(test), rustc_diagnostic_item = "vec_type")]
+#[cfg_attr(not(test), rustc_diagnostic_item = "Vec")]
 #[rustc_insignificant_dtor]
 pub struct Vec<T, #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator = Global> {
     buf: RawVec<T, A>,
@@ -419,6 +421,7 @@ impl<T> Vec<T> {
     #[inline]
     #[rustc_const_stable(feature = "const_vec_new", since = "1.39.0")]
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub const fn new() -> Self {
         Vec { buf: RawVec::NEW, len: 0 }
     }
@@ -463,6 +466,7 @@ impl<T> Vec<T> {
     #[cfg(not(no_global_oom_handling))]
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self::with_capacity_in(capacity, Global)
     }
@@ -938,7 +942,6 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::TryReserveError;
     ///
     /// fn process_data(data: &[u32]) -> Result<Vec<u32>, TryReserveError> {
@@ -956,7 +959,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// }
     /// # process_data(&[1, 2, 3]).expect("why is the test harness OOMing on 12 bytes?");
     /// ```
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.buf.try_reserve(self.len, additional)
     }
@@ -981,7 +984,6 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Examples
     ///
     /// ```
-    /// #![feature(try_reserve)]
     /// use std::collections::TryReserveError;
     ///
     /// fn process_data(data: &[u32]) -> Result<Vec<u32>, TryReserveError> {
@@ -999,7 +1001,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// }
     /// # process_data(&[1, 2, 3]).expect("why is the test harness OOMing on 12 bytes?");
     /// ```
-    #[unstable(feature = "try_reserve", reason = "new API", issue = "48043")]
+    #[stable(feature = "try_reserve", since = "1.57.0")]
     pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.buf.try_reserve_exact(self.len, additional)
     }
@@ -1422,7 +1424,7 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     /// The removed element is replaced by the last element of the vector.
     ///
-    /// This does not preserve ordering, but is O(1).
+    /// This does not preserve ordering, but is *O*(1).
     ///
     /// # Panics
     ///
@@ -1639,7 +1641,15 @@ impl<T, A: Allocator> Vec<T, A> {
 
         let mut g = BackshiftOnDrop { v: self, processed_len: 0, deleted_cnt: 0, original_len };
 
-        while g.processed_len < original_len {
+        // process_one return a bool indicates whether the processing element should be retained.
+        #[inline(always)]
+        fn process_one<F, T, A: Allocator, const DELETED: bool>(
+            f: &mut F,
+            g: &mut BackshiftOnDrop<'_, T, A>,
+        ) -> bool
+        where
+            F: FnMut(&T) -> bool,
+        {
             // SAFETY: Unchecked element must be valid.
             let cur = unsafe { &mut *g.v.as_mut_ptr().add(g.processed_len) };
             if !f(cur) {
@@ -1649,9 +1659,9 @@ impl<T, A: Allocator> Vec<T, A> {
                 // SAFETY: We never touch this element again after dropped.
                 unsafe { ptr::drop_in_place(cur) };
                 // We already advanced the counter.
-                continue;
+                return false;
             }
-            if g.deleted_cnt > 0 {
+            if DELETED {
                 // SAFETY: `deleted_cnt` > 0, so the hole slot must not overlap with current element.
                 // We use copy for move, and never touch this element again.
                 unsafe {
@@ -1660,6 +1670,19 @@ impl<T, A: Allocator> Vec<T, A> {
                 }
             }
             g.processed_len += 1;
+            return true;
+        }
+
+        // Stage 1: Nothing was deleted.
+        while g.processed_len != original_len {
+            if !process_one::<F, T, A, false>(&mut f, &mut g) {
+                break;
+            }
+        }
+
+        // Stage 2: Some elements were deleted.
+        while g.processed_len != original_len {
+            process_one::<F, T, A, true>(&mut f, &mut g);
         }
 
         // All item are processed. This can be optimized to `set_len` by LLVM.
@@ -2137,8 +2160,9 @@ impl<T, A: Allocator> Vec<T, A> {
     /// `'a`. If the type has only static references, or none at all, then this
     /// may be chosen to be `'static`.
     ///
-    /// This function is similar to the [`leak`][Box::leak] function on [`Box`]
-    /// except that there is no way to recover the leaked memory.
+    /// As of Rust 1.57, this method does not reallocate or shrink the `Vec`,
+    /// so the leaked allocation may include unused capacity that is not part
+    /// of the returned slice.
     ///
     /// This function is mainly useful for data that lives for the remainder of
     /// the program's life. Dropping the returned reference will cause a memory
@@ -2161,7 +2185,8 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         A: 'a,
     {
-        Box::leak(self.into_boxed_slice())
+        let mut me = ManuallyDrop::new(self);
+        unsafe { slice::from_raw_parts_mut(me.as_mut_ptr(), me.len) }
     }
 
     /// Returns the remaining spare capacity of the vector as a slice of
@@ -2301,6 +2326,7 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
     /// in order to be able to clone the passed value.
     /// If you need more flexibility (or want to rely on [`Default`] instead of
     /// [`Clone`]), use [`Vec::resize_with`].
+    /// If you only need to resize to a smaller size, use [`Vec::truncate`].
     ///
     /// # Examples
     ///
@@ -2414,7 +2440,12 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
 
     /// Copies elements from `src` range to the end of the vector.
     ///
-    /// ## Examples
+    /// # Panics
+    ///
+    /// Panics if the starting point is greater than the end point or if
+    /// the end point is greater than the length of the vector.
+    ///
+    /// # Examples
     ///
     /// ```
     /// let mut vec = vec![0, 1, 2, 3, 4];
@@ -2519,7 +2550,7 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe {
             let mut ptr = self.as_mut_ptr().add(self.len());
             // Use SetLenOnDrop to work around bug where compiler
-            // may not realize the store through `ptr` through self.set_len()
+            // might not realize the store through `ptr` through self.set_len()
             // don't alias.
             let mut local_len = SetLenOnDrop::new(&mut self.len);
 
@@ -3147,6 +3178,7 @@ impl<T: Clone> From<&mut [T]> for Vec<T> {
     }
 }
 
+#[cfg(not(no_global_oom_handling))]
 #[stable(feature = "vec_from_array", since = "1.44.0")]
 impl<T, const N: usize> From<[T; N]> for Vec<T> {
     #[cfg(not(test))]

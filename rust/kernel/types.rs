@@ -144,6 +144,19 @@ impl<T> PointerWrapper for *mut T {
     }
 }
 
+impl PointerWrapper for () {
+    type Borrowed<'a> = ();
+
+    fn into_pointer(self) -> *const c_types::c_void {
+        // We use 1 to be different from a null pointer.
+        1usize as _
+    }
+
+    unsafe fn borrow<'a>(_: *const c_types::c_void) -> Self::Borrowed<'a> {}
+
+    unsafe fn from_pointer(_: *const c_types::c_void) -> Self {}
+}
+
 /// Runs a cleanup function/closure when dropped.
 ///
 /// The [`ScopeGuard::dismiss`] function prevents the cleanup function from running.

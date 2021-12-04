@@ -36,7 +36,7 @@
 /// be mindful of side effects.
 ///
 /// [`Vec`]: crate::vec::Vec
-#[cfg(not(test))]
+#[cfg(all(not(no_global_oom_handling), not(test)))]
 #[macro_export]
 #[stable(feature = "rust1", since = "1.0.0")]
 #[allow_internal_unstable(box_syntax, liballoc_internals)]

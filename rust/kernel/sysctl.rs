@@ -7,7 +7,7 @@
 //! Reference: <https://www.kernel.org/doc/Documentation/sysctl/README>
 
 use alloc::boxed::Box;
-use alloc::vec;
+use alloc::vec::Vec;
 use core::mem;
 use core::ptr;
 use core::sync::atomic;
@@ -141,22 +141,21 @@ impl<T: SysctlStorage> Sysctl<T> {
         }
 
         let storage = Box::try_new(storage)?;
-        let mut table = vec![
-            bindings::ctl_table {
-                procname: name.as_char_ptr(),
-                mode: mode.as_int(),
-                data: &*storage as *const T as *mut c_types::c_void,
-                proc_handler: Some(proc_handler::<T>),
+        let mut table = Vec::try_with_capacity(2)?;
+        table.try_push(bindings::ctl_table {
+            procname: name.as_char_ptr(),
+            mode: mode.as_int(),
+            data: &*storage as *const T as *mut c_types::c_void,
+            proc_handler: Some(proc_handler::<T>),
 
-                maxlen: 0,
-                child: ptr::null_mut(),
-                poll: ptr::null_mut(),
-                extra1: ptr::null_mut(),
-                extra2: ptr::null_mut(),
-            },
-            unsafe { mem::zeroed() },
-        ]
-        .try_into_boxed_slice()?;
+            maxlen: 0,
+            child: ptr::null_mut(),
+            poll: ptr::null_mut(),
+            extra1: ptr::null_mut(),
+            extra2: ptr::null_mut(),
+        })?;
+        table.try_push(unsafe { mem::zeroed() })?;
+        let mut table = table.try_into_boxed_slice()?;
 
         let result = unsafe { bindings::register_sysctl(path.as_char_ptr(), table.as_mut_ptr()) };
         if result.is_null() {

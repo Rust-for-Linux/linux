@@ -148,12 +148,12 @@ fn try_simple_param_val(
     param_type: &str,
 ) -> Box<dyn Fn(&mut token_stream::IntoIter) -> Option<String>> {
     match param_type {
-        "bool" => Box::new(|param_it| try_ident(param_it)),
+        "bool" => Box::new(try_ident),
         "str" => Box::new(|param_it| {
             try_byte_string(param_it)
                 .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
         }),
-        _ => Box::new(|param_it| try_literal(param_it)),
+        _ => Box::new(try_literal),
     }
 }
 

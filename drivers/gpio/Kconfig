@@ -473,7 +473,7 @@ config GPIO_PL061
 
 config GPIO_PL061_RUST
 	tristate "PrimeCell PL061 GPIO support written in Rust"
-	depends on ARM_AMBA
+	depends on ARM_AMBA && RUST
 	select IRQ_DOMAIN
 	select GPIOLIB_IRQCHIP
 	help

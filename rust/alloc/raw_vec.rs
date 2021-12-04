@@ -71,6 +71,7 @@ impl<T> RawVec<T, Global> {
     /// `RawVec` with capacity `0`. If `T` is zero-sized, then it makes a
     /// `RawVec` with capacity `usize::MAX`. Useful for implementing
     /// delayed allocation.
+    #[must_use]
     pub const fn new() -> Self {
         Self::new_in(Global)
     }
@@ -89,6 +90,7 @@ impl<T> RawVec<T, Global> {
     ///
     /// Aborts on OOM.
     #[cfg(not(no_global_oom_handling))]
+    #[must_use]
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         Self::with_capacity_in(capacity, Global)
@@ -106,6 +108,7 @@ impl<T> RawVec<T, Global> {
 
     /// Like `with_capacity`, but guarantees the buffer is zeroed.
     #[cfg(not(no_global_oom_handling))]
+    #[must_use]
     #[inline]
     pub fn with_capacity_zeroed(capacity: usize) -> Self {
         Self::with_capacity_zeroed_in(capacity, Global)
@@ -362,7 +365,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     pub fn reserve(&mut self, len: usize, additional: usize) {
         // Callers expect this function to be very cheap when there is already sufficient capacity.
         // Therefore, we move all the resizing and error-handling logic from grow_amortized and
-        // handle_reserve behind a call, while making sure that the this function is likely to be
+        // handle_reserve behind a call, while making sure that this function is likely to be
         // inlined as just a comparison and a call if the comparison fails.
         #[cold]
         fn do_reserve_and_handle<T, A: Allocator>(

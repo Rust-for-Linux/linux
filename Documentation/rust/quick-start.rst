@@ -26,7 +26,7 @@ Rust features.
 If ``rustup`` is being used, enter the checked out source code directory
 and run::
 
-	rustup override set 1.56.0
+	rustup override set 1.57.0
 
 Otherwise, fetch a standalone installer or install ``rustup`` from:
 

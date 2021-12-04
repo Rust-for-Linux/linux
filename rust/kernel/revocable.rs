@@ -65,7 +65,9 @@ impl<T> Revocable<T> {
             data: ManuallyDrop::new(UnsafeCell::new(data)),
         }
     }
+}
 
+impl<T: ?Sized> Revocable<T> {
     /// Tries to access the \[revocable\] wrapped object.
     ///
     /// Returns `None` if the object has been revoked and is therefore no longer accessible.
@@ -125,12 +127,12 @@ impl<T: ?Sized> Drop for Revocable<T> {
 /// # Invariants
 ///
 /// The RCU read-side lock is held while the guard is alive.
-pub struct RevocableGuard<'a, T> {
+pub struct RevocableGuard<'a, T: ?Sized> {
     data_ref: *const T,
     _p: PhantomData<&'a ()>,
 }
 
-impl<T> RevocableGuard<'_, T> {
+impl<T: ?Sized> RevocableGuard<'_, T> {
     fn new(data_ref: *const T) -> Self {
         // SAFETY: Just an FFI call, there are no further requirements.
         unsafe { bindings::rcu_read_lock() };
@@ -143,14 +145,14 @@ impl<T> RevocableGuard<'_, T> {
     }
 }
 
-impl<T> Drop for RevocableGuard<'_, T> {
+impl<T: ?Sized> Drop for RevocableGuard<'_, T> {
     fn drop(&mut self) {
         // SAFETY: By the type invariants, we know that we hold the RCU read-side lock.
         unsafe { bindings::rcu_read_unlock() };
     }
 }
 
-impl<T> Deref for RevocableGuard<'_, T> {
+impl<T: ?Sized> Deref for RevocableGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
