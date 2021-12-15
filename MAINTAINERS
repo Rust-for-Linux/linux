@@ -16574,6 +16574,7 @@ T:	git https://github.com/Rust-for-Linux/linux.git rust-next
 F:	rust/
 F:	samples/rust/
 F:	Documentation/rust/
+F:	include/linux/rust.h
 K:	\b(?i:rust)\b
 
 RXRPC SOCKETS (AF_RXRPC)

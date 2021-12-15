@@ -41,6 +41,7 @@
 #include <linux/siphash.h>
 #include <linux/compiler.h>
 #include <linux/property.h>
+#include <linux/rust.h>
 #ifdef CONFIG_BLOCK
 #include <linux/blkdev.h>
 #endif
@@ -2233,10 +2234,6 @@ char *fwnode_string(char *buf, char *end, struct fwnode_handle *fwnode,
 	return widen_string(buf, buf - buf_start, end, spec);
 }
 
-#ifdef CONFIG_RUST
-char *rust_fmt_argument(char* buf, char* end, void *ptr);
-#endif
-
 /* Disable pointer hashing if requested */
 bool no_hash_pointers __ro_after_init;
 EXPORT_SYMBOL_GPL(no_hash_pointers);
@@ -2468,10 +2465,8 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 		return device_node_string(buf, end, ptr, spec, fmt + 1);
 	case 'f':
 		return fwnode_string(buf, end, ptr, spec, fmt + 1);
-#ifdef CONFIG_RUST
 	case 'A':
 		return rust_fmt_argument(buf, end, ptr);
-#endif
 	case 'x':
 		return pointer_string(buf, end, ptr, spec);
 	case 'e':
