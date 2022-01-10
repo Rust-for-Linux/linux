@@ -33,7 +33,6 @@ core-cfgs = \
 
 alloc-cfgs = \
     --cfg no_global_oom_handling \
-    --cfg no_rc \
     --cfg no_sync
 
 quiet_cmd_rustdoc = RUSTDOC $(if $(rustdoc_host),H, ) $<

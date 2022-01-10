@@ -192,7 +192,6 @@ pub mod borrow;
 pub mod collections;
 pub mod fmt;
 pub mod raw_vec;
-#[cfg(not(no_rc))]
 pub mod rc;
 pub mod slice;
 pub mod str;
