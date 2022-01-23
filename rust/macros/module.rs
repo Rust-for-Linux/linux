@@ -414,6 +414,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             let kparam = format!(
                 "
                     kernel::bindings::kernel_param__bindgen_ty_1 {{
+                        // SAFETY: `__{name}_{param_name}_value` is a mutable static variable.
                         arg: unsafe {{ &__{name}_{param_name}_value }} as *const _ as *mut kernel::c_types::c_void,
                     }},
                 ",
@@ -441,6 +442,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                     #[repr(transparent)]
                     struct __{name}_{param_name}_RacyKernelParam(kernel::bindings::kernel_param);
 
+                    // SAFETY: `kenel::bindings::kernel_param` ensures synchronization via locking.
                     unsafe impl Sync for __{name}_{param_name}_RacyKernelParam {{
                     }}
 
@@ -545,26 +547,40 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 \"#
             );
 
+            /// Tries to initialize the module and then unsynchronously sets `__MOD` to the initialized module.
+            /// Internally calls `__init()`.
+            ///
+            /// # Safety
+            ///
+            /// Should not be called unsynchronously with `__{name}_exit()`, which unsets `__MOD`.
             #[cfg(not(MODULE))]
             #[doc(hidden)]
             #[no_mangle]
-            pub extern \"C\" fn __{name}_init() -> kernel::c_types::c_int {{
+            unsafe pub extern \"C\" fn __{name}_init() -> kernel::c_types::c_int {{
                 __init()
             }}
 
+            /// Exits the module by unsynchronously invoking `drop()` on `__MOD`. Internally calls `__exit()`.
+            ///
+            /// # Safety
+            ///
+            /// Should not be called unsynchronously with `__{name}_init()`, which initializes `__MOD`.
             #[cfg(not(MODULE))]
             #[doc(hidden)]
             #[no_mangle]
-            pub extern \"C\" fn __{name}_exit() {{
+            unsafe pub extern \"C\" fn __{name}_exit() {{
                 __exit()
             }}
 
-            fn __init() -> kernel::c_types::c_int {{
+            /// Tries to initialize the module and then unsynchronously sets `__MOD` to the initialized module.
+            ///
+            /// # Safety
+            ///
+            /// Should not be called unsynchronously with `__exit()`.
+            unsafe fn __init() -> kernel::c_types::c_int {{
                 match <{type_} as kernel::KernelModule>::init(kernel::c_str!(\"{name}\"), &THIS_MODULE) {{
                     Ok(m) => {{
-                        unsafe {{
-                            __MOD = Some(m);
-                        }}
+                        __MOD = Some(m);
                         return 0;
                     }}
                     Err(e) => {{
@@ -573,11 +589,14 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 }}
             }}
 
-            fn __exit() {{
-                unsafe {{
-                    // Invokes `drop()` on `__MOD`, which should be used for cleanup.
-                    __MOD = None;
-                }}
+            /// Exits the module by unsynchronously invoking `drop()` on `__MOD`.
+            ///
+            /// # Safety
+            ///
+            /// Should not be called unsynchronously with `__init()`.
+            unsafe fn __exit() {{
+                // Invokes `drop()` on `__MOD`, which should be used for cleanup.
+                __MOD = None;
             }}
 
             {modinfo}
