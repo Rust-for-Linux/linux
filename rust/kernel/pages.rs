@@ -127,7 +127,7 @@ impl<const ORDER: u32> Pages<ORDER> {
         // so `offset` can't overflow an `isize`.
         let dest = unsafe { (mapping.ptr as *mut u8).add(offset) };
         // SAFETY: `src` is guaranteed by the caller to be valid for reads, and `dest` is
-        //valid for writes from the type invariants. Because we're copying `u8`s
+        // valid for writes from the type invariants. Because we're copying `u8`s
         // which have an alignment of 1, `src` and `dest` are always properly aligned.
         unsafe { ptr::copy(src, dest, len) };
         Ok(())
