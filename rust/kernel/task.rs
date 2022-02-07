@@ -108,6 +108,16 @@ impl Task {
         // SAFETY: By the type invariant, we know that `self.ptr` is non-null and valid.
         unsafe { bindings::signal_pending(self.ptr) != 0 }
     }
+
+    /// Wakes up the task.
+    pub fn wake_up(&self) {
+        // SAFETY: By the type invariant, we know that `self.ptr` is non-null and valid.
+        // And `wake_up_process` is safe to be called for any valid task, even if the task is
+        // running.
+        unsafe {
+            bindings::wake_up_process(self.ptr);
+        }
+    }
 }
 
 impl PartialEq for Task {

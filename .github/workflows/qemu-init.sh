@@ -12,6 +12,9 @@ busybox  rmmod rust_module_parameters.ko
 busybox insmod rust_sync.ko
 busybox  rmmod rust_sync.ko
 
+busybox insmod rust_thread.ko
+busybox  rmmod rust_thread.ko
+
 busybox insmod rust_chrdev.ko
 busybox  rmmod rust_chrdev.ko
 

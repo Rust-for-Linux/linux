@@ -50,6 +50,16 @@ config SAMPLE_RUST_SYNC
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_THREAD
+	tristate "Thread APIs"
+	help
+	  This option builds the Rust thread APIs sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_thread.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_CHRDEV
 	tristate "Character device"
 	help

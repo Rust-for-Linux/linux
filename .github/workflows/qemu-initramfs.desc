@@ -9,6 +9,7 @@ file    /rust_minimal.ko            samples/rust/rust_minimal.ko            0755
 file    /rust_print.ko              samples/rust/rust_print.ko              0755 0 0
 file    /rust_module_parameters.ko  samples/rust/rust_module_parameters.ko  0755 0 0
 file    /rust_sync.ko               samples/rust/rust_sync.ko               0755 0 0
+file    /rust_thread.ko             samples/rust/rust_thread.ko             0755 0 0
 file    /rust_chrdev.ko             samples/rust/rust_chrdev.ko             0755 0 0
 file    /rust_miscdev.ko            samples/rust/rust_miscdev.ko            0755 0 0
 file    /rust_stack_probing.ko      samples/rust/rust_stack_probing.ko      0755 0 0

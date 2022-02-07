@@ -340,6 +340,10 @@ jobs:
           grep '] rust_sync: Rust synchronisation primitives sample (exit)$' qemu-stdout.log
 
       - run: |
+          grep '] rust_thread: Rust thread APIs sample (init)$' qemu-stdout.log
+          grep '] rust_thread: Rust thread APIs sample (exit)$' qemu-stdout.log
+
+      - run: |
           grep '] rust_chrdev: Rust character device sample (init)$' qemu-stdout.log
           grep '] rust_chrdev: Rust character device sample (exit)$' qemu-stdout.log
 

@@ -80,6 +80,7 @@ mod static_assert;
 #[doc(hidden)]
 pub mod std_vendor;
 pub mod sync;
+pub mod thread;
 
 #[cfg(any(CONFIG_SYSCTL, doc))]
 #[doc(cfg(CONFIG_SYSCTL))]
