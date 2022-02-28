@@ -122,7 +122,7 @@ config SAMPLE_RUST_PLATFORM
 
 config SAMPLE_RUST_SEQ_FILE
 	tristate "Seq file"
-	depends on PROC_FS
+	depends on DEBUG_FS
 	help
 	  This option builds the Rust seq_file sample.
 

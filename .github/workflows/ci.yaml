@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 20
 
     strategy:
+      fail-fast: false
       matrix:
         arch: [arm, arm64, ppc64le, riscv64, x86_64]
         toolchain: [gcc, clang, llvm]
@@ -363,7 +364,8 @@ jobs:
       - run: |
           grep '] rust_seq_file: Rust seq_file sample (init)$'   qemu-stdout.log
           grep '] rust_seq_file: Rust seq_file sample (exit)$'   qemu-stdout.log
-          test $(grep -c 'rust_seq_file: device opened this many times: 2' qemu-stdout.log) -eq 2
+          grep 'rust_seq_file read log: 1'                       qemu-stdout.log
+          grep 'rust_seq_file read log: 2'                       qemu-stdout.log
 
       # Report
       - run: |

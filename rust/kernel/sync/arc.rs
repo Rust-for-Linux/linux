@@ -15,7 +15,7 @@
 //!
 //! [`Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
 
-use crate::{bindings, pr_alert, Error, Opaque, Result};
+use crate::{bindings, Error, Opaque, Result};
 use alloc::{
     alloc::{alloc, dealloc},
     vec::Vec,
@@ -215,10 +215,6 @@ impl<T: ?Sized> Deref for Ref<T> {
 
 impl<T: ?Sized> Clone for Ref<T> {
     fn clone(&self) -> Self {
-        pr_alert!(
-            "------------------------ Incrementing refcount at address {:?}",
-            self.ptr
-        );
         // INVARIANT: C `refcount_inc` saturates the refcount, so it cannot overflow to zero.
         // SAFETY: By the type invariant, there is necessarily a reference to the object, so it is
         // safe to increment the refcount.
@@ -239,11 +235,6 @@ impl<T: ?Sized> AsRef<T> for Ref<T> {
 
 impl<T: ?Sized> Drop for Ref<T> {
     fn drop(&mut self) {
-        pr_alert!(
-            "------------------------------ Decrementing refcount at address {:?}",
-            self.ptr
-        );
-
         // SAFETY: By the type invariant, there is necessarily a reference to the object. We cannot
         // touch `refcount` after it's decremented to a non-zero value because another thread/CPU
         // may concurrently decrement it to zero and free it. It is ok to have a raw pointer to

@@ -10,7 +10,7 @@
  *  See ./Documentation/core-api/kernel-api.rst for more details.
  */
 
-#define pr_fmt(fmt) "debugfs: " fmt
+#define pr_fmt(fmt)	"debugfs: " fmt
 
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -30,7 +30,7 @@
 
 #include "internal.h"
 
-#define DEBUGFS_DEFAULT_MODE 0700
+#define DEBUGFS_DEFAULT_MODE	0700
 
 static struct vfsmount *debugfs_mount;
 static int debugfs_mount_count;
@@ -56,15 +56,15 @@ static int debugfs_setattr(struct user_namespace *mnt_userns,
 }
 
 static const struct inode_operations debugfs_file_inode_operations = {
-	.setattr = debugfs_setattr,
+	.setattr	= debugfs_setattr,
 };
 static const struct inode_operations debugfs_dir_inode_operations = {
-	.lookup = simple_lookup,
-	.setattr = debugfs_setattr,
+	.lookup		= simple_lookup,
+	.setattr	= debugfs_setattr,
 };
 static const struct inode_operations debugfs_symlink_inode_operations = {
-	.get_link = simple_get_link,
-	.setattr = debugfs_setattr,
+	.get_link	= simple_get_link,
+	.setattr	= debugfs_setattr,
 };
 
 static struct inode *debugfs_get_inode(struct super_block *sb)
@@ -72,8 +72,8 @@ static struct inode *debugfs_get_inode(struct super_block *sb)
 	struct inode *inode = new_inode(sb);
 	if (inode) {
 		inode->i_ino = get_next_ino();
-		inode->i_atime = inode->i_mtime = inode->i_ctime =
-			current_time(inode);
+		inode->i_atime = inode->i_mtime =
+			inode->i_ctime = current_time(inode);
 	}
 	return inode;
 }
@@ -84,12 +84,19 @@ struct debugfs_mount_opts {
 	umode_t mode;
 };
 
-enum { Opt_uid, Opt_gid, Opt_mode, Opt_err };
+enum {
+	Opt_uid,
+	Opt_gid,
+	Opt_mode,
+	Opt_err
+};
 
-static const match_table_t tokens = { { Opt_uid, "uid=%u" },
-				      { Opt_gid, "gid=%u" },
-				      { Opt_mode, "mode=%o" },
-				      { Opt_err, NULL } };
+static const match_table_t tokens = {
+	{Opt_uid, "uid=%u"},
+	{Opt_gid, "gid=%u"},
+	{Opt_mode, "mode=%o"},
+	{Opt_err, NULL}
+};
 
 struct debugfs_fs_info {
 	struct debugfs_mount_opts mount_opts;
@@ -133,7 +140,7 @@ static int debugfs_parse_options(char *data, struct debugfs_mount_opts *opts)
 				return -EINVAL;
 			opts->mode = option & S_IALLUGO;
 			break;
-			/*
+		/*
 		 * We might like to report bad mount options here;
 		 * but traditionally debugfs has ignored all mount options
 		 */
@@ -199,10 +206,10 @@ static void debugfs_free_inode(struct inode *inode)
 }
 
 static const struct super_operations debugfs_super_operations = {
-	.statfs = simple_statfs,
-	.remount_fs = debugfs_remount,
-	.show_options = debugfs_show_options,
-	.free_inode = debugfs_free_inode,
+	.statfs		= simple_statfs,
+	.remount_fs	= debugfs_remount,
+	.show_options	= debugfs_show_options,
+	.free_inode	= debugfs_free_inode,
 };
 
 static void debugfs_release_dentry(struct dentry *dentry)
@@ -228,7 +235,7 @@ static const struct dentry_operations debugfs_dops = {
 
 static int debug_fill_super(struct super_block *sb, void *data, int silent)
 {
-	static const struct tree_descr debug_files[] = { { "" } };
+	static const struct tree_descr debug_files[] = {{""}};
 	struct debugfs_fs_info *fsi;
 	int err;
 
@@ -243,7 +250,7 @@ static int debug_fill_super(struct super_block *sb, void *data, int silent)
 	if (err)
 		goto fail;
 
-	err = simple_fill_super(sb, DEBUGFS_MAGIC, debug_files);
+	err  =  simple_fill_super(sb, DEBUGFS_MAGIC, debug_files);
 	if (err)
 		goto fail;
 
@@ -260,8 +267,9 @@ fail:
 	return err;
 }
 
-static struct dentry *debug_mount(struct file_system_type *fs_type, int flags,
-				  const char *dev_name, void *data)
+static struct dentry *debug_mount(struct file_system_type *fs_type,
+			int flags, const char *dev_name,
+			void *data)
 {
 	if (!(debugfs_allow & DEBUGFS_ALLOW_API))
 		return ERR_PTR(-EPERM);
@@ -270,10 +278,10 @@ static struct dentry *debug_mount(struct file_system_type *fs_type, int flags,
 }
 
 static struct file_system_type debug_fs_type = {
-	.owner = THIS_MODULE,
-	.name = "debugfs",
-	.mount = debug_mount,
-	.kill_sb = kill_litter_super,
+	.owner =	THIS_MODULE,
+	.name =		"debugfs",
+	.mount =	debug_mount,
+	.kill_sb =	kill_litter_super,
 };
 MODULE_ALIAS_FS("debugfs");
 
@@ -375,10 +383,10 @@ static struct dentry *end_creating(struct dentry *dentry)
 	return dentry;
 }
 
-static struct dentry *
-__debugfs_create_file(const char *name, umode_t mode, struct dentry *parent,
-		      void *data, const struct file_operations *proxy_fops,
-		      const struct file_operations *real_fops)
+static struct dentry *__debugfs_create_file(const char *name, umode_t mode,
+				struct dentry *parent, void *data,
+				const struct file_operations *proxy_fops,
+				const struct file_operations *real_fops)
 {
 	struct dentry *dentry;
 	struct inode *inode;
@@ -409,7 +417,7 @@ __debugfs_create_file(const char *name, umode_t mode, struct dentry *parent,
 	inode->i_op = &debugfs_file_inode_operations;
 	inode->i_fop = proxy_fops;
 	dentry->d_fsdata = (void *)((unsigned long)real_fops |
-				    DEBUGFS_FSDATA_IS_REAL_FOPS_BIT);
+				DEBUGFS_FSDATA_IS_REAL_FOPS_BIT);
 
 	d_instantiate(dentry, inode);
 	fsnotify_create(d_inode(dentry->d_parent), dentry);
@@ -447,11 +455,11 @@ struct dentry *debugfs_create_file(const char *name, umode_t mode,
 				   struct dentry *parent, void *data,
 				   const struct file_operations *fops)
 {
-	return __debugfs_create_file(
-		name, mode, parent, data,
-		fops ? &debugfs_full_proxy_file_operations :
-			     &debugfs_noop_file_operations,
-		fops);
+
+	return __debugfs_create_file(name, mode, parent, data,
+				fops ? &debugfs_full_proxy_file_operations :
+					&debugfs_noop_file_operations,
+				fops);
 }
 EXPORT_SYMBOL_GPL(debugfs_create_file);
 
@@ -483,14 +491,14 @@ EXPORT_SYMBOL_GPL(debugfs_create_file);
  * thus, may be used here.
  */
 struct dentry *debugfs_create_file_unsafe(const char *name, umode_t mode,
-					  struct dentry *parent, void *data,
-					  const struct file_operations *fops)
+				   struct dentry *parent, void *data,
+				   const struct file_operations *fops)
 {
-	return __debugfs_create_file(
-		name, mode, parent, data,
-		fops ? &debugfs_open_proxy_file_operations :
-			     &debugfs_noop_file_operations,
-		fops);
+
+	return __debugfs_create_file(name, mode, parent, data,
+				fops ? &debugfs_open_proxy_file_operations :
+					&debugfs_noop_file_operations,
+				fops);
 }
 EXPORT_SYMBOL_GPL(debugfs_create_file_unsafe);
 
@@ -588,8 +596,10 @@ EXPORT_SYMBOL_GPL(debugfs_create_dir);
  *
  * @f should return what ->d_automount() would.
  */
-struct dentry *debugfs_create_automount(const char *name, struct dentry *parent,
-					debugfs_automount_t f, void *data)
+struct dentry *debugfs_create_automount(const char *name,
+					struct dentry *parent,
+					debugfs_automount_t f,
+					void *data)
 {
 	struct dentry *dentry = start_creating(name, parent);
 	struct inode *inode;
@@ -695,7 +705,7 @@ static void __debugfs_file_removed(struct dentry *dentry)
 
 static void remove_one(struct dentry *victim)
 {
-	if (d_is_reg(victim))
+        if (d_is_reg(victim))
 		__debugfs_file_removed(victim);
 	simple_release_fs(&debugfs_mount, &debugfs_mount_count);
 }
@@ -744,7 +754,7 @@ EXPORT_SYMBOL_GPL(debugfs_remove);
  * returned.
  */
 struct dentry *debugfs_rename(struct dentry *old_dir, struct dentry *old_dentry,
-			      struct dentry *new_dir, const char *new_name)
+		struct dentry *new_dir, const char *new_name)
 {
 	int error;
 	struct dentry *dentry = NULL, *trap;
@@ -780,7 +790,8 @@ struct dentry *debugfs_rename(struct dentry *old_dir, struct dentry *old_dentry,
 	}
 	d_move(old_dentry, dentry);
 	fsnotify_move(d_inode(old_dir), d_inode(new_dir), &old_name.name,
-		      d_is_dir(old_dentry), NULL, old_dentry);
+		d_is_dir(old_dentry),
+		NULL, old_dentry);
 	release_dentry_name_snapshot(&old_name);
 	unlock_rename(new_dir, old_dir);
 	dput(dentry);

@@ -1,9 +1,20 @@
 dir     /bin                                          0755 0 0
 dir     /sys                                          0755 0 0
 dir     /dev                                          0755 0 0
-file    /bin/busybox  busybox/busybox                 0755 0 0
+file    /bin/busybox  busybox                         0755 0 0
 slink   /bin/sh       /bin/busybox                    0755 0 0
 file    /init         .github/workflows/qemu-init.sh  0755 0 0
 
+file    /rust_print.ko              samples/rust/rust_print.ko              0755 0 0
+file    /rust_module_parameters.ko  samples/rust/rust_module_parameters.ko  0755 0 0
+file    /rust_sync.ko               samples/rust/rust_sync.ko               0755 0 0
+file    /rust_chrdev.ko             samples/rust/rust_chrdev.ko             0755 0 0
+file    /rust_miscdev.ko            samples/rust/rust_miscdev.ko            0755 0 0
+file    /rust_stack_probing.ko      samples/rust/rust_stack_probing.ko      0755 0 0
+file    /rust_semaphore.ko          samples/rust/rust_semaphore.ko          0755 0 0
+file    /rust_semaphore_c.ko        samples/rust/rust_semaphore_c.ko        0755 0 0
+
+file    /rust_module_parameters_loadable_default.ko  samples/rust/rust_module_parameters_loadable_default.ko  0755 0 0
+file    /rust_module_parameters_loadable_custom.ko   samples/rust/rust_module_parameters_loadable_custom.ko   0755 0 0
 file    /rust_minimal.ko            samples/rust/rust_minimal.ko            0755 0 0
 file    /rust_seq_file.ko           samples/rust/rust_seq_file.ko           0755 0 0

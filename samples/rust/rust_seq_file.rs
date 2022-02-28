@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Rust miscellaneous device sample.
+//! Rust misc device that reports debug information with a seq_file entry in
+//! debugfs.
 
 use kernel::prelude::*;
 use kernel::{
     file::File,
     file_operations::FileOperations,
-    io_buffer::{IoBufferReader, IoBufferWriter},
+    io_buffer::IoBufferWriter,
     miscdev, seq_file,
     seq_file::SeqFileDebugFsDirEntry,
-    sync::{CondVar, Mutex, Ref, RefBorrow, UniqueRef},
+    sync::{Mutex, Ref, RefBorrow, UniqueRef},
 };
 
 module! {
@@ -20,10 +21,8 @@ module! {
     license: b"GPL v2",
 }
 
-const MAX_TOKENS: usize = 3;
-
 struct SharedStateInner {
-    token_count: usize,
+    read_count: usize,
 }
 
 struct SharedState {
@@ -34,7 +33,7 @@ impl SharedState {
     fn try_new() -> Result<Ref<Self>> {
         let mut state = Pin::from(UniqueRef::try_new(Self {
             // SAFETY: `mutex_init!` is called below.
-            inner: unsafe { Mutex::new(SharedStateInner { token_count: 0 }) },
+            inner: unsafe { Mutex::new(SharedStateInner { read_count: 0 }) },
         })?);
 
         // SAFETY: `inner` is pinned when `state` is.
@@ -69,14 +68,8 @@ impl FileOperations for Token {
 
         {
             let mut inner = shared.inner.lock();
-            pr_alert!("read called, current count is {}", inner.token_count);
-
-            // Consume a token.
-            inner.token_count += 1;
+            inner.read_count += 1;
         }
-
-        // Notify a possible writer waiting.
-        shared.state_changed.notify_all();
 
         // Write a one-byte 1 to the reader.
         data.write_slice(&[b'a'; 1])?;
@@ -101,15 +94,11 @@ impl seq_file::SeqOperations for Token {
     type Item = Log;
 
     fn open<'a>(open_data: RefBorrow<'a, SharedState>) -> Result<Ref<SharedState>> {
-        pr_alert!(
-            "While opening, count is {}",
-            open_data.inner.lock().token_count,
-        );
         Ok(open_data.into())
     }
 
     fn start<'a>(data: RefBorrow<'a, SharedState>) -> Option<Self::IteratorWrapper> {
-        let total = data.inner.lock().token_count;
+        let total = data.inner.lock().read_count;
         Box::try_new((total, 1)).ok()
     }
 
@@ -124,7 +113,7 @@ impl seq_file::SeqOperations for Token {
         }
     }
 
-    fn current(iterator: &Self::IteratorWrapper) -> core::option::Option<Log> {
+    fn current(iterator: &(usize, usize)) -> core::option::Option<Log> {
         let total = iterator.0;
         let current = iterator.1;
         if total >= current {
@@ -142,7 +131,7 @@ struct RustMiscdev {
 
 impl KernelModule for RustMiscdev {
     fn init(name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
-        pr_info!("Rust miscellaneous device sample (init)\n");
+        pr_info!("Rust seq_file sample (init)\n");
 
         let state = SharedState::try_new()?;
         let debugfs = seq_file::debugfs_create_file(fmt!("{name}"), state.clone())?;
@@ -156,6 +145,6 @@ impl KernelModule for RustMiscdev {
 
 impl Drop for RustMiscdev {
     fn drop(&mut self) {
-        pr_info!("Rust seq file device sample (exit)\n");
+        pr_info!("Rust seq_file sample (exit)\n");
     }
 }
