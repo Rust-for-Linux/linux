@@ -40,4 +40,17 @@ busybox insmod rust_module_parameters_loadable_custom.ko \
 busybox  rmmod rust_module_parameters_loadable_default.ko
 busybox  rmmod rust_module_parameters_loadable_custom.ko
 
+busybox insmod rust_debugfs.ko
+busybox mkdir proc
+busybox mount -t proc proc /proc
+busybox mkdir debugfs
+busybox mount -t debugfs debugfs /debugfs
+export RUST_SEQ_MINOR=$(busybox cat /proc/misc | busybox grep rust_debugfs | busybox cut -d ' ' -f 1)
+busybox mknod /dev/rust_debugfs0 c 10 $RUST_SEQ_MINOR
+busybox cat /dev/rust_debugfs0
+busybox cat /dev/rust_debugfs0
+busybox cat /debugfs/rust_debugfs_debug/rust_debugfs
+busybox rm /dev/rust_debugfs0
+busybox rmmod rust_debugfs.ko
+
 busybox reboot -f

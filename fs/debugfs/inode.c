@@ -720,6 +720,18 @@ static void remove_one(struct dentry *victim)
 	simple_release_fs(&debugfs_mount, &debugfs_mount_count);
 }
 
+void debugfs_remove_with_callback(struct dentry *dentry,
+				  void (*callback)(struct dentry *))
+{
+	if (IS_ERR_OR_NULL(dentry))
+		return;
+
+	simple_pin_fs(&debug_fs_type, &debugfs_mount, &debugfs_mount_count);
+	simple_recursive_removal(dentry, callback);
+	simple_release_fs(&debugfs_mount, &debugfs_mount_count);
+}
+EXPORT_SYMBOL_GPL(debugfs_remove_with_callback);
+
 /**
  * debugfs_remove - recursively removes a directory
  * @dentry: a pointer to a the dentry of the directory to be removed.  If this

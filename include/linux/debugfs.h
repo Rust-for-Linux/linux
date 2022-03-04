@@ -90,6 +90,8 @@ struct dentry *debugfs_create_automount(const char *name,
 
 void debugfs_remove(struct dentry *dentry);
 #define debugfs_remove_recursive debugfs_remove
+void debugfs_remove_with_callback(struct dentry *dentry,
+				  void (*callback)(struct dentry *));
 
 const struct file_operations *debugfs_real_fops(const struct file *filp);
 
