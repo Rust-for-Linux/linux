@@ -271,7 +271,7 @@ quiet_cmd_bindgen = BINDGEN $@
 		$(bindgen_target_cflags) $(bindgen_target_extra)
 
 $(objtree)/rust/bindings_generated.rs: private bindgen_target_flags = \
-    $(shell grep -v '^\#\|^$$' $(srctree)/rust/bindgen_parameters)
+    $(shell grep -v '^\#\|^$' $(srctree)/rust/bindgen_parameters)
 $(objtree)/rust/bindings_generated.rs: $(srctree)/rust/kernel/bindings_helper.h \
     $(srctree)/rust/bindgen_parameters FORCE
 	$(call if_changed_dep,bindgen)
