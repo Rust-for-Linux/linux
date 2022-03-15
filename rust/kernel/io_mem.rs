@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-use crate::{bindings, Error, Result};
+use crate::{bindings, iopoll, Error, Result};
 use core::convert::TryInto;
 
 /// Represents a memory resource.
@@ -127,6 +127,56 @@ macro_rules! define_write {
     };
 }
 
+macro_rules! define_readx_poll_timeout {
+    ($(#[$attr:meta])* $fname:ident, $try_name:ident, $callback_name:ident, $type_name:ty) => {
+        /// Polls i/o data from the given offset known, at compile time.
+        ///
+        /// The i/o data is polled until it matches specific condition or fails
+        /// at timeout.
+        ///
+        /// If the offset is not known at compile time, the build will fail.
+        $(#[$attr])*
+        pub fn $fname<F: Fn(&$type_name) -> bool>(
+            &self,
+            offset: usize,
+            cond: F,
+            sleep_us: usize,
+            timeout_us: u64,
+        ) -> Result<$type_name> {
+            Self::check_offset::<$type_name>(offset);
+            let ptr = self.ptr.wrapping_add(offset);
+            // SAFETY: The type invariants guarantee that `ptr` is a valid pointer. The check above
+            // guarantees that the code won't build if `offset` makes the read go out of bounds
+            // (including the type size).
+            unsafe { iopoll::readx_poll_timeout(bindings::$callback_name, cond, sleep_us, timeout_us, ptr as *const _) }
+        }
+
+        /// Polls i/o data from the given offset known, at compile time.
+        ///
+        /// The i/o data is polled until it matches specific condition or fails
+        /// at timeout.
+        ///
+        /// It fails if/when the offset (plus the type size) is out of bounds.
+        $(#[$attr])*
+        pub fn $try_name<F: Fn(&$type_name) -> bool>(
+            &self,
+            offset: usize,
+            cond: F,
+            sleep_us: usize,
+            timeout_us: u64,
+        ) -> Result<$type_name> {
+            if !Self::offset_ok::<$type_name>(offset) {
+                return Err(Error::EINVAL);
+            }
+            let ptr = self.ptr.wrapping_add(offset);
+            // SAFETY: The type invariants guarantee that `ptr` is a valid pointer. The check above
+            // guarantees that the code won't build if `offset` makes the read go out of bounds
+            // (including the type size).
+            unsafe { iopoll::readx_poll_timeout(bindings::$callback_name, cond, sleep_us, timeout_us, ptr as *const _) }
+        }
+    };
+}
+
 impl<const SIZE: usize> IoMem<SIZE> {
     /// Tries to create a new instance of a memory block.
     ///
@@ -186,6 +236,17 @@ impl<const SIZE: usize> IoMem<SIZE> {
     const fn check_offset<T>(offset: usize) {
         crate::build_assert!(Self::offset_ok::<T>(offset), "IoMem offset overflow");
     }
+
+    define_readx_poll_timeout!(readb_poll_timeout, try_readb_poll_timeout, readb, u8);
+    define_readx_poll_timeout!(readw_poll_timeout, try_readw_poll_timeout, readw, u16);
+    define_readx_poll_timeout!(readl_poll_timeout, try_readl_poll_timeout, readl, u32);
+    define_readx_poll_timeout!(
+        #[cfg(CONFIG_64BIT)]
+        readq_poll_timeout,
+        try_readq_poll_timeout,
+        readq,
+        u64
+    );
 
     define_read!(readb, try_readb, u8);
     define_read!(readw, try_readw, u16);

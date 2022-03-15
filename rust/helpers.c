@@ -20,6 +20,9 @@
 #include <linux/bug.h>
 #include <linux/build_bug.h>
 #include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/ktime.h>
+#include <linux/kernel.h>
 #include <linux/uaccess.h>
 #include <linux/sched/signal.h>
 #include <linux/gfp.h>
@@ -41,6 +44,30 @@ __noreturn void rust_helper_BUG(void)
 	BUG();
 }
 EXPORT_SYMBOL_GPL(rust_helper_BUG);
+
+void rust_helper_usleep_range(unsigned long min, unsigned long max)
+{
+	usleep_range(min, max);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usleep_range);
+
+void rust_helper_might_sleep(void)
+{
+	might_sleep();
+}
+EXPORT_SYMBOL_GPL(rust_helper_might_sleep);
+
+int rust_helper_ktime_compare(const ktime_t cmp1, const ktime_t cmp2)
+{
+	return ktime_compare(cmp1, cmp2);
+}
+EXPORT_SYMBOL_GPL(rust_helper_ktime_compare);
+
+ktime_t rust_helper_ktime_add_us(const ktime_t kt, const u64 usec)
+{
+	return ktime_add_us(kt, usec);
+}
+EXPORT_SYMBOL_GPL(rust_helper_ktime_add_us);
 
 void rust_helper_clk_disable_unprepare(struct clk *clk)
 {

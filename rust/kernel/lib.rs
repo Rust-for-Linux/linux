@@ -48,13 +48,16 @@ pub mod chrdev;
 #[cfg(CONFIG_COMMON_CLK)]
 pub mod clk;
 pub mod cred;
+pub mod delay;
 pub mod device;
 pub mod driver;
 mod error;
 pub mod file;
 pub mod file_operations;
 pub mod gpio;
+pub mod iopoll;
 pub mod irq;
+pub mod ktime;
 pub mod miscdev;
 pub mod mm;
 pub mod pages;
@@ -175,6 +178,17 @@ impl<'a> Drop for KParamGuard<'a> {
         // guarantees that the lock is held.
         unsafe { bindings::kernel_param_unlock(self.this_module.0) }
     }
+}
+
+#[macro_export]
+/// Possible sleep when the provided condition is true.
+macro_rules! might_sleep_if {
+    ($cond:expr) => {
+        if $cond {
+            // SAFETY: FFI call.
+            unsafe { $crate::bindings::might_sleep() };
+        }
+    };
 }
 
 /// Calculates the offset of a field from the beginning of the struct it belongs to.
