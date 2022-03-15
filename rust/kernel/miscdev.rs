@@ -8,7 +8,7 @@
 
 use crate::bindings;
 use crate::error::{Error, Result};
-use crate::file_operations::{FileOpenAdapter, FileOperations, FileOperationsVtable};
+use crate::file;
 use crate::{device, str::CStr, str::CString, KernelModule, ThisModule};
 use alloc::boxed::Box;
 use core::marker::PhantomPinned;
@@ -19,9 +19,9 @@ use core::{fmt, mem::MaybeUninit, pin::Pin};
 /// # Examples
 ///
 /// ```
-/// # use kernel::{c_str, device::RawDevice, file_operations::FileOperations, miscdev, prelude::*};
+/// # use kernel::{c_str, device::RawDevice, file, miscdev, prelude::*};
 /// pub fn example(
-///     reg: Pin<&mut miscdev::Registration<impl FileOperations<OpenData = ()>>>,
+///     reg: Pin<&mut miscdev::Registration<impl file::Operations<OpenData = ()>>>,
 ///     parent: &dyn RawDevice,
 /// ) -> Result {
 ///     miscdev::Options::new()
@@ -70,7 +70,7 @@ impl<'a> Options<'a> {
     }
 
     /// Registers a misc device using the configured options.
-    pub fn register<T: FileOperations>(
+    pub fn register<T: file::Operations>(
         &self,
         reg: Pin<&mut Registration<T>>,
         name: fmt::Arguments<'_>,
@@ -81,7 +81,7 @@ impl<'a> Options<'a> {
 
     /// Allocates a new registration of a misc device and completes the registration with the
     /// configured options.
-    pub fn register_new<T: FileOperations>(
+    pub fn register_new<T: file::Operations>(
         &self,
         name: fmt::Arguments<'_>,
         open_data: T::OpenData,
@@ -97,18 +97,18 @@ impl<'a> Options<'a> {
 /// # Invariants
 ///
 /// `Context` is always initialised when `registered` is `true`, and not initialised otherwise.
-pub struct Registration<T: FileOperations> {
+pub struct Registration<T: file::Operations> {
     registered: bool,
     mdev: bindings::miscdevice,
     name: Option<CString>,
     _pin: PhantomPinned,
 
     /// Context initialised on construction and made available to all file instances on
-    /// [`FileOperations::open`].
+    /// [`file::Operations::open`].
     open_data: MaybeUninit<T::OpenData>,
 }
 
-impl<T: FileOperations> Registration<T> {
+impl<T: file::Operations> Registration<T> {
     /// Creates a new [`Registration`] but does not register it yet.
     ///
     /// It is allowed to move.
@@ -163,7 +163,7 @@ impl<T: FileOperations> Registration<T> {
         let name = CString::try_from_fmt(name)?;
 
         // SAFETY: The adapter is compatible with `misc_register`.
-        this.mdev.fops = unsafe { FileOperationsVtable::<Self, T>::build() };
+        this.mdev.fops = unsafe { file::OperationsVtable::<Self, T>::build() };
         this.mdev.name = name.as_char_ptr();
         this.mdev.minor = opts.minor.unwrap_or(bindings::MISC_DYNAMIC_MINOR as i32);
         this.mdev.mode = opts.mode.unwrap_or(0);
@@ -193,13 +193,13 @@ impl<T: FileOperations> Registration<T> {
     }
 }
 
-impl<T: FileOperations> Default for Registration<T> {
+impl<T: file::Operations> Default for Registration<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: FileOperations> FileOpenAdapter<T::OpenData> for Registration<T> {
+impl<T: file::Operations> file::OpenAdapter<T::OpenData> for Registration<T> {
     unsafe fn convert(
         _inode: *mut bindings::inode,
         file: *mut bindings::file,
@@ -216,13 +216,13 @@ impl<T: FileOperations> FileOpenAdapter<T::OpenData> for Registration<T> {
 
 // SAFETY: The only method is `register()`, which requires a (pinned) mutable `Registration`, so it
 // is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
-unsafe impl<T: FileOperations> Sync for Registration<T> {}
+unsafe impl<T: file::Operations> Sync for Registration<T> {}
 
 // SAFETY: All functions work from any thread. So as long as the `Registration::open_data` is
 // `Send`, so is `Registration<T>`.
-unsafe impl<T: FileOperations> Send for Registration<T> where T::OpenData: Send {}
+unsafe impl<T: file::Operations> Send for Registration<T> where T::OpenData: Send {}
 
-impl<T: FileOperations> Drop for Registration<T> {
+impl<T: file::Operations> Drop for Registration<T> {
     /// Removes the registration from the kernel if it has completed successfully before.
     fn drop(&mut self) {
         if self.registered {
@@ -238,11 +238,11 @@ impl<T: FileOperations> Drop for Registration<T> {
 }
 
 /// Kernel module that exposes a single miscdev device implemented by `T`.
-pub struct Module<T: FileOperations<OpenData = ()>> {
+pub struct Module<T: file::Operations<OpenData = ()>> {
     _dev: Pin<Box<Registration<T>>>,
 }
 
-impl<T: FileOperations<OpenData = ()>> KernelModule for Module<T> {
+impl<T: file::Operations<OpenData = ()>> KernelModule for Module<T> {
     fn init(name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
         Ok(Self {
             _dev: Registration::new_pinned(crate::fmt!("{name}"), ())?,
@@ -275,7 +275,7 @@ impl<T: FileOperations<OpenData = ()>> KernelModule for Module<T> {
 /// #[derive(Default)]
 /// struct MyFile;
 ///
-/// impl kernel::file_operations::FileOperations for MyFile {
+/// impl kernel::file::Operations for MyFile {
 ///     kernel::declare_file_operations!();
 /// }
 /// ```

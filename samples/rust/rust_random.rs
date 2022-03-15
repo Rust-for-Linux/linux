@@ -6,15 +6,14 @@
 //! <https://github.com/alex/just-use/blob/master/src/lib.rs>.
 
 use kernel::{
-    file::File,
-    file_operations::FileOperations,
+    file::{self, File},
     io_buffer::{IoBufferReader, IoBufferWriter},
     prelude::*,
 };
 
 struct RandomFile;
 
-impl FileOperations for RandomFile {
+impl file::Operations for RandomFile {
     kernel::declare_file_operations!(read, write, read_iter, write_iter);
 
     fn open(_data: &(), _file: &File) -> Result {

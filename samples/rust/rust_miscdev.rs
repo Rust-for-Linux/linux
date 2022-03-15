@@ -4,8 +4,7 @@
 
 use kernel::prelude::*;
 use kernel::{
-    file::File,
-    file_operations::FileOperations,
+    file::{self, File},
     io_buffer::{IoBufferReader, IoBufferWriter},
     miscdev,
     sync::{CondVar, Mutex, Ref, RefBorrow, UniqueRef},
@@ -52,7 +51,7 @@ impl SharedState {
 }
 
 struct Token;
-impl FileOperations for Token {
+impl file::Operations for Token {
     type Data = Ref<SharedState>;
     type OpenData = Ref<SharedState>;
 

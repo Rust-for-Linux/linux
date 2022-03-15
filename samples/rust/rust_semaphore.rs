@@ -16,8 +16,7 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 use kernel::{
     condvar_init, declare_file_operations,
-    file::File,
-    file_operations::{FileOperations, IoctlCommand, IoctlHandler},
+    file::{self, File, IoctlCommand, IoctlHandler},
     io_buffer::{IoBufferReader, IoBufferWriter},
     miscdev::Registration,
     mutex_init,
@@ -62,7 +61,7 @@ impl FileState {
     }
 }
 
-impl FileOperations for FileState {
+impl file::Operations for FileState {
     type Data = Box<Self>;
     type OpenData = Ref<Semaphore>;
 

@@ -4,8 +4,7 @@ use core::{convert::TryFrom, mem::take, ops::Range};
 use kernel::{
     bindings,
     cred::Credential,
-    file::File,
-    file_operations::{FileOperations, IoctlCommand, IoctlHandler, PollTable},
+    file::{self, File, IoctlCommand, IoctlHandler, PollTable},
     io_buffer::{IoBufferReader, IoBufferWriter},
     linked_list::List,
     mm,
@@ -805,7 +804,7 @@ impl IoctlHandler for Process {
     }
 }
 
-impl FileOperations for Process {
+impl file::Operations for Process {
     type Data = Ref<Self>;
     type OpenData = Ref<Context>;
 

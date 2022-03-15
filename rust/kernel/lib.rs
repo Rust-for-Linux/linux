@@ -52,7 +52,6 @@ pub mod device;
 pub mod driver;
 mod error;
 pub mod file;
-pub mod file_operations;
 pub mod gpio;
 pub mod irq;
 pub mod miscdev;

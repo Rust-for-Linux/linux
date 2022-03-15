@@ -7,8 +7,7 @@ use core::{
 };
 use kernel::{
     bindings,
-    file::File,
-    file_operations::PollTable,
+    file::{File, PollTable},
     io_buffer::{IoBufferReader, IoBufferWriter},
     linked_list::{GetLinks, Links, List},
     prelude::*,
