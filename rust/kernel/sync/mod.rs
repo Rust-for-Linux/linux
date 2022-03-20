@@ -41,7 +41,7 @@ pub use mutex::Mutex;
 pub use revocable_mutex::{RevocableMutex, RevocableMutexGuard};
 pub use rwsem::RwSemaphore;
 pub use seqlock::{SeqLock, SeqLockReadGuard};
-pub use spinlock::SpinLock;
+pub use spinlock::{IrqDisableSpinLock, SpinLock};
 
 /// Safely initialises an object that has an `init` function that takes a name and a lock class as
 /// arguments, examples of these are [`Mutex`] and [`SpinLock`]. Each of them also provides a more

@@ -190,3 +190,126 @@ unsafe impl<T: ?Sized> Lock<DisabledInterrupts> for SpinLock<T> {
         &self.data
     }
 }
+
+/// Safely initialises an [`IrqDisableSpinLock`] with the given name, generating a new lock class.
+#[macro_export]
+macro_rules! irqdisable_spinlock_init {
+    ($spinlock:expr, $name:literal) => {
+        $crate::init_with_lockdep!($spinlock, $name)
+    };
+}
+
+/// A spinlock that always disables interrupts when locked.
+///
+/// This is similar to [`SpinLock`], except that the [`SpinLock::lock`] method always disables
+/// interrupts, and the guard restores the state when dropped. That is,
+/// [`IrqDisableSpinLock::lock`] behaves exactly like [`SpinLock::lock_irqdisable`].
+///
+/// # Examples
+///
+/// ```
+/// # use kernel::prelude::*;
+/// # use kernel::sync::IrqDisableSpinLock;
+/// # use core::pin::Pin;
+///
+/// struct Example {
+///     a: u32,
+///     b: u32,
+/// }
+///
+/// // Function that acquires spinlock and disables interrupts while holding it.
+/// fn lock_irqdisable_example(value: &IrqDisableSpinLock<Example>) {
+///     let mut guard = value.lock();
+///     guard.a = 10;
+///     guard.b = 20;
+/// }
+///
+/// // Initialises a spinlock and calls the example functions.
+/// pub fn spinlock_example() {
+///     // SAFETY: `spinlock_init` is called below.
+///     let mut value = unsafe { IrqDisableSpinLock::new(Example { a: 1, b: 2 }) };
+///     // SAFETY: We don't move `value`.
+///     kernel::irqdisable_spinlock_init!(unsafe { Pin::new_unchecked(&mut value) }, "value");
+///     lock_irqdisable_example(&value);
+/// }
+/// ```
+pub struct IrqDisableSpinLock<T: ?Sized> {
+    inner: SpinLock<T>,
+}
+
+// SAFETY: `IrqDisableSpinLock` can be transferred across thread boundaries iff the data it protects
+// can.
+unsafe impl<T: ?Sized + Send> Send for IrqDisableSpinLock<T> {}
+
+// SAFETY: `IrqDisableSpinLock` serialises the interior mutability it provides, so it is `Sync` as
+// long as the data it protects is `Send`.
+unsafe impl<T: ?Sized + Send> Sync for IrqDisableSpinLock<T> {}
+
+impl<T> IrqDisableSpinLock<T> {
+    /// Constructs a new irq-disabling spinlock.
+    ///
+    /// # Safety
+    ///
+    /// The caller must call [`IrqDisableSpinLock::init_lock`] before using the spinlock.
+    pub unsafe fn new(t: T) -> Self {
+        // SAFETY: By the safety requirements of this function, The caller is required to call
+        // `IrqDisableSpinLock::init_lock`, which itself calls `inner.init_lock`.
+        Self {
+            inner: unsafe { SpinLock::new(t) },
+        }
+    }
+}
+
+impl<T: ?Sized> IrqDisableSpinLock<T> {
+    /// Locks the spinlock and gives the caller access to the data protected by it. Additionally it
+    /// disables interrupts (if they are enabled).
+    ///
+    /// When the lock in unlocked, the interrupt state (enabled/disabled) is restored.
+    pub fn lock(&self) -> GuardMut<'_, Self> {
+        let ctx = self.lock_noguard();
+        // SAFETY: The spinlock was just acquired.
+        unsafe { GuardMut::new(self, ctx) }
+    }
+}
+
+impl<T> CreatableLock for IrqDisableSpinLock<T> {
+    unsafe fn new_lock(data: Self::Inner) -> Self {
+        // SAFETY: The safety requirements of `new_lock` also require that `init_lock` be called.
+        unsafe { Self::new(data) }
+    }
+
+    unsafe fn init_lock(
+        mut self: Pin<&mut Self>,
+        name: &'static CStr,
+        key: *mut bindings::lock_class_key,
+    ) {
+        // SAFETY: `self.inner` is pinned when `self` is.
+        let inner = unsafe { self.as_mut().map_unchecked_mut(|s| &mut s.inner) };
+        // SAFETY: By the safety requirements of this function, `key` will remain valid.
+        unsafe { inner.init_lock(name, key) };
+    }
+}
+
+// SAFETY: The underlying kernel `spinlock_t` object ensures mutual exclusion.
+unsafe impl<T: ?Sized> Lock for IrqDisableSpinLock<T> {
+    type Inner = T;
+    type GuardContext = <SpinLock<T> as Lock>::GuardContext;
+
+    fn lock_noguard(&self) -> Self::GuardContext {
+        Some(self.inner.internal_lock_irqsave())
+    }
+
+    unsafe fn unlock(&self, ctx: &mut Option<c_types::c_ulong>) {
+        // SAFETY: The safety requirements of the function ensure that the spinlock is owned by the
+        // caller.
+        unsafe { self.inner.unlock(ctx) };
+    }
+
+    fn relock(&self, ctx: &mut Self::GuardContext) {
+        self.inner.relock(ctx);
+    }
+
+    fn locked_data(&self) -> &UnsafeCell<T> {
+        self.inner.locked_data()
+    }
+}
