@@ -322,6 +322,7 @@ impl Error {
     ///
     /// It is a bug to pass an out-of-range `errno`. `EINVAL` would
     /// be returned in such a case.
+    #[cold]
     pub(crate) fn from_kernel_errno(errno: c_types::c_int) -> Error {
         if errno < -(bindings::MAX_ERRNO as i32) || errno >= 0 {
             // TODO: Make it a `WARN_ONCE` once available.
@@ -342,6 +343,7 @@ impl Error {
     /// # Safety
     ///
     /// `errno` must be within error code range (i.e. `>= -MAX_ERRNO && < 0`).
+    #[cold]
     pub(crate) unsafe fn from_kernel_errno_unchecked(errno: c_types::c_int) -> Error {
         // INVARIANT: The contract ensures the type invariant
         // will hold.
@@ -349,6 +351,7 @@ impl Error {
     }
 
     /// Returns the kernel error code.
+    #[cold]
     pub fn to_kernel_errno(self) -> c_types::c_int {
         self.0
     }
@@ -391,36 +394,42 @@ impl fmt::Debug for Error {
 }
 
 impl From<TryFromIntError> for Error {
+    #[cold]
     fn from(_: TryFromIntError) -> Error {
         code::EINVAL
     }
 }
 
 impl From<Utf8Error> for Error {
+    #[cold]
     fn from(_: Utf8Error) -> Error {
         code::EINVAL
     }
 }
 
 impl From<TryReserveError> for Error {
+    #[cold]
     fn from(_: TryReserveError) -> Error {
         code::ENOMEM
     }
 }
 
 impl From<LayoutError> for Error {
+    #[cold]
     fn from(_: LayoutError) -> Error {
         code::ENOMEM
     }
 }
 
 impl From<core::fmt::Error> for Error {
+    #[cold]
     fn from(_: core::fmt::Error) -> Error {
         code::EINVAL
     }
 }
 
 impl From<core::convert::Infallible> for Error {
+    #[cold]
     fn from(e: core::convert::Infallible) -> Error {
         match e {}
     }

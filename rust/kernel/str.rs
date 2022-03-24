@@ -45,6 +45,7 @@ pub enum CStrConvertError {
 }
 
 impl From<CStrConvertError> for Error {
+    #[cold]
     #[inline]
     fn from(_: CStrConvertError) -> Error {
         EINVAL
