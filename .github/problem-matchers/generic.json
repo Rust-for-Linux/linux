@@ -1,0 +1,15 @@
+{
+    "problemMatcher": [
+        {
+            "owner": "generic",
+            "pattern": [
+                {
+	            "__comment_owner": "match any line that starts with the words: error, warn, warning, bug; not matter the case.",
+                    "regexp": "^([wW]arning|[wW]arn|[eE]rror|[bB]ug|WARNING|WARN|ERROR|BUG)(\\[(.*)\\])?: (.*)$",
+                    "severity": 1,
+                    "message": 2,
+                }
+            ]
+        }
+    ]
+}
