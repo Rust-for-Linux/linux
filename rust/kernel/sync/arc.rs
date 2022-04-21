@@ -159,7 +159,7 @@ impl<T: ?Sized> Ref<T> {
     ///
     /// It can be reconstructed once via [`Ref::from_raw`].
     pub fn into_raw(obj: Self) -> *const T {
-        let ret = &*obj as *const T;
+        let ret = core::ptr::addr_of!(*obj);
         core::mem::forget(obj);
         ret
     }
