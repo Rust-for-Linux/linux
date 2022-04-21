@@ -110,14 +110,12 @@ impl<const ORDER: u32> Pages<ORDER> {
 
         // SAFETY: `page` is valid based on the checks above.
         let ptr = unsafe { bindings::kmap(page) };
-        if ptr.is_null() {
-            return None;
-        }
-
-        Some(PageMapping {
-            page,
-            ptr,
-            _phantom: PhantomData,
+        ptr.is_null().then_some({
+            PageMapping {
+                page,
+                ptr,
+                _phantom: PhantomData,
+            }
         })
     }
 }

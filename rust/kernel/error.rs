@@ -358,12 +358,10 @@ impl Error {
     pub fn name(&self) -> Option<&'static CStr> {
         // SAFETY: Just an FFI call, there are no extra safety requirements.
         let ptr = unsafe { bindings::errname(-self.0) };
-        if ptr.is_null() {
-            None
-        } else {
+        ptr.is_null().then_some({
             // SAFETY: The string returned by `errname` is static and `NUL`-terminated.
-            Some(unsafe { CStr::from_char_ptr(ptr) })
-        }
+            unsafe { CStr::from_char_ptr(ptr) }
+        })
     }
 
     /// Returns a string representing the error, if one exists.

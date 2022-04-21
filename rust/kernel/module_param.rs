@@ -69,11 +69,9 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
         val: *const crate::c_types::c_char,
         param: *const crate::bindings::kernel_param,
     ) -> crate::c_types::c_int {
-        let arg = if val.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_char_ptr(val).as_bytes() })
-        };
+        let arg = val
+            .is_null()
+            .then_some( unsafe { CStr::from_char_ptr(val).as_bytes() });
         match Self::try_from_param_arg(arg) {
             Some(new_value) => {
                 let old_value = unsafe { (*param).__bindgen_anon_1.arg as *mut Self };
