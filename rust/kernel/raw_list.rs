@@ -16,7 +16,7 @@ use core::{
 /// It describes the type of list elements and provides a function to determine how to get the
 /// links to be used on a list.
 ///
-/// A type that may be in multiple lists simultaneously neneds to implement one of these for each
+/// A type that may be in multiple lists simultaneously needs to implement one of these for each
 /// simultaneous list.
 pub trait GetLinks {
     /// The type of the entries in the list.
