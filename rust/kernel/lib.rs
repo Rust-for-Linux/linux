@@ -125,7 +125,7 @@ pub trait Module: Sized + Sync {
     /// should do.
     ///
     /// Equivalent to the `module_init` macro in the C API.
-    fn init(name: &'static str::CStr, module: &'static ThisModule) -> Result<Self>;
+    fn init(module: &'static ThisModule) -> Result<Self>;
 }
 
 /// Equivalent to `THIS_MODULE` in the C API.
@@ -162,6 +162,11 @@ impl ThisModule {
             this_module: self,
             phantom: PhantomData,
         }
+    }
+
+    /// Get name of [`ThisModule`]
+    pub fn name(&self) -> &'static str::CStr {
+        unsafe { str::CStr::from_char_ptr((*self.0).name.as_ptr()) }
     }
 }
 

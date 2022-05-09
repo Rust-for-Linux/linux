@@ -107,7 +107,7 @@ struct RustSemaphore {
 }
 
 impl kernel::Module for RustSemaphore {
-    fn init(name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
+    fn init(module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust semaphore sample (init)\n");
 
         let mut sema = Pin::from(UniqueRef::try_new(Semaphore {
@@ -130,6 +130,8 @@ impl kernel::Module for RustSemaphore {
         // SAFETY: `inner` is pinned when `sema` is.
         let pinned = unsafe { sema.as_mut().map_unchecked_mut(|s| &mut s.inner) };
         mutex_init!(pinned, "Semaphore::inner");
+
+        let name = module.name();
 
         Ok(Self {
             _dev: Registration::new_pinned(fmt!("{name}"), sema.into())?,

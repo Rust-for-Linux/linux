@@ -9,7 +9,6 @@ use kernel::{
     linked_list::{GetLinks, GetLinksWrapped, Links},
     miscdev::Registration,
     prelude::*,
-    str::CStr,
     sync::Ref,
     user_ptr::UserSlicePtrWriter,
 };
@@ -103,8 +102,9 @@ struct BinderModule {
 }
 
 impl kernel::Module for BinderModule {
-    fn init(name: &'static CStr, _module: &'static kernel::ThisModule) -> Result<Self> {
+    fn init(module: &'static kernel::ThisModule) -> Result<Self> {
         let ctx = Context::new()?;
+        let name = module.name();
         let reg = Registration::new_pinned(fmt!("{name}"), ctx)?;
         Ok(Self { _reg: reg })
     }

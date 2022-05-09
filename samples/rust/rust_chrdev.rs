@@ -28,10 +28,10 @@ struct RustChrdev {
 }
 
 impl kernel::Module for RustChrdev {
-    fn init(name: &'static CStr, module: &'static ThisModule) -> Result<Self> {
+    fn init(module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust character device sample (init)\n");
 
-        let mut chrdev_reg = chrdev::Registration::new_pinned(name, 0, module)?;
+        let mut chrdev_reg = chrdev::Registration::new_pinned(module.name(), 0, module)?;
 
         // Register the same kind of device twice, we're just demonstrating
         // that you can use multiple minors. There are two minors in this case

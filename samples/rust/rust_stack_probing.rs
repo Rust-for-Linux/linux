@@ -15,7 +15,7 @@ module! {
 struct RustStackProbing;
 
 impl kernel::Module for RustStackProbing {
-    fn init(_name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
+    fn init(_module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust stack probing sample (init)\n");
 
         // Including this large variable on the stack will trigger

@@ -125,10 +125,11 @@ struct RustMiscdev {
 }
 
 impl kernel::Module for RustMiscdev {
-    fn init(name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
+    fn init(module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust miscellaneous device sample (init)\n");
 
         let state = SharedState::try_new()?;
+        let name = module.name();
 
         Ok(RustMiscdev {
             _dev: miscdev::Registration::new_pinned(fmt!("{name}"), state)?,

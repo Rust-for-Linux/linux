@@ -24,7 +24,7 @@ kernel::init_static_sync! {
 struct RustSync;
 
 impl kernel::Module for RustSync {
-    fn init(_name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
+    fn init(_module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust synchronisation primitives sample (init)\n");
 
         // Test mutexes.

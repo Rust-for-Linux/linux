@@ -33,7 +33,7 @@ impl netfilter::Filter for RustNetfilter {
 }
 
 impl kernel::Module for RustNetfilter {
-    fn init(_name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
+    fn init(_module: &'static ThisModule) -> Result<Self> {
         Ok(Self {
             _in: netfilter::Registration::new_pinned(
                 Family::INet(inet::Hook::PreRouting),
