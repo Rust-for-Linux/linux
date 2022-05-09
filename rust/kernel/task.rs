@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/sched.h`](../../../../include/linux/sched.h).
 
-use crate::bindings;
+use crate::{bindings, mm::MmStruct};
 use core::{marker::PhantomData, mem::ManuallyDrop, ops::Deref};
 
 /// Wraps the kernel's `struct task_struct`.
@@ -96,6 +96,11 @@ impl Task {
         unsafe { (*self.ptr).pid }
     }
 
+    /// Returns the Mm of the given task.
+    pub fn mm(&self) -> &MmStruct {
+        let ptr = unsafe { core::ptr::addr_of!((*self.ptr).mm).read() };
+        unsafe { MmStruct::from_ptr(ptr) }
+    }
     /// Determines whether the given task has pending signals.
     pub fn signal_pending(&self) -> bool {
         // SAFETY: By the type invariant, we know that `self.ptr` is non-null and valid.
