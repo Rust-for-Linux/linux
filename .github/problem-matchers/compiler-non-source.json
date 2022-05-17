@@ -1,0 +1,17 @@
+{
+    "problemMatcher": [
+        {
+            "__comment_owner": "match compiler warning/error lines not from source",
+            "owner": "compiler-non-source",
+            "pattern": [
+                {
+                    "__comment_regexp1": "clang: warning: argument unused during compilation: '-march=armv7-a' [-Wunused-command-line-argument]",
+                    "__comment_regexp2": "ld.lld: warning: lld uses blx instruction, no object with architecture supporting feature detected",
+                    "regexp": "^(?:[^:]+): (?:fatal\\s+)?(warning|error):\\s+(.*)$",
+                    "severity": 1,
+                    "message": 2
+                }
+            ]
+        }
+    ]
+}
