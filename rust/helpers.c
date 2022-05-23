@@ -38,6 +38,7 @@
 #include <linux/of_device.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
+#include <linux/sched/mm.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -614,6 +615,12 @@ unsigned int rust_helper_NF_QUEUE_NR(unsigned int n)
 	return NF_QUEUE_NR(n);
 }
 EXPORT_SYMBOL_GPL(rust_helper_NF_QUEUE_NR);
+
+void rust_helper_mmget(struct mm_struct *mm)
+{
+        mmget(mm);
+}
+EXPORT_SYMBOL_GPL(rust_helper_mmget);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type

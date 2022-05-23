@@ -4,7 +4,8 @@
 //!
 //! C header: [`include/linux/mm.h`](../../../../include/linux/mm.h)
 
-use crate::{bindings, pages, to_result, Result};
+use crate::{bindings, pages, to_result, AlwaysRefCounted, Result};
+use core::cell::UnsafeCell;
 
 /// Virtual memory.
 pub mod virt {
@@ -145,5 +146,39 @@ pub mod virt {
 
         /// KSM may merge identical pages.
         pub const MERGEABLE: usize = bindings::VM_MERGEABLE as _;
+    }
+}
+
+/// Wraps the kernel's `struct mm_struct`.
+///
+/// # Invariants
+///
+/// Instances of this type are always ref-counted, that is, a call to `mmget` ensures that the
+/// allocation remains valid at least until the matching call to `mmput`.
+#[repr(transparent)]
+pub struct Mm(pub(crate) UnsafeCell<bindings::mm_struct>);
+
+impl Mm {
+    /// Creates a reference to a [`Mm`] from a valid pointer.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `ptr` is valid and remains valid for the lifetime of the
+    /// returned [`Mm`] reference.
+    pub(crate) unsafe fn from_ptr<'a>(ptr: *const bindings::mm_struct) -> &'a Self {
+        unsafe { &*ptr.cast() }
+    }
+}
+
+// SAFETY: The type invariants guarantee that `Mm` is always ref-counted.
+unsafe impl AlwaysRefCounted for Mm {
+    fn inc_ref(&self) {
+        // SAFETY: The existence of a shared reference means that the refcount is nonzero.
+        unsafe { bindings::mmget(self.0.get()) };
+    }
+
+    unsafe fn dec_ref(obj: core::ptr::NonNull<Self>) {
+        // SAFETY: The safety requirements guarantee that the refcount is nonzero.
+        unsafe { bindings::mmput(obj.cast().as_ptr()) };
     }
 }
