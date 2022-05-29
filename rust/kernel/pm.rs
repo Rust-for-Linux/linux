@@ -6,6 +6,9 @@
 
 #![allow(dead_code)]
 
+/// Device run-time power management helper functions.
+pub mod runtime;
+
 use crate::{bindings, c_types, error::from_kernel_result, types::PointerWrapper, Result};
 use core::marker::PhantomData;
 

@@ -59,7 +59,7 @@ pub mod mm;
 #[cfg(CONFIG_NET)]
 pub mod net;
 pub mod pages;
-pub mod power;
+pub mod pm;
 pub mod revocable;
 pub mod security;
 pub mod str;

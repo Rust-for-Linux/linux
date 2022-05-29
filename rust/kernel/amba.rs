@@ -5,8 +5,8 @@
 //! C header: [`include/linux/amba/bus.h`](../../../../include/linux/amba/bus.h)
 
 use crate::{
-    bindings, c_types, device, driver, error::from_kernel_result, io_mem::Resource, power,
-    str::CStr, to_result, types::PointerWrapper, Result, ThisModule,
+    bindings, c_types, device, driver, error::from_kernel_result, io_mem::Resource, pm, str::CStr,
+    to_result, types::PointerWrapper, Result, ThisModule,
 };
 
 /// A registration of an amba driver.
@@ -49,7 +49,7 @@ pub trait Driver {
     ///
     /// The default is a type that implements no power-management operations. Drivers that do
     /// implement them need to specify the type (commonly [`Self`]).
-    type PowerOps: power::Operations<Data = Self::Data> = power::NoOperations<Self::Data>;
+    type PowerOps: pm::Operations<Data = Self::Data> = pm::NoOperations<Self::Data>;
 
     /// The type holding information about each device id supported by the driver.
     type IdInfo: 'static = ();
@@ -91,7 +91,7 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
             // SAFETY: `probe_callback` sets the driver data after calling `T::Data::into_pointer`,
             // and we guarantee that `T::Data` is the same as `T::PowerOps::Data` by a constraint
             // in the type declaration.
-            amba.drv.pm = unsafe { power::OpsTable::<T::PowerOps>::build() };
+            amba.drv.pm = unsafe { pm::OpsTable::<T::PowerOps>::build() };
         }
         // SAFETY: By the safety requirements of this function, `reg` is valid and fully
         // initialised.

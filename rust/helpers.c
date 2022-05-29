@@ -29,6 +29,7 @@
 #include <linux/errname.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/security.h>
 #include <asm/io.h>
 #include <linux/irq.h>
@@ -44,6 +45,36 @@ __noreturn void rust_helper_BUG(void)
 	BUG();
 }
 EXPORT_SYMBOL_GPL(rust_helper_BUG);
+
+void rust_helper_pm_runtime_put_noidle(struct device *dev)
+{
+	pm_runtime_put_noidle(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pm_runtime_put_noidle);
+
+void rust_helper_pm_runtime_enable(struct device *dev)
+{
+	pm_runtime_enable(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pm_runtime_enable);
+
+void rust_helper_pm_runtime_disable(struct device *dev)
+{
+	pm_runtime_disable(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pm_runtime_disable);
+
+int rust_helper_pm_runtime_put_sync(struct device *dev)
+{
+	return pm_runtime_put_sync(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pm_runtime_put_sync);
+
+int rust_helper_pm_runtime_resume_and_get(struct device *dev)
+{
+	return pm_runtime_resume_and_get(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pm_runtime_resume_and_get);
 
 void rust_helper_clk_disable_unprepare(struct clk *clk)
 {
