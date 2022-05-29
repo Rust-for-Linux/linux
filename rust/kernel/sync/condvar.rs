@@ -55,13 +55,7 @@ impl CondVar {
         }
     }
 
-    /// Atomically releases the given lock (whose ownership is proven by the guard) and puts the
-    /// thread to sleep. It wakes up when notified by [`CondVar::notify_one`] or
-    /// [`CondVar::notify_all`], or when the thread receives a signal.
-    ///
-    /// Returns whether there is a signal pending.
-    #[must_use = "wait returns if a signal is pending, so the caller must check the return value"]
-    pub fn wait<L: Lock<I>, I: LockInfo>(&self, guard: &mut Guard<'_, L, I>) -> bool {
+    fn wait_internal<L: Lock<I>, I: LockInfo>(&self, state: u32, guard: &mut Guard<'_, L, I>) {
         let lock = guard.lock;
         let wait = Opaque::<bindings::wait_queue_entry>::uninit();
 
@@ -70,11 +64,7 @@ impl CondVar {
 
         // SAFETY: Both `wait` and `wait_list` point to valid memory.
         unsafe {
-            bindings::prepare_to_wait_exclusive(
-                self.wait_list.get(),
-                wait.get(),
-                bindings::TASK_INTERRUPTIBLE as _,
-            )
+            bindings::prepare_to_wait_exclusive(self.wait_list.get(), wait.get(), state as _)
         };
 
         // SAFETY: The guard is evidence that the caller owns the lock.
@@ -87,8 +77,24 @@ impl CondVar {
 
         // SAFETY: Both `wait` and `wait_list` point to valid memory.
         unsafe { bindings::finish_wait(self.wait_list.get(), wait.get()) };
+    }
 
+    /// Atomically releases the given lock (whose ownership is proven by the guard) and puts the
+    /// thread to sleep. It wakes up when notified by [`CondVar::notify_one`] or
+    /// [`CondVar::notify_all`], or when the thread receives a signal.
+    ///
+    /// Returns whether there is a signal pending.
+    #[must_use = "wait returns if a signal is pending, so the caller must check the return value"]
+    pub fn wait<L: Lock<I>, I: LockInfo>(&self, guard: &mut Guard<'_, L, I>) -> bool {
+        self.wait_internal(bindings::TASK_INTERRUPTIBLE, guard);
         Task::current().signal_pending()
+    }
+
+    /// The same as [`Self::wait`], except that the wait is not interruptible.
+    ///
+    /// That is, the thread won't wake up due to signals.
+    pub fn wait_uninterruptible<L: Lock<I>, I: LockInfo>(&self, guard: &mut Guard<'_, L, I>) {
+        self.wait_internal(bindings::TASK_UNINTERRUPTIBLE, guard);
     }
 
     /// Calls the kernel function to notify the appropriate number of threads with the given flags.

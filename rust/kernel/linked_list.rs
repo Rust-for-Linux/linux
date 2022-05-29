@@ -113,6 +113,24 @@ pub struct List<G: GetLinksWrapped> {
     list: RawList<G>,
 }
 
+// SAFETY: Since the elements are owned by the list, the list is `Send` as long as its elements are
+// `Send` as well.
+unsafe impl<G> Send for List<G>
+where
+    G: GetLinksWrapped,
+    G::EntryType: Send,
+{
+}
+
+// SAFETY: Since the elements are owned by the list, the list is `Sync` as long as its elements are
+// `Sync` as well.
+unsafe impl<G> Sync for List<G>
+where
+    G: GetLinksWrapped,
+    G::EntryType: Sync,
+{
+}
+
 impl<G: GetLinksWrapped> List<G> {
     /// Constructs a new empty linked list.
     pub fn new() -> Self {
