@@ -9,7 +9,7 @@ use crate::{bindings, sync::rcu};
 use core::{
     cell::UnsafeCell,
     marker::PhantomData,
-    mem::ManuallyDrop,
+    mem::MaybeUninit,
     ops::Deref,
     ptr::drop_in_place,
     sync::atomic::{AtomicBool, Ordering},
@@ -63,32 +63,30 @@ use core::{
 /// v.revoke();
 /// assert_eq!(add_two(&v), None);
 /// ```
-pub struct Revocable<T: ?Sized> {
+pub struct Revocable<T> {
     is_available: AtomicBool,
-    data: ManuallyDrop<UnsafeCell<T>>,
+    data: MaybeUninit<UnsafeCell<T>>,
 }
 
 // SAFETY: `Revocable` is `Send` if the wrapped object is also `Send`. This is because while the
 // functionality exposed by `Revocable` can be accessed from any thread/CPU, it is possible that
 // this isn't supported by the wrapped object.
-unsafe impl<T: ?Sized + Send> Send for Revocable<T> {}
+unsafe impl<T: Send> Send for Revocable<T> {}
 
 // SAFETY: `Revocable` is `Sync` if the wrapped object is both `Send` and `Sync`. We require `Send`
 // from the wrapped object as well because  of `Revocable::revoke`, which can trigger the `Drop`
 // implementation of the wrapped object from an arbitrary thread.
-unsafe impl<T: ?Sized + Sync + Send> Sync for Revocable<T> {}
+unsafe impl<T: Sync + Send> Sync for Revocable<T> {}
 
 impl<T> Revocable<T> {
     /// Creates a new revocable instance of the given data.
     pub const fn new(data: T) -> Self {
         Self {
             is_available: AtomicBool::new(true),
-            data: ManuallyDrop::new(UnsafeCell::new(data)),
+            data: MaybeUninit::new(UnsafeCell::new(data)),
         }
     }
-}
 
-impl<T: ?Sized> Revocable<T> {
     /// Tries to access the \[revocable\] wrapped object.
     ///
     /// Returns `None` if the object has been revoked and is therefore no longer accessible.
@@ -99,7 +97,9 @@ impl<T: ?Sized> Revocable<T> {
     pub fn try_access(&self) -> Option<RevocableGuard<'_, T>> {
         let guard = rcu::read_lock();
         if self.is_available.load(Ordering::Relaxed) {
-            Some(RevocableGuard::new(self.data.get(), guard))
+            // SAFETY: Since `self.is_available` is true, data is initialised and has to remain
+            // valid because the RCU read side lock prevents it from being dropped.
+            Some(unsafe { RevocableGuard::new(self.data.assume_init_ref().get(), guard) })
         } else {
             None
         }
@@ -115,8 +115,9 @@ impl<T: ?Sized> Revocable<T> {
     /// object.
     pub fn try_access_with_guard<'a>(&'a self, _guard: &'a rcu::Guard) -> Option<&'a T> {
         if self.is_available.load(Ordering::Relaxed) {
-            // SAFETY: Given that the RCU read side lock is held, data has to remain valid.
-            Some(unsafe { &*self.data.get() })
+            // SAFETY: Since `self.is_available` is true, data is initialised and has to remain
+            // valid because the RCU read side lock prevents it from being dropped.
+            Some(unsafe { &*self.data.assume_init_ref().get() })
         } else {
             None
         }
@@ -139,12 +140,12 @@ impl<T: ?Sized> Revocable<T> {
 
             // SAFETY: We know `self.data` is valid because only one CPU can succeed the
             // `compare_exchange` above that takes `is_available` from `true` to `false`.
-            unsafe { drop_in_place(self.data.get()) };
+            unsafe { drop_in_place(self.data.assume_init_ref().get()) };
         }
     }
 }
 
-impl<T: ?Sized> Drop for Revocable<T> {
+impl<T> Drop for Revocable<T> {
     fn drop(&mut self) {
         // Drop only if the data hasn't been revoked yet (in which case it has already been
         // dropped).
@@ -152,7 +153,7 @@ impl<T: ?Sized> Drop for Revocable<T> {
             // SAFETY: We know `self.data` is valid because no other CPU has changed
             // `is_available` to `false` yet, and no other CPU can do it anymore because this CPU
             // holds the only reference (mutable) to `self` now.
-            unsafe { drop_in_place(self.data.get()) };
+            unsafe { drop_in_place(self.data.assume_init_ref().get()) };
         }
     }
 }
@@ -165,13 +166,13 @@ impl<T: ?Sized> Drop for Revocable<T> {
 /// # Invariants
 ///
 /// The RCU read-side lock is held while the guard is alive.
-pub struct RevocableGuard<'a, T: ?Sized> {
+pub struct RevocableGuard<'a, T> {
     data_ref: *const T,
     _rcu_guard: rcu::Guard,
     _p: PhantomData<&'a ()>,
 }
 
-impl<T: ?Sized> RevocableGuard<'_, T> {
+impl<T> RevocableGuard<'_, T> {
     fn new(data_ref: *const T, rcu_guard: rcu::Guard) -> Self {
         Self {
             data_ref,
@@ -181,7 +182,7 @@ impl<T: ?Sized> RevocableGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Deref for RevocableGuard<'_, T> {
+impl<T> Deref for RevocableGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
