@@ -138,6 +138,7 @@ pub fn call_printk_cont(args: fmt::Arguments<'_>) {
 #[doc(hidden)]
 #[cfg(not(testlib))]
 #[macro_export]
+#[allow(clippy::crate_in_macro_def)]
 macro_rules! print_macro (
     // The non-continuation cases (most of them, e.g. `INFO`).
     ($format_string:path, false, $($arg:tt)+) => (

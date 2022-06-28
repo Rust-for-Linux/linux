@@ -7,7 +7,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-20.04
-    container: ghcr.io/rust-for-linux/ci:Rust-1.61.0
+    container: ghcr.io/rust-for-linux/ci:Rust-1.62.0
     timeout-minutes: 20
 
     strategy:
