@@ -4,10 +4,8 @@
 //!
 //! TODO: This module is a work in progress.
 
-use crate::{
-    bindings, c_types, error::code::*, io_buffer::IoBufferReader, user_ptr::UserSlicePtrReader,
-    Result, PAGE_SIZE,
-};
+use crate::io_buffer::{IoBufferReader, IoBufferWriter};
+use crate::{bindings, c_types, error::code::*, Result, PAGE_SIZE};
 use core::{marker::PhantomData, ptr};
 
 /// A set of physical pages.
@@ -40,24 +38,89 @@ impl<const ORDER: u32> Pages<ORDER> {
         Ok(Self { pages })
     }
 
-    /// Copies data from the given [`UserSlicePtrReader`] into the pages.
-    pub fn copy_into_page(
-        &self,
-        reader: &mut UserSlicePtrReader,
-        offset: usize,
-        len: usize,
-    ) -> Result {
-        // TODO: For now this only works on the first page.
+    /// Copy to or from pages by using `copy_action` to do the data transfer.
+    fn copy_with_pages<F>(&self, offset: usize, len: usize, mut copy_action: F) -> Result
+    where
+        F: FnMut(CopyCommand<'_>) -> Result,
+    {
+        let pages_in_buffer = (2_usize).pow(ORDER);
+        let buffer_size = PAGE_SIZE * pages_in_buffer;
         let end = offset.checked_add(len).ok_or(EINVAL)?;
-        if end > PAGE_SIZE {
+        if end > buffer_size {
             return Err(EINVAL);
         }
 
-        let mapping = self.kmap(0).ok_or(EINVAL)?;
+        let mut page_offset = offset % PAGE_SIZE;
+        let page_index_start = offset / PAGE_SIZE;
+        let x = (len / PAGE_SIZE) + if page_offset == 0 { 0 } else { 1 };
+        let page_count = if len + page_offset <= x * PAGE_SIZE {
+            x
+        } else {
+            x + 1
+        };
+        let page_index_end = page_index_start + page_count;
+        let mut remaining = len;
+        let mut written = 0;
 
-        // SAFETY: We ensured that the buffer was valid with the check above.
-        unsafe { reader.read_raw((mapping.ptr as usize + offset) as _, len) }?;
+        for i in page_index_start..page_index_end {
+            assert!(remaining > 0);
+            let mapping = self.kmap(i).ok_or(EINVAL)?;
+
+            let size = core::cmp::min(remaining, PAGE_SIZE - page_offset);
+
+            assert!(page_offset + size <= PAGE_SIZE);
+            assert!(written + size <= len);
+            copy_action(CopyCommand {
+                page_mapping: &mapping,
+                page_offset,
+                written,
+                size,
+            })?;
+
+            page_offset = 0;
+            remaining -= size;
+            written += size;
+        }
+
+        assert!(remaining == 0);
+        assert!(written == len);
         Ok(())
+    }
+
+    /// Copies data from the given [`IoBufferReader`] into the pages.
+    pub fn copy_into_page<R: IoBufferReader>(
+        &self,
+        reader: &mut R,
+        offset: usize,
+        len: usize,
+    ) -> Result {
+        self.copy_with_pages(offset, len, move |command| {
+            // SAFETY: This is safe because `copy_with_pages` maintain `page_offset + size <= PAGE_SIZE`.
+            unsafe {
+                reader.read_raw(
+                    (command.page_mapping.ptr as usize + command.page_offset) as _,
+                    command.size,
+                )
+            }
+        })
+    }
+
+    /// Copy data from pages to the given [`IoBufferWriter`].
+    pub fn copy_from_page<W: IoBufferWriter>(
+        &self,
+        writer: &mut W,
+        offset: usize,
+        len: usize,
+    ) -> Result {
+        self.copy_with_pages(offset, len, move |command| {
+            // SAFETY: This is safe because `copy_with_pages` maintain `page_offset + size <= PAGE_SIZE`.
+            unsafe {
+                writer.write_raw(
+                    (command.page_mapping.ptr as usize + command.page_offset) as _,
+                    command.size,
+                )
+            }
+        })
     }
 
     /// Maps the pages and reads from them into the given buffer.
@@ -68,15 +131,18 @@ impl<const ORDER: u32> Pages<ORDER> {
     /// Additionally, if the raw buffer is intended to be recast, they must ensure that the data
     /// can be safely cast; [`crate::io_buffer::ReadableFromBytes`] has more details about it.
     pub unsafe fn read(&self, dest: *mut u8, offset: usize, len: usize) -> Result {
-        // TODO: For now this only works on the first page.
-        let end = offset.checked_add(len).ok_or(EINVAL)?;
-        if end > PAGE_SIZE {
-            return Err(EINVAL);
-        }
-
-        let mapping = self.kmap(0).ok_or(EINVAL)?;
-        unsafe { ptr::copy((mapping.ptr as *mut u8).add(offset), dest, len) };
-        Ok(())
+        self.copy_with_pages(offset, len, move |command| {
+            // SAFETY: This is safe because `copy_with_pages` maintain
+            // `page_offset + size <= PAGE_SIZE` and `written + size < len`.
+            unsafe {
+                ptr::copy(
+                    (command.page_mapping.ptr as *mut u8).add(command.page_offset),
+                    dest.add(command.written),
+                    command.size,
+                )
+            }
+            Ok(())
+        })
     }
 
     /// Maps the pages and writes into them from the given buffer.
@@ -88,15 +154,18 @@ impl<const ORDER: u32> Pages<ORDER> {
     /// through padding if it was cast from another type; [`crate::io_buffer::WritableToBytes`] has
     /// more details about it.
     pub unsafe fn write(&self, src: *const u8, offset: usize, len: usize) -> Result {
-        // TODO: For now this only works on the first page.
-        let end = offset.checked_add(len).ok_or(EINVAL)?;
-        if end > PAGE_SIZE {
-            return Err(EINVAL);
-        }
-
-        let mapping = self.kmap(0).ok_or(EINVAL)?;
-        unsafe { ptr::copy(src, (mapping.ptr as *mut u8).add(offset), len) };
-        Ok(())
+        self.copy_with_pages(offset, len, move |command| {
+            // SAFETY: This is safe because `copy_with_pages` maintain
+            // `page_offset + size <= PAGE_SIZE` and `written  + size < len`.
+            unsafe {
+                ptr::copy(
+                    src.add(command.written),
+                    (command.page_mapping.ptr as *mut u8).add(command.page_offset),
+                    command.size,
+                )
+            }
+            Ok(())
+        })
     }
 
     /// Maps the page at index `index`.
@@ -127,6 +196,13 @@ impl<const ORDER: u32> Drop for Pages<ORDER> {
         // SAFETY: By the type invariants, we know the pages are allocated with the given order.
         unsafe { bindings::__free_pages(self.pages, ORDER) };
     }
+}
+
+struct CopyCommand<'a> {
+    page_mapping: &'a PageMapping<'a>,
+    page_offset: usize,
+    written: usize,
+    size: usize,
 }
 
 struct PageMapping<'a> {
