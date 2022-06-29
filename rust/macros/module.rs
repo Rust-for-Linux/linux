@@ -23,16 +23,11 @@ fn expect_array_fields(it: &mut token_stream::IntoIter) -> ParamType {
 }
 
 fn expect_type(it: &mut token_stream::IntoIter) -> ParamType {
-    if let TokenTree::Ident(ident) = it
-        .next()
-        .expect("Reached end of token stream for param type")
-    {
-        match ident.to_string().as_ref() {
-            "ArrayParam" => expect_array_fields(it),
-            _ => ParamType::Ident(ident.to_string()),
-        }
-    } else {
-        panic!("Expected Param Type")
+    match it.next() {
+        None => panic!("Reached end of token stream for param type"),
+        Some(TokenTree::Ident(p)) if &p.to_string() == "ArrayParam" => expect_array_fields(it),
+        Some(TokenTree::Ident(p)) => ParamType::Ident(p.to_string()),
+        Some(_other_param) => panic!("Expected Param Type"),
     }
 }
 
@@ -111,19 +106,14 @@ impl<'a> ModInfoBuilder<'a> {
 }
 
 fn permissions_are_readonly(perms: &str) -> bool {
-    let (radix, digits) = if let Some(n) = perms.strip_prefix("0x") {
-        (16, n)
-    } else if let Some(n) = perms.strip_prefix("0o") {
-        (8, n)
-    } else if let Some(n) = perms.strip_prefix("0b") {
-        (2, n)
-    } else {
-        (10, perms)
+    // A non-panicing try_split_at()
+    let (code, radix) = match perms.get(0..2).zip(perms.get(2..)) {
+        Some(("0x", hex)) => (hex, 16),
+        Some(("0o", oct)) => (oct, 8),
+        Some(("0b", bin)) => (bin, 2),
+        _ => (perms, 10),
     };
-    match u32::from_str_radix(digits, radix) {
-        Ok(perms) => perms & 0o222 == 0,
-        Err(_) => false,
-    }
+    u32::from_str_radix(code, radix).map(|permissions| permissions & 0o222) == Ok(0)
 }
 
 fn param_ops_path(param_type: &str) -> &'static str {
