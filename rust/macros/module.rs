@@ -134,63 +134,47 @@ fn param_ops_path(param_type: &str) -> &'static str {
     }
 }
 
-fn try_simple_param_val(
-    param_type: &str,
-) -> Box<dyn Fn(&mut token_stream::IntoIter) -> Option<String>> {
+fn try_simple_param_val(param_type: &str, it: &mut token_stream::IntoIter) -> Option<String> {
     match param_type {
-        "bool" => Box::new(try_ident),
-        "str" => Box::new(|param_it| {
-            try_byte_string(param_it)
-                .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
-        }),
-        _ => Box::new(try_literal),
+        "bool" => try_ident(it),
+        "str" => try_byte_string(it)
+            .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s)),
+        _ => try_literal(it),
     }
 }
 
 fn get_default(param_type: &ParamType, param_it: &mut token_stream::IntoIter) -> String {
-    let try_param_val = match param_type {
-        ParamType::Ident(ref param_type)
-        | ParamType::Array {
-            vals: ref param_type,
-            max_length: _,
-        } => try_simple_param_val(param_type),
-    };
     assert_eq!(expect_ident(param_it), "default");
     assert_eq!(expect_punct(param_it), ':');
-    let default = match param_type {
-        ParamType::Ident(_) => try_param_val(param_it).expect("Expected default param value"),
+    let result = match param_type {
+        ParamType::Ident(ref param_type) => {
+            try_simple_param_val(param_type, param_it).expect("Expected default param value")
+        }
         ParamType::Array {
-            vals: _,
+            vals: ref param_type,
             max_length: _,
         } => {
             let group = expect_group(param_it);
             assert_eq!(group.delimiter(), Delimiter::Bracket);
-            let mut default_vals = Vec::new();
-            let mut it = group.stream().into_iter();
+            let it = &mut group.stream().into_iter();
 
-            while let Some(default_val) = try_param_val(&mut it) {
-                default_vals.push(default_val);
-                match it.next() {
-                    Some(TokenTree::Punct(punct)) => assert_eq!(punct.as_char(), ','),
-                    None => break,
+            let try_array_param_val = move || {
+                try_simple_param_val(param_type, it).map(|default_val| match it.next() {
+                    Some(TokenTree::Punct(punct)) if punct.as_char() == ',' => default_val,
+                    None => default_val,
                     _ => panic!("Expected ',' or end of array default values"),
-                }
-            }
-
-            let mut default_array = "kernel::module_param::ArrayParam::create(&[".to_string();
-            default_array.push_str(
-                &default_vals
-                    .iter()
-                    .map(|val| val.to_string())
-                    .collect::<Vec<String>>()
-                    .join(","),
-            );
-            default_array.push_str("])");
-            default_array
+                })
+            };
+            format!(
+                "kernel::module_param::ArrayParam::create(&[{}])",
+                std::iter::from_fn(try_array_param_val)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
         }
     };
     assert_eq!(expect_punct(param_it), ',');
-    default
+    result
 }
 
 fn generated_array_ops_name(vals: &str, max_length: usize) -> String {
