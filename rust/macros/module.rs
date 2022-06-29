@@ -213,19 +213,11 @@ impl ModuleInfo {
         const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
         let mut seen_keys = Vec::new();
 
-        loop {
-            let key = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
-            };
-
-            if seen_keys.contains(&key) {
-                panic!(
-                    "Duplicated key \"{}\". Keys can only be specified once.",
-                    key
-                );
-            }
+        while let Some(key) = it.next().map(|t| match t {
+            TokenTree::Ident(ident) => ident.to_string(),
+            _ => panic!("Expected Ident or end"),
+        }) {
+            assert!(!seen_keys.contains(&key), "Duplicated key \"{}\".", key);
 
             assert_eq!(expect_punct(it), ':');
 
