@@ -9,6 +9,12 @@
 use crate::{bindings, error::code::*, Result};
 use core::convert::TryInto;
 
+/// The type of `Resource`.
+pub enum IoResource {
+    /// i/o memory
+    Mem = bindings::IORESOURCE_MEM as _,
+}
+
 /// Represents a memory resource.
 pub struct Resource {
     offset: bindings::resource_size_t,
