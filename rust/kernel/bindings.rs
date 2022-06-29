@@ -22,7 +22,6 @@ mod bindings_raw {
     // Use glob import here to expose all helpers.
     // Symbols defined within the module will take precedence to the glob import.
     pub use super::bindings_helper::*;
-    use crate::c_types;
     include!(concat!(env!("OBJTREE"), "/rust/bindings_generated.rs"));
 }
 
@@ -33,7 +32,6 @@ mod bindings_raw {
 mod bindings_helper {
     // Import the generated bindings for types.
     use super::bindings_raw::*;
-    use crate::c_types;
     include!(concat!(
         env!("OBJTREE"),
         "/rust/bindings_helpers_generated.rs"
