@@ -296,14 +296,10 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
         assert_eq!(params.delimiter(), Delimiter::Brace);
 
         let mut it = params.stream().into_iter();
-
-        loop {
-            let param_name = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
-            };
-
+        while let Some(param_name) = it.next().map(|p| match p {
+            TokenTree::Ident(ident) => ident.to_string(),
+            _ => panic!("Expected Ident or end"),
+        }) {
             assert_eq!(expect_punct(&mut it), ':');
             let param_type = expect_type(&mut it);
             let group = expect_group(&mut it);
