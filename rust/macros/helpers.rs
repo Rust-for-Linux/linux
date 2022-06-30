@@ -28,6 +28,31 @@ pub(crate) fn try_byte_string(it: &mut token_stream::IntoIter) -> Option<String>
     })
 }
 
+pub(crate) trait TryFromRadix {
+    type Primitive;
+    fn try_from_radix(code: &str) -> Result<Self::Primitive, std::num::ParseIntError>;
+}
+
+macro_rules! try_from_radix_impl {
+    ($($t:ty)*) => {$(
+        impl TryFromRadix for $t {
+            type Primitive = $t;
+            fn try_from_radix(raw: &str) -> Result<$t, std::num::ParseIntError> {
+                let code = raw.strip_suffix(stringify!($t)).unwrap_or(&raw).replace("_", "");
+                // A non-panicing try_split_at()
+                match code.get(0..2).zip(code.get(2..)) {
+                     Some(("0x", hex)) => <$t>::from_str_radix(hex, 16),
+                     Some(("0o", oct)) => <$t>::from_str_radix(oct, 8),
+                     Some(("0b", bin)) => <$t>::from_str_radix(bin, 2),
+                     _ => code.parse::<$t>(),
+                }
+            }
+        }
+    )*}
+}
+
+try_from_radix_impl! { i8 u8 i16 u16 i32 u32 i64 u64 usize isize }
+
 pub(crate) fn expect_ident(it: &mut token_stream::IntoIter) -> String {
     try_ident(it).expect("Expected Ident")
 }

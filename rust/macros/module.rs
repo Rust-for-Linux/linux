@@ -106,14 +106,7 @@ impl<'a> ModInfoBuilder<'a> {
 }
 
 fn permissions_are_readonly(perms: &str) -> bool {
-    // A non-panicing try_split_at()
-    let (code, radix) = match perms.get(0..2).zip(perms.get(2..)) {
-        Some(("0x", hex)) => (hex, 16),
-        Some(("0o", oct)) => (oct, 8),
-        Some(("0b", bin)) => (bin, 2),
-        _ => (perms, 10),
-    };
-    u32::from_str_radix(code, radix).map(|permissions| permissions & 0o222) == Ok(0)
+    u32::try_from_radix(perms).map(|permissions| permissions & 0o222) == Ok(0)
 }
 
 fn param_ops_path(param_type: &str) -> &'static str {
