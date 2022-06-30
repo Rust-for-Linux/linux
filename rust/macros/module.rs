@@ -130,8 +130,39 @@ fn param_ops_path(param_type: &str) -> &'static str {
 fn try_simple_param_val(param_type: &str, it: &mut token_stream::IntoIter) -> Option<String> {
     match param_type {
         "bool" => try_ident(it),
-        "str" => try_byte_string(it)
-            .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s)),
+        "i8" => try_ident(it)
+            .and_then(|c| i8::try_from_radix(&c).ok())
+            .map(|i| format!("kernel::module_param::I8Param::Ref({})", i)),
+        "u8" => try_ident(it)
+            .and_then(|b| u8::try_from_radix(&b).ok())
+            .map(|u| format!("kernel::module_param::U8Param::Ref({})", u)),
+        "i16" => try_ident(it)
+            .and_then(|s| i16::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::I16Param::Ref({})", i)),
+        "u16" => try_ident(it)
+            .and_then(|s| u16::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::U16Param::Ref({})", u)),
+        "i32" => try_ident(it)
+            .and_then(|s| i32::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::I32Param::Ref({})", i)),
+        "u32" => try_ident(it)
+            .and_then(|s| u32::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::U32Param::Ref({})", u)),
+        "i64" => try_ident(it)
+            .and_then(|s| i64::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::I64Param::Ref({})", i)),
+        "u64" => try_ident(it)
+            .and_then(|s| u64::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::U64Param::Ref({})", u)),
+        "isize" => try_ident(it)
+            .and_then(|s| isize::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::ISizeParam::Ref({})", i)),
+        "usize" => try_ident(it)
+            .and_then(|s| usize::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::USizeParam::Ref({})", u)),
+        "str" => {
+            try_byte_string(it).map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
+        }
         _ => try_literal(it),
     }
 }
