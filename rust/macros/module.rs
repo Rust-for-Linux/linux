@@ -130,8 +130,9 @@ fn param_ops_path(param_type: &str) -> &'static str {
 fn try_simple_param_val(param_type: &str, it: &mut token_stream::IntoIter) -> Option<String> {
     match param_type {
         "bool" => try_ident(it),
-        "str" => try_byte_string(it)
-            .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s)),
+        "str" => {
+            try_byte_string(it).map(|s| format!("kernel::module_param::StringParam::Ref({})", s))
+        }
         _ => try_literal(it),
     }
 }

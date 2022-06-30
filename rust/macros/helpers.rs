@@ -19,13 +19,7 @@ pub(crate) fn try_literal(it: &mut token_stream::IntoIter) -> Option<String> {
 }
 
 pub(crate) fn try_byte_string(it: &mut token_stream::IntoIter) -> Option<String> {
-    try_literal(it).and_then(|byte_string| {
-        if byte_string.starts_with("b\"") && byte_string.ends_with('\"') {
-            Some(byte_string[2..byte_string.len() - 1].to_string())
-        } else {
-            None
-        }
-    })
+    try_literal(it).filter(|bytes| bytes.starts_with("b\"") && bytes.ends_with('\"'))
 }
 
 pub(crate) trait TryFromRadix {
