@@ -275,7 +275,7 @@ $(obj)/%.lst: $(src)/%.c FORCE
 # Compile Rust sources (.rs)
 # ---------------------------------------------------------------------------
 
-rust_allowed_features := allocator_api,bench_black_box,concat_idents,generic_associated_types
+rust_allowed_features := allocator_api,bench_black_box,concat_idents,core_ffi_c,generic_associated_types
 
 rust_common_cmd = \
 	RUST_MODFILE=$(modfile) $(RUSTC_OR_CLIPPY) $(rust_flags) \
