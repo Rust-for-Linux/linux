@@ -160,7 +160,7 @@ fn try_simple_param_val(param_type: &str, it: &mut token_stream::IntoIter) -> Op
             .and_then(|s| usize::try_from_radix(&s).ok())
             .map(|u| format!("kernel::module_param::USizeParam::Ref({})", u)),
         "str" => {
-            try_byte_string(it).map(|s| format!("kernel::module_param::StringParam::Ref({})", s))
+            try_byte_string(it).map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
         }
         _ => try_literal(it),
     }
