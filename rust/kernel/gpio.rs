@@ -5,8 +5,8 @@
 //! C header: [`include/linux/gpio/driver.h`](../../../../include/linux/gpio/driver.h)
 
 use crate::{
-    bindings, c_types, device, error::code::*, error::from_kernel_result, types::PointerWrapper,
-    Error, Result,
+    bindings, device, error::code::*, error::from_kernel_result, types::PointerWrapper, Error,
+    Result,
 };
 use core::{
     cell::UnsafeCell,
@@ -249,8 +249,8 @@ impl<T: Chip> Drop for Registration<T> {
 
 unsafe extern "C" fn get_direction_callback<T: Chip>(
     gc: *mut bindings::gpio_chip,
-    offset: c_types::c_uint,
-) -> c_types::c_int {
+    offset: core::ffi::c_uint,
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: The value stored as chip data was returned by `into_pointer` during registration.
         let data = unsafe { T::Data::borrow(bindings::gpiochip_get_data(gc)) };
@@ -260,8 +260,8 @@ unsafe extern "C" fn get_direction_callback<T: Chip>(
 
 unsafe extern "C" fn direction_input_callback<T: Chip>(
     gc: *mut bindings::gpio_chip,
-    offset: c_types::c_uint,
-) -> c_types::c_int {
+    offset: core::ffi::c_uint,
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: The value stored as chip data was returned by `into_pointer` during registration.
         let data = unsafe { T::Data::borrow(bindings::gpiochip_get_data(gc)) };
@@ -272,9 +272,9 @@ unsafe extern "C" fn direction_input_callback<T: Chip>(
 
 unsafe extern "C" fn direction_output_callback<T: Chip>(
     gc: *mut bindings::gpio_chip,
-    offset: c_types::c_uint,
-    value: c_types::c_int,
-) -> c_types::c_int {
+    offset: core::ffi::c_uint,
+    value: core::ffi::c_int,
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: The value stored as chip data was returned by `into_pointer` during registration.
         let data = unsafe { T::Data::borrow(bindings::gpiochip_get_data(gc)) };
@@ -285,8 +285,8 @@ unsafe extern "C" fn direction_output_callback<T: Chip>(
 
 unsafe extern "C" fn get_callback<T: Chip>(
     gc: *mut bindings::gpio_chip,
-    offset: c_types::c_uint,
-) -> c_types::c_int {
+    offset: core::ffi::c_uint,
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: The value stored as chip data was returned by `into_pointer` during registration.
         let data = unsafe { T::Data::borrow(bindings::gpiochip_get_data(gc)) };
@@ -297,8 +297,8 @@ unsafe extern "C" fn get_callback<T: Chip>(
 
 unsafe extern "C" fn set_callback<T: Chip>(
     gc: *mut bindings::gpio_chip,
-    offset: c_types::c_uint,
-    value: c_types::c_int,
+    offset: core::ffi::c_uint,
+    value: core::ffi::c_int,
 ) {
     // SAFETY: The value stored as chip data was returned by `into_pointer` during registration.
     let data = unsafe { T::Data::borrow(bindings::gpiochip_get_data(gc)) };

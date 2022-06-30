@@ -6,12 +6,12 @@
 //!
 //! Reference: <https://www.kernel.org/doc/html/latest/core-api/printk-basics.html>
 
-use core::fmt;
-
-use crate::{
-    c_types::{c_char, c_void},
-    str::RawFormatter,
+use core::{
+    ffi::{c_char, c_void},
+    fmt,
 };
+
+use crate::str::RawFormatter;
 
 #[cfg(CONFIG_PRINTK)]
 use crate::bindings;

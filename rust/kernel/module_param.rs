@@ -66,9 +66,9 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
     /// If `val` is non-null then it must point to a valid null-terminated
     /// string. The `arg` field of `param` must be an instance of `Self`.
     unsafe extern "C" fn set_param(
-        val: *const crate::c_types::c_char,
+        val: *const core::ffi::c_char,
         param: *const crate::bindings::kernel_param,
-    ) -> crate::c_types::c_int {
+    ) -> core::ffi::c_int {
         let arg = if val.is_null() {
             None
         } else {
@@ -93,9 +93,9 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
     /// `buf` must be a buffer of length at least `kernel::PAGE_SIZE` that is
     /// writeable. The `arg` field of `param` must be an instance of `Self`.
     unsafe extern "C" fn get_param(
-        buf: *mut crate::c_types::c_char,
+        buf: *mut core::ffi::c_char,
         param: *const crate::bindings::kernel_param,
-    ) -> crate::c_types::c_int {
+    ) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: The C contracts guarantees that the buffer is at least `PAGE_SIZE` bytes.
             let mut f = unsafe { Formatter::from_buffer(buf.cast(), crate::PAGE_SIZE) };
@@ -111,7 +111,7 @@ pub trait ModuleParam: core::fmt::Display + core::marker::Sized {
     /// # Safety
     ///
     /// The `arg` field of `param` must be an instance of `Self`.
-    unsafe extern "C" fn free(arg: *mut crate::c_types::c_void) {
+    unsafe extern "C" fn free(arg: *mut core::ffi::c_void) {
         unsafe { core::ptr::drop_in_place(arg as *mut Self) };
     }
 }

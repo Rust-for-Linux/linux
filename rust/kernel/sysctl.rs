@@ -13,7 +13,7 @@ use core::ptr;
 use core::sync::atomic;
 
 use crate::{
-    bindings, c_types,
+    bindings,
     error::code::*,
     io_buffer::IoBufferWriter,
     str::CStr,
@@ -98,11 +98,11 @@ unsafe impl<T: SysctlStorage> Sync for Sysctl<T> {}
 
 unsafe extern "C" fn proc_handler<T: SysctlStorage>(
     ctl: *mut bindings::ctl_table,
-    write: c_types::c_int,
-    buffer: *mut c_types::c_void,
+    write: core::ffi::c_int,
+    buffer: *mut core::ffi::c_void,
     len: *mut usize,
     ppos: *mut bindings::loff_t,
-) -> c_types::c_int {
+) -> core::ffi::c_int {
     // If we are reading from some offset other than the beginning of the file,
     // return an empty read to signal EOF.
     if unsafe { *ppos } != 0 && write == 0 {
@@ -147,7 +147,7 @@ impl<T: SysctlStorage> Sysctl<T> {
         table.try_push(bindings::ctl_table {
             procname: name.as_char_ptr(),
             mode: mode.as_int(),
-            data: &*storage as *const T as *mut c_types::c_void,
+            data: &*storage as *const T as *mut core::ffi::c_void,
             proc_handler: Some(proc_handler::<T>),
 
             maxlen: 0,

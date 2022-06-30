@@ -5,8 +5,8 @@
 //! C header: [`include/linux/sched.h`](../../../../include/linux/sched.h).
 
 use crate::{
-    bindings, c_str, c_types, error::from_kernel_err_ptr, types::PointerWrapper, ARef,
-    AlwaysRefCounted, Result, ScopeGuard,
+    bindings, c_str, error::from_kernel_err_ptr, types::PointerWrapper, ARef, AlwaysRefCounted,
+    Result, ScopeGuard,
 };
 use alloc::boxed::Box;
 use core::{cell::UnsafeCell, fmt, marker::PhantomData, ops::Deref, ptr};
@@ -148,8 +148,8 @@ impl Task {
         func: T,
     ) -> Result<ARef<Task>> {
         unsafe extern "C" fn threadfn<T: FnOnce() + Send + 'static>(
-            arg: *mut c_types::c_void,
-        ) -> c_types::c_int {
+            arg: *mut core::ffi::c_void,
+        ) -> core::ffi::c_int {
             // SAFETY: The thread argument is always a `Box<T>` because it is only called via the
             // thread creation below.
             let bfunc = unsafe { Box::<T>::from_pointer(arg) };
@@ -174,7 +174,7 @@ impl Task {
                 arg as _,
                 bindings::NUMA_NO_NODE,
                 c_str!("%pA").as_char_ptr(),
-                &name as *const _ as *const c_types::c_void,
+                &name as *const _ as *const core::ffi::c_void,
             )
         })?;
 

@@ -5,7 +5,7 @@
 //! C header: [`include/linux/uaccess.h`](../../../../include/linux/uaccess.h)
 
 use crate::{
-    bindings, c_types,
+    bindings,
     error::code::*,
     io_buffer::{IoBufferReader, IoBufferWriter},
     Result,
@@ -40,7 +40,7 @@ use alloc::vec::Vec;
 /// range (no additional calls to `access_ok` are needed).
 ///
 /// [`std::io`]: https://doc.rust-lang.org/std/io/index.html
-pub struct UserSlicePtr(*mut c_types::c_void, usize);
+pub struct UserSlicePtr(*mut core::ffi::c_void, usize);
 
 impl UserSlicePtr {
     /// Constructs a user slice from a raw pointer and a length in bytes.
@@ -51,7 +51,7 @@ impl UserSlicePtr {
     /// (TOCTOU) issues. The simplest way is to create a single instance of
     /// [`UserSlicePtr`] per user memory block as it reads each byte at
     /// most once.
-    pub unsafe fn new(ptr: *mut c_types::c_void, length: usize) -> Self {
+    pub unsafe fn new(ptr: *mut core::ffi::c_void, length: usize) -> Self {
         UserSlicePtr(ptr, length)
     }
 
@@ -95,7 +95,7 @@ impl UserSlicePtr {
 /// A reader for [`UserSlicePtr`].
 ///
 /// Used to incrementally read from the user slice.
-pub struct UserSlicePtrReader(*mut c_types::c_void, usize);
+pub struct UserSlicePtrReader(*mut core::ffi::c_void, usize);
 
 impl IoBufferReader for UserSlicePtrReader {
     /// Returns the number of bytes left to be read from this.
@@ -130,7 +130,7 @@ impl IoBufferReader for UserSlicePtrReader {
 /// A writer for [`UserSlicePtr`].
 ///
 /// Used to incrementally write into the user slice.
-pub struct UserSlicePtrWriter(*mut c_types::c_void, usize);
+pub struct UserSlicePtrWriter(*mut core::ffi::c_void, usize);
 
 impl IoBufferWriter for UserSlicePtrWriter {
     fn len(&self) -> usize {

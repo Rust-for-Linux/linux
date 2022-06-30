@@ -5,8 +5,8 @@
 //! TODO: This module is a work in progress.
 
 use crate::{
-    bindings, c_types, error::code::*, io_buffer::IoBufferReader, user_ptr::UserSlicePtrReader,
-    Result, PAGE_SIZE,
+    bindings, error::code::*, io_buffer::IoBufferReader, user_ptr::UserSlicePtrReader, Result,
+    PAGE_SIZE,
 };
 use core::{marker::PhantomData, ptr};
 
@@ -131,7 +131,7 @@ impl<const ORDER: u32> Drop for Pages<ORDER> {
 
 struct PageMapping<'a> {
     page: *mut bindings::page,
-    ptr: *mut c_types::c_void,
+    ptr: *mut core::ffi::c_void,
     _phantom: PhantomData<&'a i32>,
 }
 

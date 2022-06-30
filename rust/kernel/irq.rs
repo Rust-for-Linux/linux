@@ -9,7 +9,7 @@
 
 #![allow(dead_code)]
 
-use crate::{bindings, c_types, error::from_kernel_result, types::PointerWrapper, Error, Result};
+use crate::{bindings, error::from_kernel_result, types::PointerWrapper, Error, Result};
 use core::ops::Deref;
 
 /// The type of irq hardware numbers.
@@ -233,8 +233,8 @@ unsafe extern "C" fn irq_unmask_callback<T: Chip>(irq_data: *mut bindings::irq_d
 
 unsafe extern "C" fn irq_set_type_callback<T: Chip>(
     irq_data: *mut bindings::irq_data,
-    flow_type: c_types::c_uint,
-) -> c_types::c_int {
+    flow_type: core::ffi::c_uint,
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: The safety requirements of `init_chip`, which is the only place that uses this
         // callback, ensure that the value stored as irq chip data comes from a previous call to
@@ -250,8 +250,8 @@ unsafe extern "C" fn irq_set_type_callback<T: Chip>(
 
 unsafe extern "C" fn irq_set_wake_callback<T: Chip>(
     irq_data: *mut bindings::irq_data,
-    on: c_types::c_uint,
-) -> c_types::c_int {
+    on: core::ffi::c_uint,
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: The safety requirements of `init_chip`, which is the only place that uses this
         // callback, ensure that the value stored as irq chip data comes from a previous call to

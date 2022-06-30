@@ -6,7 +6,6 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::ptr;
 
 use crate::bindings;
-use crate::c_types;
 
 struct KernelAllocator;
 
@@ -19,7 +18,7 @@ unsafe impl GlobalAlloc for KernelAllocator {
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         unsafe {
-            bindings::kfree(ptr as *const c_types::c_void);
+            bindings::kfree(ptr as *const core::ffi::c_void);
         }
     }
 }
@@ -39,14 +38,14 @@ fn __rust_alloc(size: usize, _align: usize) -> *mut u8 {
 
 #[no_mangle]
 fn __rust_dealloc(ptr: *mut u8, _size: usize, _align: usize) {
-    unsafe { bindings::kfree(ptr as *const c_types::c_void) };
+    unsafe { bindings::kfree(ptr as *const core::ffi::c_void) };
 }
 
 #[no_mangle]
 fn __rust_realloc(ptr: *mut u8, _old_size: usize, _align: usize, new_size: usize) -> *mut u8 {
     unsafe {
         bindings::krealloc(
-            ptr as *const c_types::c_void,
+            ptr as *const core::ffi::c_void,
             new_size,
             bindings::GFP_KERNEL,
         ) as *mut u8

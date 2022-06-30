@@ -5,7 +5,7 @@
 //! C header: [`include/linux/netfilter.h`](../../../../../include/linux/netfilter.h)
 
 use crate::{
-    bindings, c_types,
+    bindings,
     error::{code::*, to_result},
     net,
     types::PointerWrapper,
@@ -222,10 +222,10 @@ impl<T: Filter> Registration<T> {
     }
 
     unsafe extern "C" fn hook_callback(
-        priv_: *mut c_types::c_void,
+        priv_: *mut core::ffi::c_void,
         skb: *mut bindings::sk_buff,
         _state: *const bindings::nf_hook_state,
-    ) -> c_types::c_uint {
+    ) -> core::ffi::c_uint {
         // SAFETY: `priv_` was initialised on registration by a value returned from
         // `T::Data::into_pointer`, and it remains valid until the hook is unregistered.
         let data = unsafe { T::Data::borrow(priv_) };

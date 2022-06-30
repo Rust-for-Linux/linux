@@ -5,7 +5,7 @@
 //! C header: [`include/linux/types.h`](../../../../include/linux/types.h)
 
 use crate::{
-    bindings, c_types,
+    bindings,
     sync::{Ref, RefBorrow},
 };
 use alloc::boxed::Box;
@@ -48,7 +48,7 @@ pub trait PointerWrapper {
     type Borrowed<'a>;
 
     /// Returns the raw pointer.
-    fn into_pointer(self) -> *const c_types::c_void;
+    fn into_pointer(self) -> *const core::ffi::c_void;
 
     /// Returns a borrowed value.
     ///
@@ -57,24 +57,24 @@ pub trait PointerWrapper {
     /// `ptr` must have been returned by a previous call to [`PointerWrapper::into_pointer`].
     /// Additionally, [`PointerWrapper::from_pointer`] can only be called after *all* values
     /// returned by [`PointerWrapper::borrow`] have been dropped.
-    unsafe fn borrow<'a>(ptr: *const c_types::c_void) -> Self::Borrowed<'a>;
+    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> Self::Borrowed<'a>;
 
     /// Returns the instance back from the raw pointer.
     ///
     /// # Safety
     ///
     /// The passed pointer must come from a previous call to [`PointerWrapper::into_pointer()`].
-    unsafe fn from_pointer(ptr: *const c_types::c_void) -> Self;
+    unsafe fn from_pointer(ptr: *const core::ffi::c_void) -> Self;
 }
 
 impl<T: 'static> PointerWrapper for Box<T> {
     type Borrowed<'a> = &'a T;
 
-    fn into_pointer(self) -> *const c_types::c_void {
+    fn into_pointer(self) -> *const core::ffi::c_void {
         Box::into_raw(self) as _
     }
 
-    unsafe fn borrow<'a>(ptr: *const c_types::c_void) -> &'a T {
+    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> &'a T {
         // SAFETY: The safety requirements for this function ensure that the object is still alive,
         // so it is safe to dereference the raw pointer.
         // The safety requirements also ensure that the object remains alive for the lifetime of
@@ -82,7 +82,7 @@ impl<T: 'static> PointerWrapper for Box<T> {
         unsafe { &*ptr.cast() }
     }
 
-    unsafe fn from_pointer(ptr: *const c_types::c_void) -> Self {
+    unsafe fn from_pointer(ptr: *const core::ffi::c_void) -> Self {
         // SAFETY: The passed pointer comes from a previous call to [`Self::into_pointer()`].
         unsafe { Box::from_raw(ptr as _) }
     }
@@ -91,17 +91,17 @@ impl<T: 'static> PointerWrapper for Box<T> {
 impl<T: 'static> PointerWrapper for Ref<T> {
     type Borrowed<'a> = RefBorrow<'a, T>;
 
-    fn into_pointer(self) -> *const c_types::c_void {
+    fn into_pointer(self) -> *const core::ffi::c_void {
         Ref::into_usize(self) as _
     }
 
-    unsafe fn borrow<'a>(ptr: *const c_types::c_void) -> RefBorrow<'a, T> {
+    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> RefBorrow<'a, T> {
         // SAFETY: The safety requirements for this function ensure that the underlying object
         // remains valid for the lifetime of the returned value.
         unsafe { Ref::borrow_usize(ptr as _) }
     }
 
-    unsafe fn from_pointer(ptr: *const c_types::c_void) -> Self {
+    unsafe fn from_pointer(ptr: *const core::ffi::c_void) -> Self {
         // SAFETY: The passed pointer comes from a previous call to [`Self::into_pointer()`].
         unsafe { Ref::from_usize(ptr as _) }
     }
@@ -110,20 +110,20 @@ impl<T: 'static> PointerWrapper for Ref<T> {
 impl<T: PointerWrapper + Deref> PointerWrapper for Pin<T> {
     type Borrowed<'a> = T::Borrowed<'a>;
 
-    fn into_pointer(self) -> *const c_types::c_void {
+    fn into_pointer(self) -> *const core::ffi::c_void {
         // SAFETY: We continue to treat the pointer as pinned by returning just a pointer to it to
         // the caller.
         let inner = unsafe { Pin::into_inner_unchecked(self) };
         inner.into_pointer()
     }
 
-    unsafe fn borrow<'a>(ptr: *const c_types::c_void) -> Self::Borrowed<'a> {
+    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> Self::Borrowed<'a> {
         // SAFETY: The safety requirements for this function are the same as the ones for
         // `T::borrow`.
         unsafe { T::borrow(ptr) }
     }
 
-    unsafe fn from_pointer(p: *const c_types::c_void) -> Self {
+    unsafe fn from_pointer(p: *const core::ffi::c_void) -> Self {
         // SAFETY: The object was originally pinned.
         // The passed pointer comes from a previous call to `inner::into_pointer()`.
         unsafe { Pin::new_unchecked(T::from_pointer(p)) }
@@ -133,15 +133,15 @@ impl<T: PointerWrapper + Deref> PointerWrapper for Pin<T> {
 impl<T> PointerWrapper for *mut T {
     type Borrowed<'a> = *mut T;
 
-    fn into_pointer(self) -> *const c_types::c_void {
+    fn into_pointer(self) -> *const core::ffi::c_void {
         self as _
     }
 
-    unsafe fn borrow<'a>(ptr: *const c_types::c_void) -> Self::Borrowed<'a> {
+    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> Self::Borrowed<'a> {
         ptr as _
     }
 
-    unsafe fn from_pointer(ptr: *const c_types::c_void) -> Self {
+    unsafe fn from_pointer(ptr: *const core::ffi::c_void) -> Self {
         ptr as _
     }
 }
@@ -149,14 +149,14 @@ impl<T> PointerWrapper for *mut T {
 impl PointerWrapper for () {
     type Borrowed<'a> = ();
 
-    fn into_pointer(self) -> *const c_types::c_void {
+    fn into_pointer(self) -> *const core::ffi::c_void {
         // We use 1 to be different from a null pointer.
         1usize as _
     }
 
-    unsafe fn borrow<'a>(_: *const c_types::c_void) -> Self::Borrowed<'a> {}
+    unsafe fn borrow<'a>(_: *const core::ffi::c_void) -> Self::Borrowed<'a> {}
 
-    unsafe fn from_pointer(_: *const c_types::c_void) -> Self {}
+    unsafe fn from_pointer(_: *const core::ffi::c_void) -> Self {}
 }
 
 /// Runs a cleanup function/closure when dropped.

@@ -21,7 +21,7 @@ use core::{
 };
 
 #[cfg(CONFIG_PRINTK)]
-use crate::{c_str, c_types};
+use crate::c_str;
 
 /// A raw device.
 ///
@@ -149,10 +149,10 @@ pub unsafe trait RawDevice {
         #[cfg(CONFIG_PRINTK)]
         unsafe {
             bindings::_dev_printk(
-                klevel as *const _ as *const c_types::c_char,
+                klevel as *const _ as *const core::ffi::c_char,
                 self.raw_device(),
                 c_str!("%pA").as_char_ptr(),
-                &msg as *const _ as *const c_types::c_void,
+                &msg as *const _ as *const core::ffi::c_void,
             )
         };
     }

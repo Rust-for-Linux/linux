@@ -14,7 +14,6 @@ use core::marker::PhantomPinned;
 use core::pin::Pin;
 
 use crate::bindings;
-use crate::c_types;
 use crate::error::{code::*, Error, Result};
 use crate::file;
 use crate::str::CStr;
@@ -53,7 +52,7 @@ impl Cdev {
         Ok(Self(cdev))
     }
 
-    fn add(&mut self, dev: bindings::dev_t, count: c_types::c_uint) -> Result {
+    fn add(&mut self, dev: bindings::dev_t, count: core::ffi::c_uint) -> Result {
         // SAFETY: According to the type invariants:
         //   - [`self.0`] can be safely passed to [`bindings::cdev_add`].
         //   - [`(*self.0).ops`] will live at least as long as [`self.0`].

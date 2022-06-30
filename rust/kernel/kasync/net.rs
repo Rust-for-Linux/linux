@@ -2,7 +2,7 @@
 
 //! Async networking.
 
-use crate::{bindings, c_types, error::code::*, net, sync::NoWaitLock, types::Opaque, Result};
+use crate::{bindings, error::code::*, net, sync::NoWaitLock, types::Opaque, Result};
 use core::{
     future::Future,
     marker::{PhantomData, PhantomPinned},
@@ -187,10 +187,10 @@ impl<'a, Out, F: FnMut() -> Result<Out> + Send + 'a> SocketFuture<'a, Out, F> {
     /// polled again.
     unsafe extern "C" fn wake_callback(
         wq_entry: *mut bindings::wait_queue_entry,
-        _mode: c_types::c_uint,
-        _flags: c_types::c_int,
-        key: *mut c_types::c_void,
-    ) -> c_types::c_int {
+        _mode: core::ffi::c_uint,
+        _flags: core::ffi::c_int,
+        key: *mut core::ffi::c_void,
+    ) -> core::ffi::c_int {
         let mask = key as u32;
 
         // SAFETY: The future is valid while this callback is called because we remove from the
