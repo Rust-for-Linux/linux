@@ -27,7 +27,7 @@ fn expect_type(it: &mut token_stream::IntoIter) -> ParamType {
         None => panic!("Reached end of token stream for param type"),
         Some(TokenTree::Ident(p)) if &p.to_string() == "ArrayParam" => expect_array_fields(it),
         Some(TokenTree::Ident(p)) => ParamType::Ident(p.to_string()),
-        Some(_other_param) => panic!("Expected Param Type"),
+        Some(_) => panic!("Expected Param Type"),
     }
 }
 
