@@ -31,15 +31,15 @@ macro_rules! try_from_radix_impl {
     ($($t:ty)*) => {$(
         impl TryFromRadix for $t {
             type Primitive = $t;
-            fn try_from_radix(raw: &str) -> Result<$t, std::num::ParseIntError> {
-                let code = raw.strip_suffix(stringify!($t)).unwrap_or(&raw).replace("_", "");
-                // A non-panicing try_split_at()
-                match code.get(0..2).zip(code.get(2..)) {
-                     Some(("0x", hex)) => <$t>::from_str_radix(hex, 16),
-                     Some(("0o", oct)) => <$t>::from_str_radix(oct, 8),
-                     Some(("0b", bin)) => <$t>::from_str_radix(bin, 2),
-                     _ => code.parse::<$t>(),
-                }
+            fn try_from_radix(marked: &str) -> Result<$t, std::num::ParseIntError> {
+                let code = marked.strip_suffix(stringify!($t)).unwrap_or(&marked).replace("_", "");
+                let radix = match code.get(..2) {
+                     Some("0x") => 16,
+                     Some("0o") => 8,
+                     Some("0b") => 2,
+                     _ => return code.parse::<$t>(),
+                };
+                <$t>::from_str_radix(code.get(2..).expect("Invalid radix"), radix)
             }
         }
     )*}
