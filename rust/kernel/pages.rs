@@ -25,18 +25,30 @@ pub struct Pages<const ORDER: u32> {
 impl<const ORDER: u32> Pages<ORDER> {
     /// Allocates a new set of contiguous pages.
     pub fn new() -> Result<Self> {
-        // TODO: Consider whether we want to allow callers to specify flags.
+        Self::new_with_flags(bindings::GFP_KERNEL | bindings::__GFP_ZERO | bindings::__GFP_HIGHMEM)
+    }
+
+    /// Allocates a new set of contiguous pages atomically.
+    pub fn new_atomic() -> Result<Self> {
+        Self::new_with_flags(
+            bindings::GFP_KERNEL
+                | bindings::__GFP_ZERO
+                | bindings::__GFP_HIGHMEM
+                | bindings::___GFP_ATOMIC,
+        )
+    }
+
+    /// Allocates a new set of contiguous pages with the provided GFP
+    /// mask (`gfp_mask`).
+    fn new_with_flags(gfp_mask: bindings::gfp_t) -> Result<Self> {
         // SAFETY: This only allocates pages. We check that it succeeds in the next statement.
-        let pages = unsafe {
-            bindings::alloc_pages(
-                bindings::GFP_KERNEL | bindings::__GFP_ZERO | bindings::__GFP_HIGHMEM,
-                ORDER,
-            )
-        };
+        let pages = unsafe { bindings::alloc_pages(gfp_mask, ORDER) };
+
         if pages.is_null() {
             return Err(ENOMEM);
         }
-        // INVARIANTS: We checked that the allocation above succeeded>
+
+        // INVARIANTS: We checked that the allocation above succeeded.
         Ok(Self { pages })
     }
 
