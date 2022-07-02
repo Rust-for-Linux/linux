@@ -282,6 +282,7 @@ impl<T, F: FnOnce(T)> Drop for ScopeGuard<T, F> {
 /// Stores an opaque value.
 ///
 /// This is meant to be used with FFI objects that are never interpreted by Rust code.
+#[repr(transparent)]
 pub struct Opaque<T>(MaybeUninit<UnsafeCell<T>>);
 
 impl<T> Opaque<T> {
@@ -676,4 +677,13 @@ impl<T: AlwaysRefCounted> Drop for ARef<T> {
         // decrement.
         unsafe { T::dec_ref(self.ptr) };
     }
+}
+
+/// A sum type that always holds either a value of type `L` or `R`.
+pub enum Either<L, R> {
+    /// Constructs an instance of [`Either`] containing a value of type `L`.
+    Left(L),
+
+    /// Constructs an instance of [`Either`] containing a value of type `R`.
+    Right(R),
 }

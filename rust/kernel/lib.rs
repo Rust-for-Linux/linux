@@ -65,6 +65,7 @@ pub mod revocable;
 pub mod security;
 pub mod str;
 pub mod task;
+pub mod workqueue;
 
 pub mod linked_list;
 mod raw_list;
@@ -104,7 +105,8 @@ pub use build_error::build_error;
 
 pub use crate::error::{to_result, Error, Result};
 pub use crate::types::{
-    bit, bits_iter, ARef, AlwaysRefCounted, Bool, False, Mode, Opaque, ScopeGuard, True,
+    bit, bits_iter, ARef, AlwaysRefCounted, Bool, Either, Either::Left, Either::Right, False, Mode,
+    Opaque, ScopeGuard, True,
 };
 
 use core::marker::PhantomData;

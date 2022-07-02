@@ -12,6 +12,8 @@ use core::{
     task::{RawWaker, RawWakerVTable, Waker},
 };
 
+pub mod workqueue;
+
 /// Spawns a new task to run in the given executor.
 ///
 /// It also automatically defines a new lockdep lock class for executors (e.g., workqueue) that

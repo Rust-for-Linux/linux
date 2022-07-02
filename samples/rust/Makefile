@@ -12,5 +12,6 @@ obj-$(CONFIG_SAMPLE_RUST_SEMAPHORE_C)		+= rust_semaphore_c.o
 obj-$(CONFIG_SAMPLE_RUST_RANDOM)		+= rust_random.o
 obj-$(CONFIG_SAMPLE_RUST_PLATFORM)		+= rust_platform.o
 obj-$(CONFIG_SAMPLE_RUST_NETFILTER)		+= rust_netfilter.o
+obj-$(CONFIG_SAMPLE_RUST_ECHO_SERVER)		+= rust_echo_server.o
 
 subdir-$(CONFIG_SAMPLE_RUST_HOSTPROGS)		+= hostprogs

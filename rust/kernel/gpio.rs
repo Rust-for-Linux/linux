@@ -5,8 +5,8 @@
 //! C header: [`include/linux/gpio/driver.h`](../../../../include/linux/gpio/driver.h)
 
 use crate::{
-    bindings, device, error::code::*, error::from_kernel_result, types::PointerWrapper, Error,
-    Result,
+    bindings, device, error::code::*, error::from_kernel_result, sync::LockClassKey,
+    types::PointerWrapper, Error, Result,
 };
 use core::{
     cell::UnsafeCell,
@@ -120,6 +120,27 @@ macro_rules! declare_gpio_chip_operations {
 }
 
 /// A registration of a gpio chip.
+///
+/// # Examples
+///
+/// The following example registers an empty gpio chip.
+///
+/// ```
+/// # use kernel::prelude::*;
+/// use kernel::{device::RawDevice, gpio::{self, Registration}};
+///
+/// struct MyGpioChip;
+/// impl gpio::Chip for MyGpioChip {
+///     type Data = ();
+///     kernel::declare_gpio_chip_operations!();
+/// }
+///
+/// fn example(parent: &dyn RawDevice) -> Result<Pin<Box<Registration<MyGpioChip>>>> {
+///     let mut r = Pin::from(Box::try_new(Registration::new())?);
+///     kernel::gpio_chip_register!(r.as_mut(), 32, None, parent, ())?;
+///     Ok(r)
+/// }
+/// ```
 pub struct Registration<T: Chip> {
     gc: UnsafeCell<bindings::gpio_chip>,
     parent: Option<device::Device>,
@@ -141,12 +162,16 @@ impl<T: Chip> Registration<T> {
     }
 
     /// Registers a gpio chip with the rest of the kernel.
+    ///
+    /// Users are encouraged to use the [`gpio_chip_register`] macro because it automatically
+    /// defines the lock classes and calls the registration function.
     pub fn register(
         self: Pin<&mut Self>,
         gpio_count: u16,
         base: Option<i32>,
         parent: &dyn device::RawDevice,
         data: T::Data,
+        lock_keys: [&'static LockClassKey; 2],
     ) -> Result {
         if self.parent.is_some() {
             // Already registered.
@@ -197,8 +222,8 @@ impl<T: Chip> Registration<T> {
             bindings::gpiochip_add_data_with_key(
                 this.gc.get(),
                 data_pointer as _,
-                core::ptr::null_mut(),
-                core::ptr::null_mut(),
+                lock_keys[0].get(),
+                lock_keys[1].get(),
             )
         };
         if ret < 0 {
@@ -245,6 +270,25 @@ impl<T: Chip> Drop for Registration<T> {
             unsafe { <T::Data as PointerWrapper>::from_pointer(data_pointer) };
         }
     }
+}
+
+/// Registers a gpio chip with the rest of the kernel.
+///
+/// It automatically defines the required lock classes.
+#[macro_export]
+macro_rules! gpio_chip_register {
+    ($reg:expr, $count:expr, $base:expr, $parent:expr, $data:expr $(,)?) => {{
+        static CLASS1: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
+        static CLASS2: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
+        $crate::gpio::Registration::register(
+            $reg,
+            $count,
+            $base,
+            $parent,
+            $data,
+            [&CLASS1, &CLASS2],
+        )
+    }};
 }
 
 unsafe extern "C" fn get_direction_callback<T: Chip>(
@@ -340,6 +384,9 @@ mod irqchip {
         }
 
         /// Registers a gpio chip and its irq chip with the rest of the kernel.
+        ///
+        /// Users are encouraged to use the [`gpio_irq_chip_register`] macro because it
+        /// automatically defines the lock classes and calls the registration function.
         pub fn register<U: irq::Chip<Data = T::Data>>(
             mut self: Pin<&mut Self>,
             gpio_count: u16,
@@ -347,6 +394,7 @@ mod irqchip {
             parent: &dyn device::RawDevice,
             data: T::Data,
             parent_irq: u32,
+            lock_keys: [&'static LockClassKey; 2],
         ) -> Result {
             if self.reg.parent.is_some() {
                 // Already registered.
@@ -384,7 +432,7 @@ mod irqchip {
 
             // SAFETY: `reg` is pinned when `self` is.
             let pinned = unsafe { self.map_unchecked_mut(|r| &mut r.reg) };
-            pinned.register(gpio_count, base, parent, data)
+            pinned.register(gpio_count, base, parent, data, lock_keys)
         }
     }
 
@@ -474,5 +522,26 @@ mod irqchip {
             let data = unsafe { T::Data::borrow(bindings::gpiochip_get_data(gc as _)) };
             T::set_wake(data, irq_data, on)
         }
+    }
+
+    /// Registers a gpio chip and its irq chip with the rest of the kernel.
+    ///
+    /// It automatically defines the required lock classes.
+    #[macro_export]
+    macro_rules! gpio_irq_chip_register {
+        ($reg:expr, $irqchip:ty, $count:expr, $base:expr, $parent:expr, $data:expr,
+         $parent_irq:expr $(,)?) => {{
+            static CLASS1: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
+            static CLASS2: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
+            $crate::gpio::RegistrationWithIrqChip::register::<$irqchip>(
+                $reg,
+                $count,
+                $base,
+                $parent,
+                $data,
+                $parent_irq,
+                [&CLASS1, &CLASS2],
+            )
+        }};
     }
 }

@@ -62,7 +62,7 @@ impl LockClassKey {
         Self(UnsafeCell::new(MaybeUninit::uninit()))
     }
 
-    fn get(&self) -> *mut bindings::lock_class_key {
+    pub(crate) fn get(&self) -> *mut bindings::lock_class_key {
         self.0.get().cast()
     }
 }

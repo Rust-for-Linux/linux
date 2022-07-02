@@ -297,10 +297,15 @@ impl amba::Driver for PL061Device {
 
         data.resources().ok_or(ENXIO)?.base.writeb(0, GPIOIE); // disable irqs
 
-        data.registrations()
-            .ok_or(ENXIO)?
-            .as_pinned_mut()
-            .register::<Self>(PL061_GPIO_NR, None, dev, data.clone(), irq)?;
+        kernel::gpio_irq_chip_register!(
+            data.registrations().ok_or(ENXIO)?.as_pinned_mut(),
+            Self,
+            PL061_GPIO_NR,
+            None,
+            dev,
+            data.clone(),
+            irq
+        )?;
 
         dev_info!(data.dev, "PL061 GPIO chip registered\n");
 
