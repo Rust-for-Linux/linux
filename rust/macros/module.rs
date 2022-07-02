@@ -159,9 +159,8 @@ fn try_simple_param_val(param_type: &str, it: &mut token_stream::IntoIter) -> Op
         "usize" => try_ident(it)
             .and_then(|s| usize::try_from_radix(&s).ok())
             .map(|u| format!("kernel::module_param::USizeParam::Ref({})", u)),
-        "str" => {
-            try_byte_string(it).map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
-        }
+        "str" => try_byte_string(it)
+            .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s)),
         _ => try_literal(it),
     }
 }
@@ -179,21 +178,18 @@ fn get_default(param_type: &ParamType, param_it: &mut token_stream::IntoIter) ->
         } => {
             let group = expect_group(param_it);
             assert_eq!(group.delimiter(), Delimiter::Bracket);
+            let mut default_vals = "kernel::module_param::ArrayParam::create(&[".to_string();
             let it = &mut group.stream().into_iter();
 
-            let try_array_param_val = move || {
-                try_simple_param_val(param_type, it).map(|default_val| match it.next() {
-                    Some(TokenTree::Punct(punct)) if punct.as_char() == ',' => default_val,
-                    None => default_val,
+            while let Some(default_val) = try_simple_param_val(param_type, it) {
+                default_vals.push_str(&default_val);
+                match it.next() {
+                    Some(TokenTree::Punct(punct)) => assert_eq!(punct.as_char(), ','),
+                    None => break,
                     _ => panic!("Expected ',' or end of array default values"),
-                })
-            };
-            format!(
-                "kernel::module_param::ArrayParam::create(&[{}])",
-                std::iter::from_fn(try_array_param_val)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )
+                }
+            }
+            default_vals + "])"
         }
     };
     assert_eq!(expect_punct(param_it), ',');
