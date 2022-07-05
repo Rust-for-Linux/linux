@@ -34,3 +34,5 @@ pub use super::static_assert;
 pub use super::{error::code::*, Error, Result};
 
 pub use super::{str::CStr, ARef, ThisModule};
+
+pub use super::allocext::{BoxAllocFlagExt, BoxAllocFlagInExt};

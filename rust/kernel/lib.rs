@@ -28,6 +28,7 @@
 #![feature(coerce_unsized)]
 #![feature(dispatch_from_dyn)]
 #![feature(unsize)]
+#![feature(new_uninit)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
@@ -37,6 +38,8 @@ compile_error!("Missing kernel configuration for conditional compilation");
 #[cfg(not(test))]
 #[cfg(not(testlib))]
 mod allocator;
+
+pub mod allocext;
 
 #[doc(hidden)]
 pub mod bindings;
