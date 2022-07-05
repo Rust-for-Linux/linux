@@ -19,6 +19,8 @@
 #![feature(const_ptr_offset_from)]
 #![feature(const_refs_to_cell)]
 #![feature(const_trait_impl)]
+#![feature(core_ffi_c)]
+#![feature(c_size_t)]
 #![feature(doc_cfg)]
 #![feature(generic_associated_types)]
 #![feature(ptr_metadata)]
@@ -41,7 +43,6 @@ pub mod bindings;
 
 #[cfg(CONFIG_ARM_AMBA)]
 pub mod amba;
-pub mod c_types;
 pub mod chrdev;
 #[cfg(CONFIG_COMMON_CLK)]
 pub mod clk;
@@ -50,6 +51,7 @@ pub mod device;
 pub mod driver;
 pub mod error;
 pub mod file;
+pub mod fs;
 pub mod gpio;
 pub mod hwrng;
 pub mod irq;
@@ -64,10 +66,12 @@ pub mod revocable;
 pub mod security;
 pub mod str;
 pub mod task;
+pub mod workqueue;
 
 pub mod linked_list;
 mod raw_list;
 pub mod rbtree;
+pub mod unsafe_list;
 
 #[doc(hidden)]
 pub mod module_param;
@@ -102,7 +106,8 @@ pub use build_error::build_error;
 
 pub use crate::error::{to_result, Error, Result};
 pub use crate::types::{
-    bit, bits_iter, ARef, AlwaysRefCounted, Bool, False, Mode, Opaque, ScopeGuard, True,
+    bit, bits_iter, ARef, AlwaysRefCounted, Bool, Either, Either::Left, Either::Right, False, Mode,
+    Opaque, ScopeGuard, True,
 };
 
 use core::marker::PhantomData;

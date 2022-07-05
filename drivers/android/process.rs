@@ -14,6 +14,7 @@ use kernel::{
     sync::{Guard, Mutex, Ref, RefBorrow, UniqueRef},
     task::Task,
     user_ptr::{UserSlicePtr, UserSlicePtrReader},
+    Either,
 };
 
 use crate::{
@@ -23,7 +24,7 @@ use crate::{
     node::{Node, NodeDeath, NodeRef},
     range_alloc::RangeAllocator,
     thread::{BinderError, BinderResult, Thread},
-    DeliverToRead, DeliverToReadListAdapter, Either,
+    DeliverToRead, DeliverToReadListAdapter,
 };
 
 // TODO: Review this:

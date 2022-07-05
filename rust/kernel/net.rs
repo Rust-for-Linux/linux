@@ -260,7 +260,7 @@ impl TcpListener {
         };
 
         // SAFETY: The namespace is valid and the output socket pointer is valid for write.
-        to_result(|| unsafe {
+        to_result(unsafe {
             bindings::sock_create_kern(
                 ns.0.get(),
                 pf as _,
@@ -275,10 +275,10 @@ impl TcpListener {
 
         // SAFETY: The type invariant guarantees that the socket is valid, and `addr` and `addrlen`
         // were initialised based on valid values provided in the address enum.
-        to_result(|| unsafe { bindings::kernel_bind(socket, addr, addrlen as _) })?;
+        to_result(unsafe { bindings::kernel_bind(socket, addr, addrlen as _) })?;
 
         // SAFETY: The socket is valid per the type invariant.
-        to_result(|| unsafe { bindings::kernel_listen(socket, bindings::SOMAXCONN as _) })?;
+        to_result(unsafe { bindings::kernel_listen(socket, bindings::SOMAXCONN as _) })?;
 
         Ok(listener)
     }
@@ -295,7 +295,7 @@ impl TcpListener {
         let flags = if block { 0 } else { bindings::O_NONBLOCK };
         // SAFETY: The type invariant guarantees that the socket is valid, and the output argument
         // is also valid for write.
-        to_result(|| unsafe { bindings::kernel_accept(self.sock, &mut new, flags as _) })?;
+        to_result(unsafe { bindings::kernel_accept(self.sock, &mut new, flags as _) })?;
         Ok(TcpStream { sock: new })
     }
 }

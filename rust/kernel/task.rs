@@ -5,8 +5,8 @@
 //! C header: [`include/linux/sched.h`](../../../../include/linux/sched.h).
 
 use crate::{
-    bindings, c_str, c_types, error::from_kernel_err_ptr, types::PointerWrapper, ARef,
-    AlwaysRefCounted, Result, ScopeGuard,
+    bindings, c_str, error::from_kernel_err_ptr, types::PointerWrapper, ARef, AlwaysRefCounted,
+    Result, ScopeGuard,
 };
 use alloc::boxed::Box;
 use core::{cell::UnsafeCell, fmt, marker::PhantomData, ops::Deref, ptr};
@@ -148,8 +148,8 @@ impl Task {
         func: T,
     ) -> Result<ARef<Task>> {
         unsafe extern "C" fn threadfn<T: FnOnce() + Send + 'static>(
-            arg: *mut c_types::c_void,
-        ) -> c_types::c_int {
+            arg: *mut core::ffi::c_void,
+        ) -> core::ffi::c_int {
             // SAFETY: The thread argument is always a `Box<T>` because it is only called via the
             // thread creation below.
             let bfunc = unsafe { Box::<T>::from_pointer(arg) };
@@ -174,18 +174,27 @@ impl Task {
                 arg as _,
                 bindings::NUMA_NO_NODE,
                 c_str!("%pA").as_char_ptr(),
-                &name as *const _ as *const c_types::c_void,
+                &name as *const _ as *const core::ffi::c_void,
             )
         })?;
 
         // SAFETY: Since the kthread creation succeeded and we haven't run it yet, we know the task
         // is valid.
-        let task = unsafe { &*(ktask as *const Task) }.into();
+        let task: ARef<_> = unsafe { &*(ktask as *const Task) }.into();
 
-        // SAFETY: Since the kthread creation succeeded, we know `ktask` is valid.
-        unsafe { bindings::wake_up_process(ktask) };
+        // Wakes up the thread, otherwise it won't run.
+        task.wake_up();
+
         guard.dismiss();
         Ok(task)
+    }
+
+    /// Wakes up the task.
+    pub fn wake_up(&self) {
+        // SAFETY: By the type invariant, we know that `self.0.get()` is non-null and valid.
+        // And `wake_up_process` is safe to be called for any valid task, even if the task is
+        // running.
+        unsafe { bindings::wake_up_process(self.0.get()) };
     }
 }
 

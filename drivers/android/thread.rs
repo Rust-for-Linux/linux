@@ -14,6 +14,7 @@ use kernel::{
     security,
     sync::{CondVar, Ref, SpinLock, UniqueRef},
     user_ptr::{UserSlicePtr, UserSlicePtrWriter},
+    Either,
 };
 
 use crate::{
@@ -22,7 +23,7 @@ use crate::{
     process::{AllocationInfo, Process},
     ptr_align,
     transaction::{FileInfo, Transaction},
-    DeliverCode, DeliverToRead, DeliverToReadListAdapter, Either,
+    DeliverCode, DeliverToRead, DeliverToReadListAdapter,
 };
 
 pub(crate) type BinderResult<T = ()> = core::result::Result<T, BinderError>;

@@ -7,7 +7,7 @@
 //! C header: [`include/linux/platform_device.h`](../../../../include/linux/platform_device.h)
 
 use crate::{
-    bindings, c_types,
+    bindings,
     device::{self, RawDevice},
     driver,
     error::{from_kernel_result, Result},
@@ -49,7 +49,7 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
         //   - `probe()` and `remove()` are static functions.
         //   - `of_match_table` is either a raw pointer with static lifetime,
         //      as guaranteed by the [`driver::IdTable`] type, or null.
-        to_result(|| unsafe { bindings::__platform_driver_register(reg, module.0) })
+        to_result(unsafe { bindings::__platform_driver_register(reg, module.0) })
     }
 
     unsafe fn unregister(reg: *mut bindings::platform_driver) {
@@ -89,7 +89,7 @@ impl<T: Driver> Adapter<T> {
         unsafe { (&*ptr).as_ref() }
     }
 
-    extern "C" fn probe_callback(pdev: *mut bindings::platform_device) -> c_types::c_int {
+    extern "C" fn probe_callback(pdev: *mut bindings::platform_device) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `pdev` is valid by the contract with the C code. `dev` is alive only for the
             // duration of this call, so it is guaranteed to remain alive for the lifetime of
@@ -103,7 +103,7 @@ impl<T: Driver> Adapter<T> {
         }
     }
 
-    extern "C" fn remove_callback(pdev: *mut bindings::platform_device) -> c_types::c_int {
+    extern "C" fn remove_callback(pdev: *mut bindings::platform_device) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `pdev` is guaranteed to be a valid, non-null pointer.
             let ptr = unsafe { bindings::platform_get_drvdata(pdev) };

@@ -6,7 +6,7 @@
 //! [`include/linux/file.h`](../../../../include/linux/file.h)
 
 use crate::{
-    bindings, c_types,
+    bindings,
     cred::Credential,
     error::{code::*, from_kernel_result, Error, Result},
     io_buffer::{IoBufferReader, IoBufferWriter},
@@ -216,7 +216,7 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
     unsafe extern "C" fn open_callback(
         inode: *mut bindings::inode,
         file: *mut bindings::file,
-    ) -> c_types::c_int {
+    ) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `A::convert` must return a valid non-null pointer that
             // should point to data in the inode or file that lives longer
@@ -233,19 +233,19 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
             // for implementers of the file operations (no other C code accesses
             // it), so we know that there are no concurrent threads/CPUs accessing
             // it (it's not visible to any other Rust code).
-            unsafe { (*file).private_data = ptr as *mut c_types::c_void };
+            unsafe { (*file).private_data = ptr as *mut core::ffi::c_void };
             Ok(0)
         }
     }
 
     unsafe extern "C" fn read_callback(
         file: *mut bindings::file,
-        buf: *mut c_types::c_char,
-        len: c_types::c_size_t,
+        buf: *mut core::ffi::c_char,
+        len: core::ffi::c_size_t,
         offset: *mut bindings::loff_t,
-    ) -> c_types::c_ssize_t {
+    ) -> core::ffi::c_ssize_t {
         from_kernel_result! {
-            let mut data = unsafe { UserSlicePtr::new(buf as *mut c_types::c_void, len).writer() };
+            let mut data = unsafe { UserSlicePtr::new(buf as *mut core::ffi::c_void, len).writer() };
             // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
             // `T::Data::into_pointer`. `T::Data::from_pointer` is only called by the
             // `release` callback, which the C API guarantees that will be called only when all
@@ -288,12 +288,12 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
 
     unsafe extern "C" fn write_callback(
         file: *mut bindings::file,
-        buf: *const c_types::c_char,
-        len: c_types::c_size_t,
+        buf: *const core::ffi::c_char,
+        len: core::ffi::c_size_t,
         offset: *mut bindings::loff_t,
-    ) -> c_types::c_ssize_t {
+    ) -> core::ffi::c_ssize_t {
         from_kernel_result! {
-            let mut data = unsafe { UserSlicePtr::new(buf as *mut c_types::c_void, len).reader() };
+            let mut data = unsafe { UserSlicePtr::new(buf as *mut core::ffi::c_void, len).reader() };
             // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
             // `T::Data::into_pointer`. `T::Data::from_pointer` is only called by the
             // `release` callback, which the C API guarantees that will be called only when all
@@ -337,7 +337,7 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
     unsafe extern "C" fn release_callback(
         _inode: *mut bindings::inode,
         file: *mut bindings::file,
-    ) -> c_types::c_int {
+    ) -> core::ffi::c_int {
         let ptr = mem::replace(unsafe { &mut (*file).private_data }, ptr::null_mut());
         T::release(unsafe { T::Data::from_pointer(ptr as _) }, unsafe {
             File::from_ptr(file)
@@ -348,7 +348,7 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
     unsafe extern "C" fn llseek_callback(
         file: *mut bindings::file,
         offset: bindings::loff_t,
-        whence: c_types::c_int,
+        whence: core::ffi::c_int,
     ) -> bindings::loff_t {
         from_kernel_result! {
             let off = match whence as u32 {
@@ -370,9 +370,9 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
 
     unsafe extern "C" fn unlocked_ioctl_callback(
         file: *mut bindings::file,
-        cmd: c_types::c_uint,
-        arg: c_types::c_ulong,
-    ) -> c_types::c_long {
+        cmd: core::ffi::c_uint,
+        arg: core::ffi::c_ulong,
+    ) -> core::ffi::c_long {
         from_kernel_result! {
             // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
             // `T::Data::into_pointer`. `T::Data::from_pointer` is only called by the
@@ -388,9 +388,9 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
 
     unsafe extern "C" fn compat_ioctl_callback(
         file: *mut bindings::file,
-        cmd: c_types::c_uint,
-        arg: c_types::c_ulong,
-    ) -> c_types::c_long {
+        cmd: core::ffi::c_uint,
+        arg: core::ffi::c_ulong,
+    ) -> core::ffi::c_long {
         from_kernel_result! {
             // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
             // `T::Data::into_pointer`. `T::Data::from_pointer` is only called by the
@@ -407,7 +407,7 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
     unsafe extern "C" fn mmap_callback(
         file: *mut bindings::file,
         vma: *mut bindings::vm_area_struct,
-    ) -> c_types::c_int {
+    ) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
             // `T::Data::into_pointer`. `T::Data::from_pointer` is only called by the
@@ -431,8 +431,8 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
         file: *mut bindings::file,
         start: bindings::loff_t,
         end: bindings::loff_t,
-        datasync: c_types::c_int,
-    ) -> c_types::c_int {
+        datasync: core::ffi::c_int,
+    ) -> core::ffi::c_int {
         from_kernel_result! {
             let start = start.try_into()?;
             let end = end.try_into()?;

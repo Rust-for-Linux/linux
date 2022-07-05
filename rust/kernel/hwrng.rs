@@ -7,7 +7,7 @@
 use alloc::{boxed::Box, slice::from_raw_parts_mut};
 
 use crate::{
-    bindings, c_types, error::code::*, error::from_kernel_result, str::CString, to_result,
+    bindings, error::code::*, error::from_kernel_result, str::CString, to_result,
     types::PointerWrapper, Result, ScopeGuard,
 };
 
@@ -106,7 +106,7 @@ impl<T: Operations> Registration<T> {
         );
 
         // SAFETY: `bindings::hwrng` is initialized above which guarantees safety.
-        to_result(|| unsafe { bindings::hwrng_register(this.hwrng.get()) })?;
+        to_result(unsafe { bindings::hwrng_register(this.hwrng.get()) })?;
 
         this.registered = true;
         this.name = Some(name);
@@ -118,7 +118,7 @@ impl<T: Operations> Registration<T> {
         hwrng: &mut bindings::hwrng,
         name: &CString,
         quality: u16,
-        data: *const c_types::c_void,
+        data: *const core::ffi::c_void,
     ) {
         hwrng.name = name.as_char_ptr();
 
@@ -144,7 +144,7 @@ impl<T: Operations> Registration<T> {
         // zeroed by `bindings::hwrng::default()` call.
     }
 
-    unsafe extern "C" fn init_callback(rng: *mut bindings::hwrng) -> c_types::c_int {
+    unsafe extern "C" fn init_callback(rng: *mut bindings::hwrng) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `priv` private data field was initialized during creation of
             // the `bindings::hwrng` in `Self::init_hwrng` method. This callback is only
@@ -165,10 +165,10 @@ impl<T: Operations> Registration<T> {
 
     unsafe extern "C" fn read_callback(
         rng: *mut bindings::hwrng,
-        data: *mut c_types::c_void,
+        data: *mut core::ffi::c_void,
         max: usize,
         wait: bindings::bool_,
-    ) -> c_types::c_int {
+    ) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `priv` private data field was initialized during creation of
             // the `bindings::hwrng` in `Self::init_hwrng` method. This callback is only

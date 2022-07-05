@@ -297,7 +297,7 @@ bindgen_c_flags_final = $(bindgen_c_flags_lto)
 quiet_cmd_bindgen = BINDGEN $@
       cmd_bindgen = \
 	$(BINDGEN) $< $(bindgen_target_flags) \
-		--use-core --with-derive-default --ctypes-prefix c_types \
+		--use-core --with-derive-default --ctypes-prefix core::ffi \
 		--no-debug '.*' \
 		--size_t-is-usize -o $@ -- $(bindgen_c_flags_final) -DMODULE \
 		$(bindgen_target_cflags) $(bindgen_target_extra)

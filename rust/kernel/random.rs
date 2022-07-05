@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/random.h`](../../../../include/linux/random.h)
 
-use crate::{bindings, c_types, error::code::*, Error, Result};
+use crate::{bindings, error::code::*, Error, Result};
 
 /// Fills a byte slice with random bytes generated from the kernel's CSPRNG.
 ///
@@ -17,7 +17,7 @@ pub fn getrandom(dest: &mut [u8]) -> Result {
     }
 
     unsafe {
-        bindings::get_random_bytes(dest.as_mut_ptr() as *mut c_types::c_void, dest.len());
+        bindings::get_random_bytes(dest.as_mut_ptr() as *mut core::ffi::c_void, dest.len());
     }
     Ok(())
 }
@@ -37,6 +37,6 @@ pub fn getrandom_nonblock(dest: &mut [u8]) -> Result {
 /// Does *not* credit the kernel entropy counter though.
 pub fn add_randomness(data: &[u8]) {
     unsafe {
-        bindings::add_device_randomness(data.as_ptr() as *const c_types::c_void, data.len());
+        bindings::add_device_randomness(data.as_ptr() as *const core::ffi::c_void, data.len());
     }
 }

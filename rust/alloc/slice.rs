@@ -155,7 +155,7 @@ pub use hack::to_vec;
 // functions are actually methods that are in `impl [T]` but not in
 // `core::slice::SliceExt` - we need to supply these functions for the
 // `test_permutations` test
-mod hack {
+pub(crate) mod hack {
     use core::alloc::Allocator;
 
     use crate::boxed::Box;
@@ -287,7 +287,6 @@ mod hack {
     }
 }
 
-#[cfg_attr(bootstrap, lang = "slice_alloc")]
 #[cfg(not(test))]
 impl<T> [T] {
     /// Sorts the slice.
@@ -317,7 +316,7 @@ impl<T> [T] {
     /// assert!(v == [-5, -3, 1, 2, 4]);
     /// ```
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[inline]
     pub fn sort(&mut self)
@@ -373,7 +372,7 @@ impl<T> [T] {
     /// assert!(v == [5, 4, 3, 2, 1]);
     /// ```
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[inline]
     pub fn sort_by<F>(&mut self, mut compare: F)
@@ -415,7 +414,7 @@ impl<T> [T] {
     /// assert!(v == [1, 2, -3, 4, -5]);
     /// ```
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "slice_sort_by_key", since = "1.7.0")]
     #[inline]
     pub fn sort_by_key<K, F>(&mut self, mut f: F)
@@ -462,7 +461,7 @@ impl<T> [T] {
     ///
     /// [pdqsort]: https://github.com/orlp/pdqsort
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "slice_sort_by_cached_key", since = "1.34.0")]
     #[inline]
     pub fn sort_by_cached_key<K, F>(&mut self, f: F)
@@ -521,7 +520,7 @@ impl<T> [T] {
     /// // Here, `s` and `x` can be modified independently.
     /// ```
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[rustc_conversion_suggestion]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[inline]
@@ -541,7 +540,7 @@ impl<T> [T] {
     /// let x = s.try_to_vec().unwrap();
     /// // Here, `s` and `x` can be modified independently.
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[inline]
     #[stable(feature = "kernel", since = "1.0.0")]
     pub fn try_to_vec(&self) -> Result<Vec<T>, TryReserveError>
@@ -565,7 +564,7 @@ impl<T> [T] {
     /// // Here, `s` and `x` can be modified independently.
     /// ```
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[inline]
     #[unstable(feature = "allocator_api", issue = "32838")]
     pub fn to_vec_in<A: Allocator>(&self, alloc: A) -> Vec<T, A>
@@ -589,7 +588,7 @@ impl<T> [T] {
     /// let x = s.try_to_vec_in(System).unwrap();
     /// // Here, `s` and `x` can be modified independently.
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[inline]
     #[stable(feature = "kernel", since = "1.0.0")]
     pub fn try_to_vec_in<A: Allocator>(&self, alloc: A) -> Result<Vec<T, A>, TryReserveError>
@@ -614,7 +613,7 @@ impl<T> [T] {
     ///
     /// assert_eq!(x, vec![10, 40, 30]);
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "rust1", since = "1.0.0")]
     #[inline]
     pub fn into_vec<A: Allocator>(self: Box<Self, A>) -> Vec<T, A> {
@@ -642,7 +641,7 @@ impl<T> [T] {
     /// // this will panic at runtime
     /// b"0123456789abcdef".repeat(usize::MAX);
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[cfg(not(no_global_oom_handling))]
     #[stable(feature = "repeat_generic_slice", since = "1.40.0")]
     pub fn repeat(&self, n: usize) -> Vec<T>
@@ -711,7 +710,7 @@ impl<T> [T] {
     /// assert_eq!(["hello", "world"].concat(), "helloworld");
     /// assert_eq!([[1, 2], [3, 4]].concat(), [1, 2, 3, 4]);
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn concat<Item: ?Sized>(&self) -> <Self as Concat<Item>>::Output
     where
@@ -730,7 +729,7 @@ impl<T> [T] {
     /// assert_eq!([[1, 2], [3, 4]].join(&0), [1, 2, 0, 3, 4]);
     /// assert_eq!([[1, 2], [3, 4]].join(&[0, 0][..]), [1, 2, 0, 0, 3, 4]);
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "rename_connect_to_join", since = "1.3.0")]
     pub fn join<Separator>(&self, sep: Separator) -> <Self as Join<Separator>>::Output
     where
@@ -749,9 +748,9 @@ impl<T> [T] {
     /// assert_eq!(["hello", "world"].connect(" "), "hello world");
     /// assert_eq!([[1, 2], [3, 4]].connect(&0), [1, 2, 0, 3, 4]);
     /// ```
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[stable(feature = "rust1", since = "1.0.0")]
-    #[rustc_deprecated(since = "1.3.0", reason = "renamed to join")]
+    #[deprecated(since = "1.3.0", note = "renamed to join")]
     pub fn connect<Separator>(&self, sep: Separator) -> <Self as Join<Separator>>::Output
     where
         Self: Join<Separator>,
@@ -760,7 +759,6 @@ impl<T> [T] {
     }
 }
 
-#[cfg_attr(bootstrap, lang = "slice_u8_alloc")]
 #[cfg(not(test))]
 impl [u8] {
     /// Returns a vector containing a copy of this slice where each byte
@@ -773,7 +771,7 @@ impl [u8] {
     ///
     /// [`make_ascii_uppercase`]: slice::make_ascii_uppercase
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[must_use = "this returns the uppercase bytes as a new Vec, \
                   without modifying the original"]
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
@@ -794,7 +792,7 @@ impl [u8] {
     ///
     /// [`make_ascii_lowercase`]: slice::make_ascii_lowercase
     #[cfg(not(no_global_oom_handling))]
-    #[cfg_attr(not(bootstrap), rustc_allow_incoherent_impl)]
+    #[rustc_allow_incoherent_impl]
     #[must_use = "this returns the lowercase bytes as a new Vec, \
                   without modifying the original"]
     #[stable(feature = "ascii_methods_on_intrinsics", since = "1.23.0")]
@@ -1151,7 +1149,7 @@ where
         fn drop(&mut self) {
             // `T` is not a zero-sized type, and these are pointers into a slice's elements.
             unsafe {
-                let len = self.end.offset_from(self.start) as usize;
+                let len = self.end.sub_ptr(self.start);
                 ptr::copy_nonoverlapping(self.start, self.dest, len);
             }
         }

@@ -117,7 +117,7 @@ impl<T, A: Allocator> SpecExtend<T, IntoIter<T>> for Vec<T, A> {
         unsafe {
             self.append_elements(iterator.as_slice() as _);
         }
-        iterator.ptr = iterator.end;
+        iterator.forget_remaining_elements();
     }
 }
 
@@ -126,7 +126,7 @@ impl<T, A: Allocator> TrySpecExtend<T, IntoIter<T>> for Vec<T, A> {
         unsafe {
             self.try_append_elements(iterator.as_slice() as _)?;
         }
-        iterator.ptr = iterator.end;
+        iterator.forget_remaining_elements();
         Ok(())
     }
 }

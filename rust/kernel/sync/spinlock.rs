@@ -10,7 +10,7 @@ use super::{
     mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockInfo, LockIniter,
     WriteLock,
 };
-use crate::{bindings, c_types, str::CStr, Opaque, True};
+use crate::{bindings, str::CStr, Opaque, True};
 use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
 
 /// Safely initialises a [`SpinLock`] with the given name, generating a new lock class.
@@ -176,14 +176,14 @@ unsafe impl<T: ?Sized> Lock for SpinLock<T> {
 // SAFETY: The underlying kernel `spinlock_t` object ensures mutual exclusion.
 unsafe impl<T: ?Sized> Lock<DisabledInterrupts> for SpinLock<T> {
     type Inner = T;
-    type GuardContext = c_types::c_ulong;
+    type GuardContext = core::ffi::c_ulong;
 
-    fn lock_noguard(&self) -> c_types::c_ulong {
+    fn lock_noguard(&self) -> core::ffi::c_ulong {
         // SAFETY: `spin_lock` points to valid memory.
         unsafe { bindings::spin_lock_irqsave(self.spin_lock.get()) }
     }
 
-    unsafe fn unlock(&self, ctx: &mut c_types::c_ulong) {
+    unsafe fn unlock(&self, ctx: &mut core::ffi::c_ulong) {
         // SAFETY: The safety requirements of the function ensure that the spinlock is owned by
         // the caller.
         unsafe { bindings::spin_unlock_irqrestore(self.spin_lock.get(), *ctx) }
@@ -338,14 +338,14 @@ unsafe impl<T: ?Sized> Lock for RawSpinLock<T> {
 // SAFETY: The underlying kernel `raw_spinlock_t` object ensures mutual exclusion.
 unsafe impl<T: ?Sized> Lock<DisabledInterrupts> for RawSpinLock<T> {
     type Inner = T;
-    type GuardContext = c_types::c_ulong;
+    type GuardContext = core::ffi::c_ulong;
 
-    fn lock_noguard(&self) -> c_types::c_ulong {
+    fn lock_noguard(&self) -> core::ffi::c_ulong {
         // SAFETY: `spin_lock` points to valid memory.
         unsafe { bindings::raw_spin_lock_irqsave(self.spin_lock.get()) }
     }
 
-    unsafe fn unlock(&self, ctx: &mut c_types::c_ulong) {
+    unsafe fn unlock(&self, ctx: &mut core::ffi::c_ulong) {
         // SAFETY: The safety requirements of the function ensure that the raw spinlock is owned by
         // the caller.
         unsafe { bindings::raw_spin_unlock_irqrestore(self.spin_lock.get(), *ctx) };

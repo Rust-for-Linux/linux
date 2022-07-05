@@ -33,11 +33,6 @@ module! {
     license: b"GPL",
 }
 
-enum Either<L, R> {
-    Left(L),
-    Right(R),
-}
-
 trait DeliverToRead {
     /// Performs work. Returns true if remaining work items in the queue should be processed
     /// immediately, or false if it should return to caller before processing additional work

@@ -5,8 +5,8 @@
 //! C header: [`include/linux/amba/bus.h`](../../../../include/linux/amba/bus.h)
 
 use crate::{
-    bindings, c_types, device, driver, error::from_kernel_result, io_mem::Resource, power,
-    str::CStr, to_result, types::PointerWrapper, Result, ThisModule,
+    bindings, device, driver, error::from_kernel_result, io_mem::Resource, power, str::CStr,
+    to_result, types::PointerWrapper, Result, ThisModule,
 };
 
 /// A registration of an amba driver.
@@ -95,7 +95,7 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
         }
         // SAFETY: By the safety requirements of this function, `reg` is valid and fully
         // initialised.
-        to_result(|| unsafe { bindings::amba_driver_register(reg) })
+        to_result(unsafe { bindings::amba_driver_register(reg) })
     }
 
     unsafe fn unregister(reg: *mut bindings::amba_driver) {
@@ -108,7 +108,7 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
 unsafe extern "C" fn probe_callback<T: Driver>(
     adev: *mut bindings::amba_device,
     aid: *const bindings::amba_id,
-) -> c_types::c_int {
+) -> core::ffi::c_int {
     from_kernel_result! {
         // SAFETY: `adev` is valid by the contract with the C code. `dev` is alive only for the
         // duration of this call, so it is guaranteed to remain alive for the lifetime of `dev`.

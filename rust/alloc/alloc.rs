@@ -328,16 +328,12 @@ unsafe fn exchange_malloc(size: usize, align: usize) -> *mut u8 {
 #[cfg_attr(not(test), lang = "box_free")]
 #[inline]
 #[rustc_const_unstable(feature = "const_box", issue = "92521")]
-#[cfg_attr(not(bootstrap), allow(drop_bounds))] // FIXME remove `~const Drop` and this attr when bumping
 // This signature has to be the same as `Box`, otherwise an ICE will happen.
 // When an additional parameter to `Box` is added (like `A: Allocator`), this has to be added here as
 // well.
 // For example if `Box` is changed to  `struct Box<T: ?Sized, A: Allocator>(Unique<T>, A)`,
 // this function has to be changed to `fn box_free<T: ?Sized, A: Allocator>(Unique<T>, A)` as well.
-pub(crate) const unsafe fn box_free<
-    T: ?Sized,
-    A: ~const Allocator + ~const Drop + ~const Destruct,
->(
+pub(crate) const unsafe fn box_free<T: ?Sized, A: ~const Allocator + ~const Destruct>(
     ptr: Unique<T>,
     alloc: A,
 ) {
@@ -393,7 +389,7 @@ pub const fn handle_alloc_error(layout: Layout) -> ! {
 #[cfg(all(not(no_global_oom_handling), test))]
 pub use std::alloc::handle_alloc_error;
 
-#[cfg(all(not(no_global_oom_handling), not(any(target_os = "hermit", test))))]
+#[cfg(all(not(no_global_oom_handling), not(test)))]
 #[doc(hidden)]
 #[allow(unused_attributes)]
 #[unstable(feature = "alloc_internals", issue = "none")]

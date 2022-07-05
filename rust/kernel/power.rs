@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-use crate::{bindings, c_types, error::from_kernel_result, types::PointerWrapper, Result};
+use crate::{bindings, error::from_kernel_result, types::PointerWrapper, Result};
 use core::marker::PhantomData;
 
 /// Corresponds to the kernel's `struct dev_pm_ops`.
@@ -41,7 +41,7 @@ macro_rules! pm_callback {
     ($callback:ident, $method:ident) => {
         unsafe extern "C" fn $callback<T: Operations>(
             dev: *mut bindings::device,
-        ) -> c_types::c_int {
+        ) -> core::ffi::c_int {
             from_kernel_result! {
                 // SAFETY: `dev` is valid as it was passed in by the C portion.
                 let ptr = unsafe { bindings::dev_get_drvdata(dev) };
