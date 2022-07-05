@@ -10,7 +10,7 @@ use kernel::{
     prelude::*,
     sync::{Ref, SpinLock, UniqueRef},
     user_ptr::UserSlicePtrWriter,
-    ScopeGuard,
+    Either, ScopeGuard,
 };
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
     process::Process,
     ptr_align,
     thread::{BinderResult, Thread},
-    DeliverToRead, Either,
+    DeliverToRead,
 };
 
 struct TransactionInner {

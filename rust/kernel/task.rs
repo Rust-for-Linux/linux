@@ -180,12 +180,21 @@ impl Task {
 
         // SAFETY: Since the kthread creation succeeded and we haven't run it yet, we know the task
         // is valid.
-        let task = unsafe { &*(ktask as *const Task) }.into();
+        let task: ARef<_> = unsafe { &*(ktask as *const Task) }.into();
 
-        // SAFETY: Since the kthread creation succeeded, we know `ktask` is valid.
-        unsafe { bindings::wake_up_process(ktask) };
+        // Wakes up the thread, otherwise it won't run.
+        task.wake_up();
+
         guard.dismiss();
         Ok(task)
+    }
+
+    /// Wakes up the task.
+    pub fn wake_up(&self) {
+        // SAFETY: By the type invariant, we know that `self.0.get()` is non-null and valid.
+        // And `wake_up_process` is safe to be called for any valid task, even if the task is
+        // running.
+        unsafe { bindings::wake_up_process(self.0.get()) };
     }
 }
 

@@ -106,7 +106,7 @@ impl<T: Operations> Registration<T> {
         );
 
         // SAFETY: `bindings::hwrng` is initialized above which guarantees safety.
-        to_result(|| unsafe { bindings::hwrng_register(this.hwrng.get()) })?;
+        to_result(unsafe { bindings::hwrng_register(this.hwrng.get()) })?;
 
         this.registered = true;
         this.name = Some(name);

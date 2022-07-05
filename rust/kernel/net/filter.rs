@@ -213,7 +213,7 @@ impl<T: Filter> Registration<T> {
 
         // SAFETY: `ns` has a valid reference to the namespace, and `this.hook` was just
         // initialised above, so they're both valid.
-        to_result(|| unsafe { bindings::nf_register_net_hook(ns.0.get(), &this.hook) })?;
+        to_result(unsafe { bindings::nf_register_net_hook(ns.0.get(), &this.hook) })?;
 
         this.dev = dev;
         this.ns = Some(ns);

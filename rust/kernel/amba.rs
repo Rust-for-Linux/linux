@@ -95,7 +95,7 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
         }
         // SAFETY: By the safety requirements of this function, `reg` is valid and fully
         // initialised.
-        to_result(|| unsafe { bindings::amba_driver_register(reg) })
+        to_result(unsafe { bindings::amba_driver_register(reg) })
     }
 
     unsafe fn unregister(reg: *mut bindings::amba_driver) {

@@ -66,7 +66,7 @@ pub mod virt {
             // SAFETY: The page is guaranteed to be order 0 by the type system. The range of
             // `address` is already checked by `vm_insert_page`. `self.vma` and `page.pages` are
             // guaranteed by their repective type invariants to be valid.
-            to_result(|| unsafe { bindings::vm_insert_page(self.vma, address as _, page.pages) })
+            to_result(unsafe { bindings::vm_insert_page(self.vma, address as _, page.pages) })
         }
     }
 

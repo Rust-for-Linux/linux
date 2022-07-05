@@ -35,7 +35,7 @@ impl Clk {
     /// This function should not be called in atomic context.
     pub fn prepare_enable(self) -> Result<EnabledClk> {
         // SAFETY: The pointer is valid by the type invariant.
-        to_result(|| unsafe { bindings::clk_prepare_enable(self.0) })?;
+        to_result(unsafe { bindings::clk_prepare_enable(self.0) })?;
         Ok(EnabledClk(self))
     }
 }

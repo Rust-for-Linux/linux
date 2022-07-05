@@ -627,6 +627,12 @@ void rust_helper___INIT_WORK_WITH_KEY(struct work_struct *work,
 }
 EXPORT_SYMBOL_GPL(rust_helper___INIT_WORK_WITH_KEY);
 
+struct dentry *rust_helper_dget(struct dentry *dentry)
+{
+	return dget(dentry);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dget);
+
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
  * as the Rust `usize` type, so we can use it in contexts where Rust

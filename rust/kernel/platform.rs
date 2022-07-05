@@ -49,7 +49,7 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
         //   - `probe()` and `remove()` are static functions.
         //   - `of_match_table` is either a raw pointer with static lifetime,
         //      as guaranteed by the [`driver::IdTable`] type, or null.
-        to_result(|| unsafe { bindings::__platform_driver_register(reg, module.0) })
+        to_result(unsafe { bindings::__platform_driver_register(reg, module.0) })
     }
 
     unsafe fn unregister(reg: *mut bindings::platform_driver) {
