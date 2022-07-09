@@ -38,6 +38,11 @@ compile_error!("Missing kernel configuration for conditional compilation");
 #[cfg(not(testlib))]
 mod allocator;
 
+#[cfg(not(test))]
+#[cfg(not(testlib))]
+#[doc(inline)]
+pub use allocator::ALLOCATOR_ATOMIC;
+
 #[doc(hidden)]
 pub mod bindings;
 

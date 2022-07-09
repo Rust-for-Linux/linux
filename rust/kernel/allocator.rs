@@ -2,14 +2,15 @@
 
 //! Allocator support.
 
-use core::alloc::{GlobalAlloc, Layout};
-use core::ptr;
+use core::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
+use core::ptr::{self, NonNull};
 
 use crate::bindings;
 
-struct KernelAllocator;
+#[derive(Copy, Clone)]
+pub struct KernelAllocator<const A: bindings::gfp_t>;
 
-unsafe impl GlobalAlloc for KernelAllocator {
+unsafe impl GlobalAlloc for KernelAllocator<{ bindings::GFP_KERNEL }> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // `krealloc()` is used instead of `kmalloc()` because the latter is
         // an inline function and cannot be bound to as a result.
@@ -23,8 +24,42 @@ unsafe impl GlobalAlloc for KernelAllocator {
     }
 }
 
+unsafe impl<const A: bindings::gfp_t> Allocator for KernelAllocator<A> {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        // `krealloc()` is used instead of `kmalloc()` because the latter is
+        // an inline function and cannot be bound to as a result.
+        let mem = unsafe { bindings::krealloc(ptr::null(), layout.size(), A) as *mut u8 };
+        if mem.is_null() {
+            return Err(AllocError);
+        }
+        let mem = unsafe { core::slice::from_raw_parts_mut(mem, layout.size()) };
+
+        // Safety: checked for non null abpve
+        Ok(unsafe { NonNull::new_unchecked(mem) })
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, _layout: Layout) {
+        unsafe {
+            bindings::kfree(ptr.as_ptr() as *const core::ffi::c_void);
+        }
+    }
+}
+
 #[global_allocator]
-static ALLOCATOR: KernelAllocator = KernelAllocator;
+static ALLOCATOR: KernelAllocator<{ bindings::GFP_KERNEL }> = KernelAllocator;
+
+/// Allocator using [`bindings::GFP_ATOMIC`].
+///
+/// # Example
+///
+/// ```
+/// use kernel::ALLOCATOR_ATOMIC;
+/// use alloc::vec::Vec;
+///
+/// let mut vec = Vec::new_in(ALLOCATOR_ATOMIC);
+/// vec.try_push(1).unwrap();
+/// ```
+pub static ALLOCATOR_ATOMIC: KernelAllocator<{ bindings::GFP_ATOMIC }> = KernelAllocator;
 
 // `rustc` only generates these for some crate types. Even then, we would need
 // to extract the object file that has them from the archive. For the moment,
