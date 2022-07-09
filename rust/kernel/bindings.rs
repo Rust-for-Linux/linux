@@ -41,5 +41,7 @@ mod bindings_helper {
 pub use bindings_raw::*;
 
 pub const GFP_KERNEL: gfp_t = BINDINGS_GFP_KERNEL;
+pub const GFP_ATOMIC: gfp_t = BINDINGS_GFP_ATOMIC;
 pub const __GFP_ZERO: gfp_t = BINDINGS___GFP_ZERO;
 pub const __GFP_HIGHMEM: gfp_t = ___GFP_HIGHMEM;
+pub const ARCH_KMALLOC_MINALIGN: usize = BINDINGS_ARCH_KMALLOC_MINALIGN;

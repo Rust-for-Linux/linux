@@ -15,3 +15,8 @@
 
 # `seccomp`'s comment gets understood as a doctest
 --no-doc-comments
+
+# ARCH_KMALLOC_MINALIGN is picked up by bindgen for some architectures but not
+# for others (if definition is simple enough for bindgen to parse). Prevent
+# bindgen from creating definitions that would be flagged as dead code.
+--blacklist-item=ARCH_KMALLOC_MINALIGN
