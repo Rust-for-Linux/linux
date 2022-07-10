@@ -8,6 +8,7 @@ import json
 import logging
 import pathlib
 import sys
+import os
 import subprocess
 
 def generate_crates(srctree, objtree, sysroot_src):
@@ -68,7 +69,7 @@ def generate_crates(srctree, objtree, sysroot_src):
     )
 
     libmacros_path = subprocess.run(
-        ["rustc", "--print", "file-names", "--crate-name", "macros", "--crate-type", "proc-macro", "-"],
+        [os.environ["RUSTC"], "--print", "file-names", "--crate-name", "macros", "--crate-type", "proc-macro", "-"],
         stdin=subprocess.DEVNULL,
         capture_output=True
     ).stdout.decode().strip()
