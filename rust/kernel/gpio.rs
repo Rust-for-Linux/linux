@@ -13,6 +13,7 @@ use core::{
     marker::{PhantomData, PhantomPinned},
     pin::Pin,
 };
+use macros::vtable;
 
 #[cfg(CONFIG_GPIOLIB_IRQCHIP)]
 pub use irqchip::{ChipWithIrqChip, RegistrationWithIrqChip};
@@ -27,15 +28,12 @@ pub enum LineDirection {
 }
 
 /// A gpio chip.
+#[vtable]
 pub trait Chip {
     /// Context data associated with the gpio chip.
     ///
     /// It determines the type of the context data passed to each of the methods of the trait.
     type Data: PointerWrapper + Sync + Send;
-
-    /// The methods to use to populate [`struct gpio_chip`]. This is typically populated with
-    /// [`declare_gpio_chip_operations`].
-    const TO_USE: ToUse;
 
     /// Returns the direction of the given gpio line.
     fn get_direction(
@@ -73,52 +71,6 @@ pub trait Chip {
     fn set(_data: <Self::Data as PointerWrapper>::Borrowed<'_>, _offset: u32, _value: bool) {}
 }
 
-/// Represents which fields of [`struct gpio_chip`] should be populated with pointers.
-///
-/// This is typically populated with the [`declare_gpio_chip_operations`] macro.
-pub struct ToUse {
-    /// The `get_direction` field of [`struct gpio_chip`].
-    pub get_direction: bool,
-
-    /// The `direction_input` field of [`struct gpio_chip`].
-    pub direction_input: bool,
-
-    /// The `direction_output` field of [`struct gpio_chip`].
-    pub direction_output: bool,
-
-    /// The `get` field of [`struct gpio_chip`].
-    pub get: bool,
-
-    /// The `set` field of [`struct gpio_chip`].
-    pub set: bool,
-}
-
-/// A constant version where all values are set to `false`, that is, all supported fields will be
-/// set to null pointers.
-pub const USE_NONE: ToUse = ToUse {
-    get_direction: false,
-    direction_input: false,
-    direction_output: false,
-    get: false,
-    set: false,
-};
-
-/// Defines the [`Chip::TO_USE`] field based on a list of fields to be populated.
-#[macro_export]
-macro_rules! declare_gpio_chip_operations {
-    () => {
-        const TO_USE: $crate::gpio::ToUse = $crate::gpio::USE_NONE;
-    };
-    ($($i:ident),+) => {
-        #[allow(clippy::needless_update)]
-        const TO_USE: $crate::gpio::ToUse =
-            $crate::gpio::ToUse {
-                $($i: true),+ ,
-                ..$crate::gpio::USE_NONE
-            };
-    };
-}
-
 /// A registration of a gpio chip.
 ///
 /// # Examples
@@ -130,9 +82,9 @@ macro_rules! declare_gpio_chip_operations {
 /// use kernel::{device::RawDevice, gpio::{self, Registration}};
 ///
 /// struct MyGpioChip;
+/// #[vtable]
 /// impl gpio::Chip for MyGpioChip {
 ///     type Data = ();
-///     kernel::declare_gpio_chip_operations!();
 /// }
 ///
 /// fn example(parent: &dyn RawDevice) -> Result<Pin<Box<Registration<MyGpioChip>>>> {
@@ -186,19 +138,19 @@ impl<T: Chip> Registration<T> {
             // Set up the callbacks.
             gc.request = Some(bindings::gpiochip_generic_request);
             gc.free = Some(bindings::gpiochip_generic_free);
-            if T::TO_USE.get_direction {
+            if T::HAS_GET_DIRECTION {
                 gc.get_direction = Some(get_direction_callback::<T>);
             }
-            if T::TO_USE.direction_input {
+            if T::HAS_DIRECTION_INPUT {
                 gc.direction_input = Some(direction_input_callback::<T>);
             }
-            if T::TO_USE.direction_output {
+            if T::HAS_DIRECTION_OUTPUT {
                 gc.direction_output = Some(direction_output_callback::<T>);
             }
-            if T::TO_USE.get {
+            if T::HAS_GET {
                 gc.get = Some(get_callback::<T>);
             }
-            if T::TO_USE.set {
+            if T::HAS_SET {
                 gc.set = Some(set_callback::<T>);
             }
 
@@ -475,9 +427,12 @@ mod irqchip {
     /// data is passed as context.
     struct IrqChipAdapter<T: irq::Chip>(PhantomData<T>);
 
+    #[vtable]
     impl<T: irq::Chip> irq::Chip for IrqChipAdapter<T> {
         type Data = *mut bindings::gpio_chip;
-        const TO_USE: irq::ToUse = T::TO_USE;
+
+        const HAS_SET_TYPE: bool = T::HAS_SET_TYPE;
+        const HAS_SET_WAKE: bool = T::HAS_SET_WAKE;
 
         fn ack(gc: *mut bindings::gpio_chip, irq_data: &irq::IrqData) {
             // SAFETY: `IrqChipAdapter` is a private struct, only used when the data stored in the

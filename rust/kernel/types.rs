@@ -60,6 +60,21 @@ pub trait PointerWrapper {
     /// returned by [`PointerWrapper::borrow`] have been dropped.
     unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> Self::Borrowed<'a>;
 
+    /// Returns a mutably borrowed value.
+    ///
+    /// # Safety
+    ///
+    /// The passed pointer must come from a previous to [`PointerWrapper::into_pointer`], and no
+    /// other concurrent users of the pointer (except the ones derived from the returned value) run
+    /// at least until the returned [`ScopeGuard`] is dropped.
+    unsafe fn borrow_mut<T: PointerWrapper>(ptr: *const core::ffi::c_void) -> ScopeGuard<T, fn(T)> {
+        // SAFETY: The safety requirements ensure that `ptr` came from a previous call to
+        // `into_pointer`.
+        ScopeGuard::new_with_data(unsafe { T::from_pointer(ptr) }, |d| {
+            d.into_pointer();
+        })
+    }
+
     /// Returns the instance back from the raw pointer.
     ///
     /// # Safety

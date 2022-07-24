@@ -8,7 +8,7 @@ jobs:
   ci:
     runs-on: ubuntu-20.04
     container: ghcr.io/rust-for-linux/ci:Rust-1.62.0
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     strategy:
       matrix:
@@ -362,6 +362,11 @@ jobs:
       - run: |
           grep '] rust_semaphore_c: Rust semaphore sample (in C, for comparison) (init)$' qemu-stdout.log
           grep '] rust_semaphore_c: Rust semaphore sample (in C, for comparison) (exit)$' qemu-stdout.log
+
+      - run: |
+          grep '] rust_selftests: Rust self tests (init)$' qemu-stdout.log
+          grep '] rust_selftests: All tests passed. Congratulations!$' qemu-stdout.log
+          grep '] rust_selftests: Rust self tests (exit)$' qemu-stdout.log
 
       # Report
       - run: |

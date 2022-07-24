@@ -14,7 +14,6 @@
 #![no_std]
 #![feature(allocator_api)]
 #![feature(associated_type_defaults)]
-#![feature(concat_idents)]
 #![feature(const_mut_refs)]
 #![feature(const_ptr_offset_from)]
 #![feature(const_refs_to_cell)]
@@ -28,6 +27,7 @@
 #![feature(coerce_unsized)]
 #![feature(dispatch_from_dyn)]
 #![feature(unsize)]
+#![feature(duration_constants)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
@@ -39,7 +39,9 @@ compile_error!("Missing kernel configuration for conditional compilation");
 mod allocator;
 
 #[doc(hidden)]
-pub mod bindings;
+pub use bindings;
+
+pub use macros;
 
 #[cfg(CONFIG_ARM_AMBA)]
 pub mod amba;
@@ -47,6 +49,7 @@ pub mod chrdev;
 #[cfg(CONFIG_COMMON_CLK)]
 pub mod clk;
 pub mod cred;
+pub mod delay;
 pub mod device;
 pub mod driver;
 pub mod error;

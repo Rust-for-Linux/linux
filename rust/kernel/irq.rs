@@ -17,6 +17,7 @@ use crate::{
     Error, Result, ScopeGuard,
 };
 use core::{fmt, marker::PhantomData, ops::Deref};
+use macros::vtable;
 
 /// The type of irq hardware numbers.
 pub type HwNumber = bindings::irq_hw_number_t;
@@ -101,13 +102,10 @@ pub enum ExtraResult {
 /// It is a trait for the functions defined in [`struct irq_chip`].
 ///
 /// [`struct irq_chip`]: ../../../include/linux/irq.h
+#[vtable]
 pub trait Chip: Sized {
     /// The type of the context data stored in the irq chip and made available on each callback.
     type Data: PointerWrapper;
-
-    /// The methods to use to populate [`struct irq_chip`]. This is typically populated with
-    /// [`declare_irq_chip_operations`].
-    const TO_USE: ToUse;
 
     /// Called at the start of a new interrupt.
     fn ack(data: <Self::Data as PointerWrapper>::Borrowed<'_>, irq_data: &IrqData);
@@ -150,47 +148,13 @@ pub(crate) unsafe fn init_chip<T: Chip>(chip: &mut bindings::irq_chip) {
     chip.irq_mask = Some(irq_mask_callback::<T>);
     chip.irq_unmask = Some(irq_unmask_callback::<T>);
 
-    if T::TO_USE.set_type {
+    if T::HAS_SET_TYPE {
         chip.irq_set_type = Some(irq_set_type_callback::<T>);
     }
 
-    if T::TO_USE.set_wake {
+    if T::HAS_SET_WAKE {
         chip.irq_set_wake = Some(irq_set_wake_callback::<T>);
     }
-}
-
-/// Represents which fields of [`struct irq_chip`] should be populated with pointers.
-///
-/// This is typically populated with the [`declare_irq_chip_operations`] macro.
-pub struct ToUse {
-    /// The `irq_set_type` field of [`struct irq_chip`].
-    pub set_type: bool,
-
-    /// The `irq_set_wake` field of [`struct irq_chip`].
-    pub set_wake: bool,
-}
-
-/// A constant version where all values are to set to `false`, that is, all supported fields will
-/// be set to null pointers.
-pub const USE_NONE: ToUse = ToUse {
-    set_type: false,
-    set_wake: false,
-};
-
-/// Defines the [`Chip::TO_USE`] field based on a list of fields to be populated.
-#[macro_export]
-macro_rules! declare_irq_chip_operations {
-    () => {
-        const TO_USE: $crate::irq::ToUse = $crate::irq::USE_NONE;
-    };
-    ($($i:ident),+) => {
-        #[allow(clippy::needless_update)]
-        const TO_USE: $crate::irq::ToUse =
-            $crate::irq::ToUse {
-                $($i: true),+ ,
-                ..$crate::irq::USE_NONE
-            };
-    };
 }
 
 /// Enables or disables power-management wake-on for the given irq number.

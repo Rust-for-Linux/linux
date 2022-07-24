@@ -304,6 +304,8 @@ pub mod code {
     declare_err!(ERESTARTSYS, "Restart the system call.");
 
     declare_err!(ENOTSUPP, "Operation is not supported.");
+
+    declare_err!(ENOPARAM, "Parameter not supported.");
 }
 
 /// Generic integer kernel error.

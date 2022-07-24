@@ -21,9 +21,8 @@ module_misc_device! {
 
 struct RandomFile;
 
+#[vtable]
 impl file::Operations for RandomFile {
-    kernel::declare_file_operations!(read, write, read_iter, write_iter);
-
     fn open(_data: &(), _file: &File) -> Result {
         Ok(())
     }
@@ -35,8 +34,9 @@ impl file::Operations for RandomFile {
         while !buf.is_empty() {
             let len = chunkbuf.len().min(buf.len());
             let chunk = &mut chunkbuf[0..len];
+            let blocking = (file.flags() & file::flags::O_NONBLOCK) == 0;
 
-            if file.is_blocking() {
+            if blocking {
                 kernel::random::getrandom(chunk)?;
             } else {
                 kernel::random::getrandom_nonblock(chunk)?;

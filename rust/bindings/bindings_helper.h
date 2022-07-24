@@ -36,6 +36,7 @@
 #include <linux/uaccess.h>
 #include <linux/uio.h>
 #include <uapi/linux/android/binder.h>
+#include <linux/fs_parser.h>
 
 /* `bindgen` gets confused at certain things. */
 const gfp_t BINDINGS_GFP_KERNEL = GFP_KERNEL;
@@ -44,3 +45,5 @@ const __poll_t BINDINGS_EPOLLIN = EPOLLIN;
 const __poll_t BINDINGS_EPOLLOUT = EPOLLOUT;
 const __poll_t BINDINGS_EPOLLERR = EPOLLERR;
 const __poll_t BINDINGS_EPOLLHUP = EPOLLHUP;
+
+const loff_t BINDINGS_MAX_LFS_FILESIZE = MAX_LFS_FILESIZE;

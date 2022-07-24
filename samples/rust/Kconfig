@@ -118,6 +118,14 @@ config SAMPLE_RUST_PLATFORM
 	  To compile this as a module, choose M here:
 	  the module will be called rust_platform.
 
+config SAMPLE_RUST_FS
+	tristate "File system"
+	help
+	  This option builds the Rust file system sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_fs.
+
 	  If unsure, say N.
 
 config SAMPLE_RUST_NETFILTER
@@ -144,6 +152,13 @@ config SAMPLE_RUST_HOSTPROGS
 	bool "Host programs"
 	help
 	  This option builds the Rust host program samples.
+
+	  If unsure, say N.
+
+config SAMPLE_RUST_SELFTESTS
+	tristate "Self tests"
+	help
+	  This option builds the self test cases for Rust.
 
 	  If unsure, say N.
 

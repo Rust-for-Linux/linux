@@ -55,16 +55,9 @@ type DeviceData = device::Data<PL061Registrations, PL061Resources, PL061Data>;
 
 struct PL061Device;
 
+#[vtable]
 impl gpio::Chip for PL061Device {
     type Data = Ref<DeviceData>;
-
-    kernel::declare_gpio_chip_operations!(
-        get_direction,
-        direction_input,
-        direction_output,
-        get,
-        set
-    );
 
     fn get_direction(data: RefBorrow<'_, DeviceData>, offset: u32) -> Result<gpio::LineDirection> {
         let pl061 = data.resources().ok_or(ENXIO)?;
@@ -129,10 +122,9 @@ impl gpio::ChipWithIrqChip for PL061Device {
     }
 }
 
+#[vtable]
 impl irq::Chip for PL061Device {
     type Data = Ref<DeviceData>;
-
-    kernel::declare_irq_chip_operations!(set_type, set_wake);
 
     fn set_type(
         data: RefBorrow<'_, DeviceData>,

@@ -15,9 +15,8 @@ module! {
 
 struct RustFile;
 
+#[vtable]
 impl file::Operations for RustFile {
-    kernel::declare_file_operations!();
-
     fn open(_shared: &(), _file: &file::File) -> Result {
         Ok(())
     }

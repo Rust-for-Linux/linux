@@ -15,7 +15,7 @@ pub use core::pin::Pin;
 
 pub use alloc::{boxed::Box, string::String, vec::Vec};
 
-pub use macros::module;
+pub use macros::{module, vtable};
 
 pub use super::build_assert;
 

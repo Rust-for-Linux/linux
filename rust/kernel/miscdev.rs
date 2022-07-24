@@ -275,9 +275,8 @@ impl<T: file::Operations<OpenData = ()>> crate::Module for Module<T> {
 /// #[derive(Default)]
 /// struct MyFile;
 ///
-/// impl kernel::file::Operations for MyFile {
-///     kernel::declare_file_operations!();
-/// }
+/// #[vtable]
+/// impl kernel::file::Operations for MyFile {}
 /// ```
 #[macro_export]
 macro_rules! module_misc_device {

@@ -794,8 +794,9 @@ impl IoctlHandler for Process {
         data: UserSlicePtr,
     ) -> Result<i32> {
         let thread = this.get_thread(Task::current().pid())?;
+        let blocking = (file.flags() & file::flags::O_NONBLOCK) == 0;
         match cmd {
-            bindings::BINDER_WRITE_READ => thread.write_read(data, file.is_blocking())?,
+            bindings::BINDER_WRITE_READ => thread.write_read(data, blocking)?,
             bindings::BINDER_GET_NODE_DEBUG_INFO => this.get_node_debug_info(data)?,
             bindings::BINDER_GET_NODE_INFO_FOR_REF => this.get_node_info_from_ref(data)?,
             bindings::BINDER_VERSION => this.version(data)?,
@@ -805,11 +806,10 @@ impl IoctlHandler for Process {
     }
 }
 
+#[vtable]
 impl file::Operations for Process {
     type Data = Ref<Self>;
     type OpenData = Ref<Context>;
-
-    kernel::declare_file_operations!(ioctl, compat_ioctl, mmap, poll);
 
     fn open(ctx: &Ref<Context>, file: &File) -> Result<Self::Data> {
         Self::new(ctx.clone(), file.cred().into())

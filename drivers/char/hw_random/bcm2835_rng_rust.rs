@@ -17,9 +17,8 @@ module_platform_driver! {
 
 struct RngDevice;
 
+#[vtable]
 impl file::Operations for RngDevice {
-    kernel::declare_file_operations!(read);
-
     fn open(_open_data: &(), _file: &File) -> Result {
         Ok(())
     }

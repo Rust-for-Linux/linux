@@ -10,14 +10,13 @@ use crate::{
     bindings, error::code::*, error::from_kernel_result, str::CString, to_result,
     types::PointerWrapper, Result, ScopeGuard,
 };
+use macros::vtable;
 
 use core::{cell::UnsafeCell, fmt, marker::PhantomData, pin::Pin};
 
 /// This trait is implemented in order to provide callbacks to `struct hwrng`.
+#[vtable]
 pub trait Operations {
-    /// The methods to use to populate [`struct hwrng`].
-    const TO_USE: ToUse;
-
     /// The pointer type that will be used to hold user-defined data type.
     type Data: PointerWrapper + Send + Sync = ();
 
@@ -122,12 +121,12 @@ impl<T: Operations> Registration<T> {
     ) {
         hwrng.name = name.as_char_ptr();
 
-        hwrng.init = if T::TO_USE.init {
+        hwrng.init = if T::HAS_INIT {
             Some(Self::init_callback)
         } else {
             None
         };
-        hwrng.cleanup = if T::TO_USE.cleanup {
+        hwrng.cleanup = if T::HAS_CLEANUP {
             Some(Self::cleanup_callback)
         } else {
             None
@@ -188,38 +187,6 @@ impl<T: Operations> Default for Registration<T> {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Represents which callbacks of [`struct hwrng`] should be populated with pointers.
-pub struct ToUse {
-    /// The `init` field of [`struct hwrng`].
-    pub init: bool,
-
-    /// The `cleanup` field of [`struct hwrng`].
-    pub cleanup: bool,
-}
-
-/// A constant version where all values are to set to `false`, that is, all supported fields will
-/// be set to null pointers.
-pub const USE_NONE: ToUse = ToUse {
-    init: false,
-    cleanup: false,
-};
-
-/// Defines the [`Operations::TO_USE`] field based on a list of fields to be populated.
-#[macro_export]
-macro_rules! declare_hwrng_operations {
-    () => {
-        const TO_USE: $crate::hwrng::ToUse = $crate::hwrng::USE_NONE;
-    };
-    ($($i:ident),+) => {
-        #[allow(clippy::needless_update)]
-        const TO_USE: kernel::hwrng::ToUse =
-            $crate::hwrng::ToUse {
-                $($i: true),+ ,
-                ..$crate::hwrng::USE_NONE
-            };
-    };
 }
 
 // SAFETY: `Registration` does not expose any of its state across threads.
