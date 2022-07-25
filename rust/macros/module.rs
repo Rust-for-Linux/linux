@@ -424,6 +424,8 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             let kparam = format!(
                 "
                     kernel::bindings::kernel_param__bindgen_ty_1 {{
+                        // SAFETY: `__{name}_{param_name}_value` is a static mutable variable, that
+                        // is wrapped in `kernel::bindings::kernel_param`, there will be no data races
                         arg: unsafe {{ &__{name}_{param_name}_value }}
                             as *const _ as *mut core::ffi::c_void,
                     }},
@@ -452,6 +454,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 #[repr(transparent)]
                 struct __{name}_{param_name}_RacyKernelParam(kernel::bindings::kernel_param);
 
+                // SAFETY: `kernel::bindings::kernel_param` ensures synchronization via locking.
                 unsafe impl Sync for __{name}_{param_name}_RacyKernelParam {{
                 }}
 
@@ -529,6 +532,8 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             #[used]
             static __IS_RUST_MODULE: () = ();
 
+            // This static mutable variable will only be accessed in functions that are called by
+            // the kernel.
             static mut __MOD: Option<{type_}> = None;
 
             // SAFETY: `__this_module` is constructed by the kernel at load time and will not be
@@ -543,18 +548,34 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             }};
 
             // Loadable modules need to export the `{{init,cleanup}}_module` identifiers.
+            ///
+            /// # Safety
+            ///
+            /// This is a exported identifier that should only be called by the kernel at load time.
             #[cfg(MODULE)]
             #[doc(hidden)]
             #[no_mangle]
-            pub extern \"C\" fn init_module() -> core::ffi::c_int {{
-                __init()
+            pub unsafe extern \"C\" fn init_module() -> core::ffi::c_int {{
+                // SAFETY: This function will only be called by the kernel at load time.
+                unsafe {{
+                    __init()
+                }}
             }}
 
+            ///
+            /// # Safety
+            ///
+            /// This is a exported identifier that should only be called by the kernel when the
+            /// module gets unloaded.
             #[cfg(MODULE)]
             #[doc(hidden)]
             #[no_mangle]
-            pub extern \"C\" fn cleanup_module() {{
-                __exit()
+            pub unsafe extern \"C\" fn cleanup_module() {{
+                // SAFETY: This function will only be called by the kernel when the module gets
+                // unloaded.
+                unsafe {{
+                    __exit()
+                }}
             }}
 
             // Built-in modules are initialized through an initcall pointer
@@ -564,7 +585,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             #[doc(hidden)]
             #[link_section = \"{initcall_section}\"]
             #[used]
-            pub static __{name}_initcall: extern \"C\" fn() -> core::ffi::c_int = __{name}_init;
+            pub static __{name}_initcall: unsafe extern \"C\" fn() -> core::ffi::c_int = __{name}_init;
 
             #[cfg(not(MODULE))]
             #[cfg(CONFIG_HAVE_ARCH_PREL32_RELOCATIONS)]
@@ -576,23 +597,48 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 \"#
             );
 
+            ///
+            /// # Safety
+            ///
+            /// This function should only be use as a initcall pointer to called by the kernel at
+            /// load time.
             #[cfg(not(MODULE))]
             #[doc(hidden)]
             #[no_mangle]
-            pub extern \"C\" fn __{name}_init() -> core::ffi::c_int {{
-                __init()
+            pub unsafe extern \"C\" fn __{name}_init() -> core::ffi::c_int {{
+                // SAFETY: This function will only be called by the kernel at load time.
+                unsafe {{
+                    __init()
+                }}
             }}
 
+            ///
+            /// # Safety
+            ///
+            /// This function should only be use as a initcall pointer to called by the kernel
+            /// when the module gets unloaded.
             #[cfg(not(MODULE))]
             #[doc(hidden)]
             #[no_mangle]
-            pub extern \"C\" fn __{name}_exit() {{
-                __exit()
+            pub unsafe extern \"C\" fn __{name}_exit() {{
+                // SAFETY: This function will only be called by the kernel when the module gets
+                // unloaded.
+                unsafe {{
+                    __exit()
+                }}
             }}
 
-            fn __init() -> core::ffi::c_int {{
+            ///
+            /// # Safety
+            ///
+            /// This function is our implementation of the initcall pointer that should only be
+            /// called from the __{name}_init() function of this module to ensure exclusive access
+            /// to the local `static mut __MOD` variable.
+            unsafe fn __init() -> core::ffi::c_int {{
                 match <{type_} as kernel::Module>::init(kernel::c_str!(\"{name}\"), &THIS_MODULE) {{
                     Ok(m) => {{
+                        // SAFETY: This function will only be called by the kernel at load time
+                        // which ensures, that we have exclusive access.
                         unsafe {{
                             __MOD = Some(m);
                         }}
@@ -604,7 +650,15 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 }}
             }}
 
-            fn __exit() {{
+            ///
+            /// # Safety
+            ///
+            /// This function is our implementation of the initcall pointer that should only be
+            /// called by the __{name}_exit() function of this module to ensure exclusive access to
+            /// the local `static mut __MOD` variable.
+            unsafe fn __exit() {{
+                // SAFETY: This function will only be called by the kernel when the module gets
+                // unloaded which ensures, that we have exclusive access.
                 unsafe {{
                     // Invokes `drop()` on `__MOD`, which should be used for cleanup.
                     __MOD = None;
