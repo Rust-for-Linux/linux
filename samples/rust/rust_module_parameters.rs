@@ -31,7 +31,7 @@ module! {
             permissions: 0o644,
             description: b"Example of usize",
         },
-        my_array: ArrayParam<i32, 3> {
+        my_array: ArrayParam<i32, 2> {
             default: [0, 1],
             permissions: 0,
             description: b"Example of array",

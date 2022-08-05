@@ -24,16 +24,11 @@ fn expect_array_fields(it: &mut token_stream::IntoIter) -> ParamType {
 }
 
 fn expect_type(it: &mut token_stream::IntoIter) -> ParamType {
-    if let TokenTree::Ident(ident) = it
-        .next()
-        .expect("Reached end of token stream for param type")
-    {
-        match ident.to_string().as_ref() {
-            "ArrayParam" => expect_array_fields(it),
-            _ => ParamType::Ident(ident.to_string()),
-        }
-    } else {
-        panic!("Expected Param Type")
+    match it.next() {
+        None => panic!("Reached end of token stream for param type"),
+        Some(TokenTree::Ident(p)) if &p.to_string() == "ArrayParam" => expect_array_fields(it),
+        Some(TokenTree::Ident(p)) => ParamType::Ident(p.to_string()),
+        Some(_) => panic!("Expected Param Type"),
     }
 }
 
@@ -110,19 +105,7 @@ impl<'a> ModInfoBuilder<'a> {
 }
 
 fn permissions_are_readonly(perms: &str) -> bool {
-    let (radix, digits) = if let Some(n) = perms.strip_prefix("0x") {
-        (16, n)
-    } else if let Some(n) = perms.strip_prefix("0o") {
-        (8, n)
-    } else if let Some(n) = perms.strip_prefix("0b") {
-        (2, n)
-    } else {
-        (10, perms)
-    };
-    match u32::from_str_radix(digits, radix) {
-        Ok(perms) => perms & 0o222 == 0,
-        Err(_) => false,
-    }
+    u32::try_from_radix(perms).map(|permissions| permissions & 0o222) == Ok(0)
 }
 
 fn param_ops_path(param_type: &str) -> &'static str {
@@ -143,63 +126,74 @@ fn param_ops_path(param_type: &str) -> &'static str {
     }
 }
 
-fn try_simple_param_val(
-    param_type: &str,
-) -> Box<dyn Fn(&mut token_stream::IntoIter) -> Option<String>> {
+fn try_simple_param_val(param_type: &str, it: &mut token_stream::IntoIter) -> Option<String> {
     match param_type {
-        "bool" => Box::new(try_ident),
-        "str" => Box::new(|param_it| {
-            try_byte_string(param_it)
-                .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
-        }),
-        _ => Box::new(try_literal),
+        "bool" => try_ident(it),
+        "i8" => try_ident(it)
+            .and_then(|c| i8::try_from_radix(&c).ok())
+            .map(|i| format!("kernel::module_param::I8Param::Ref({})", i)),
+        "u8" => try_ident(it)
+            .and_then(|b| u8::try_from_radix(&b).ok())
+            .map(|u| format!("kernel::module_param::U8Param::Ref({})", u)),
+        "i16" => try_ident(it)
+            .and_then(|s| i16::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::I16Param::Ref({})", i)),
+        "u16" => try_ident(it)
+            .and_then(|s| u16::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::U16Param::Ref({})", u)),
+        "i32" => try_ident(it)
+            .and_then(|s| i32::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::I32Param::Ref({})", i)),
+        "u32" => try_ident(it)
+            .and_then(|s| u32::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::U32Param::Ref({})", u)),
+        "i64" => try_ident(it)
+            .and_then(|s| i64::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::I64Param::Ref({})", i)),
+        "u64" => try_ident(it)
+            .and_then(|s| u64::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::U64Param::Ref({})", u)),
+        "isize" => try_ident(it)
+            .and_then(|s| isize::try_from_radix(&s).ok())
+            .map(|i| format!("kernel::module_param::ISizeParam::Ref({})", i)),
+        "usize" => try_ident(it)
+            .and_then(|s| usize::try_from_radix(&s).ok())
+            .map(|u| format!("kernel::module_param::USizeParam::Ref({})", u)),
+        "str" => try_byte_string(it)
+            .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s)),
+        _ => try_literal(it),
     }
 }
 
 fn get_default(param_type: &ParamType, param_it: &mut token_stream::IntoIter) -> String {
-    let try_param_val = match param_type {
-        ParamType::Ident(ref param_type)
-        | ParamType::Array {
-            vals: ref param_type,
-            max_length: _,
-        } => try_simple_param_val(param_type),
-    };
     assert_eq!(expect_ident(param_it), "default");
     assert_eq!(expect_punct(param_it), ':');
-    let default = match param_type {
-        ParamType::Ident(_) => try_param_val(param_it).expect("Expected default param value"),
+    let result = match param_type {
+        ParamType::Ident(ref param_type) => {
+            try_simple_param_val(param_type, param_it).expect("Expected default param value")
+        }
         ParamType::Array {
-            vals: _,
+            vals: ref param_type,
             max_length: _,
         } => {
             let group = expect_group(param_it);
             assert_eq!(group.delimiter(), Delimiter::Bracket);
-            let mut default_vals = Vec::new();
-            let mut it = group.stream().into_iter();
+            let mut default_vals = "kernel::module_param::ArrayParam::create(&[".to_string();
+            let it = &mut group.stream().into_iter();
 
-            while let Some(default_val) = try_param_val(&mut it) {
-                default_vals.push(default_val);
+            while let Some(default_val) = try_simple_param_val(param_type, it) {
+                default_vals.push_str(&default_val);
                 match it.next() {
                     Some(TokenTree::Punct(punct)) => assert_eq!(punct.as_char(), ','),
                     None => break,
                     _ => panic!("Expected ',' or end of array default values"),
                 }
             }
-
-            let mut default_array = "kernel::module_param::ArrayParam::create(&[".to_string();
-            default_array.push_str(
-                &default_vals
-                    .iter()
-                    .map(|val| val.to_string())
-                    .collect::<Vec<String>>()
-                    .join(","),
-            );
-            default_array.push_str("])");
-            default_array
+            default_vals + "])"
         }
     };
     assert_eq!(expect_punct(param_it), ',');
-    default
+    result
 }
 
 fn generated_array_ops_name(vals: &str, max_length: usize) -> String {
@@ -238,19 +232,11 @@ impl ModuleInfo {
         const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
         let mut seen_keys = Vec::new();
 
-        loop {
-            let key = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
-            };
-
-            if seen_keys.contains(&key) {
-                panic!(
-                    "Duplicated key \"{}\". Keys can only be specified once.",
-                    key
-                );
-            }
+        while let Some(key) = it.next().map(|t| match t {
+            TokenTree::Ident(ident) => ident.to_string(),
+            _ => panic!("Expected Ident or end"),
+        }) {
+            assert!(!seen_keys.contains(&key), "Duplicated key \"{}\".", key);
 
             assert_eq!(expect_punct(it), ':');
 
@@ -329,14 +315,10 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
         assert_eq!(params.delimiter(), Delimiter::Brace);
 
         let mut it = params.stream().into_iter();
-
-        loop {
-            let param_name = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
-            };
-
+        while let Some(param_name) = it.next().map(|p| match p {
+            TokenTree::Ident(ident) => ident.to_string(),
+            _ => panic!("Expected Ident or end"),
+        }) {
             assert_eq!(expect_punct(&mut it), ':');
             let param_type = expect_type(&mut it);
             let group = expect_group(&mut it);
