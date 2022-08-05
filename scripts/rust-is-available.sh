@@ -22,7 +22,8 @@ get_canonical_version()
 }
 
 # Check that the Rust compiler exists.
-if ! command -v "$RUSTC" >/dev/null; then
+# if ! command -v "$RUSTC" >/dev/null; then
+if ! [ -x "$(command -v $RUSTC)" ]; then
 	if [ "$1" = -v ]; then
 		echo >&2 "***"
 		echo >&2 "*** Rust compiler '$RUSTC' could not be found."
