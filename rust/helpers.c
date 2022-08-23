@@ -38,6 +38,7 @@
 #include <linux/security.h>
 #include <linux/skbuff.h>
 #include <linux/uaccess.h>
+#include <linux/usb.h>
 #include <linux/uio.h>
 #include <linux/xarray.h>
 
@@ -515,6 +516,12 @@ void *rust_helper_dev_get_drvdata(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(rust_helper_dev_get_drvdata);
 
+void rust_helper_dev_set_drvdata(struct device *dev, void *data)
+{
+	dev_set_drvdata(dev, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dev_set_drvdata);
+
 const char *rust_helper_dev_name(const struct device *dev)
 {
 	return dev_name(dev);
@@ -691,6 +698,16 @@ int rust_helper_fs_parse(struct fs_context *fc,
 	return fs_parse(fc, desc, param, result);
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
+
+void *rust_helper_usb_get_intfdata(struct usb_interface *intf) {
+	return usb_get_intfdata(intf);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_get_intfdata);
+
+void rust_helper_usb_set_intfdata(struct usb_interface *intf, void *data) {
+	usb_set_intfdata(intf, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_set_intfdata);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type

@@ -66,6 +66,8 @@ pub mod revocable;
 pub mod security;
 pub mod str;
 pub mod task;
+#[cfg(CONFIG_USB)]
+pub mod usb;
 pub mod workqueue;
 
 pub mod linked_list;

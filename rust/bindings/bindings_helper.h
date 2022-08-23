@@ -36,6 +36,7 @@
 #include <linux/sysctl.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <linux/usb.h>
 #include <linux/xarray.h>
 #include <uapi/linux/android/binder.h>
 
