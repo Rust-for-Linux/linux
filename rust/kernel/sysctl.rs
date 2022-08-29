@@ -12,23 +12,15 @@ use core::mem;
 use core::ptr;
 use core::sync::atomic;
 
-use crate::{
-    bindings,
-    error::code::*,
-    io_buffer::IoBufferWriter,
-    str::CStr,
-    types,
-    user_ptr::{UserSlicePtr, UserSlicePtrWriter},
-    Result,
-};
+use crate::{bindings, error::code::*, str::CStr, types, Result};
 
 /// Sysctl storage.
 pub trait SysctlStorage: Sync {
     /// Writes a byte slice.
     fn store_value(&self, data: &[u8]) -> (usize, Result);
 
-    /// Reads via a [`UserSlicePtrWriter`].
-    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, Result);
+    /// Reads via a [`u8`].
+    fn read_value(&self, data: &mut [u8]) -> (usize, Result);
 }
 
 fn trim_whitespace(mut data: &[u8]) -> &[u8] {
@@ -53,7 +45,7 @@ where
         (*self).store_value(data)
     }
 
-    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, Result) {
+    fn read_value(&self, data: &mut [u8]) -> (usize, Result) {
         (*self).read_value(data)
     }
 }
@@ -74,13 +66,20 @@ impl SysctlStorage for atomic::AtomicBool {
         (data.len(), result)
     }
 
-    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, Result) {
+    fn read_value(&self, data: &mut [u8]) -> (usize, Result) {
         let value = if self.load(atomic::Ordering::Relaxed) {
             b"1\n"
         } else {
             b"0\n"
         };
-        (value.len(), data.write_slice(value))
+        let result = match data.get_mut(..value.len()) {
+            None => Err(EINVAL),
+            Some(dst) => {
+                dst.copy_from_slice(value);
+                Ok(())
+            }
+        };
+        (value.len(), result)
     }
 }
 
@@ -110,17 +109,12 @@ unsafe extern "C" fn proc_handler<T: SysctlStorage>(
         return 0;
     }
 
-    let data = unsafe { UserSlicePtr::new(buffer, *len) };
+    let data = unsafe { core::slice::from_raw_parts_mut(buffer as *mut u8, *len) };
     let storage = unsafe { &*((*ctl).data as *const T) };
     let (bytes_processed, result) = if write != 0 {
-        let data = match data.read_all() {
-            Ok(r) => r,
-            Err(e) => return e.to_kernel_errno(),
-        };
-        storage.store_value(&data)
+        storage.store_value(data)
     } else {
-        let mut writer = data.writer();
-        storage.read_value(&mut writer)
+        storage.read_value(data)
     };
     unsafe { *len = bytes_processed };
     unsafe { *ppos += *len as bindings::loff_t };
