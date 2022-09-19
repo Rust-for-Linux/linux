@@ -68,9 +68,9 @@ use core::str::pattern::Pattern;
 use crate::borrow::{Cow, ToOwned};
 use crate::boxed::Box;
 use crate::collections::TryReserveError;
-use crate::str::{self, Chars, Utf8Error};
+use crate::str::{self, from_boxed_utf8_unchecked, Chars, Utf8Error};
 #[cfg(not(no_global_oom_handling))]
-use crate::str::{from_boxed_utf8_unchecked, FromStr};
+use crate::str::FromStr;
 use crate::vec::Vec;
 
 /// A UTF-8–encoded, growable string.
@@ -502,6 +502,59 @@ impl String {
         String { vec: Vec::with_capacity(capacity) }
     }
 
+    /// Tries to create a new empty `String` with a particular capacity.
+    ///
+    /// `String`s have an internal buffer to hold their data. The capacity is
+    /// the length of that buffer, and can be queried with the [`capacity`]
+    /// method. This method creates an empty `String`, but one with an initial
+    /// buffer that can hold `capacity` bytes. This is useful when you may be
+    /// appending a bunch of data to the `String`, reducing the number of
+    /// reallocations it needs to do.
+    ///
+    /// [`capacity`]: String::capacity
+    ///
+    /// If the given capacity is `0`, no allocation will occur, and this method
+    /// is identical to the [`new`] method.
+    ///
+    /// [`new`]: String::new
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// let mut s = String::try_with_capacity(10).unwrap();
+    ///
+    /// // The String contains no chars, even though it has capacity for more
+    /// assert_eq!(s.len(), 0);
+    ///
+    /// // These are all done without reallocating...
+    /// let cap = s.capacity();
+    /// for _ in 0..10 {
+    ///     s.push('a');
+    /// }
+    ///
+    /// assert_eq!(s.capacity(), cap);
+    ///
+    /// // ...but this may make the string reallocate
+    /// s.push('a');
+    ///
+    /// let result = String::try_with_capacity(usize::MAX);
+    /// assert!(result.is_err());
+    /// ```
+    #[inline]
+    #[doc(alias = "alloc")]
+    #[doc(alias = "malloc")]
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn try_with_capacity(capacity: usize) -> Result<String, TryReserveError> {
+        Ok(String { vec: Vec::try_with_capacity(capacity)? })
+    }
+
     // HACK(japaric): with cfg(test) the inherent `[T]::to_vec` method, which is
     // required for this method definition, is not available. Since we don't
     // require this method for testing purposes, I'll just stub it
@@ -927,6 +980,30 @@ impl String {
         self.vec.extend_from_slice(string.as_bytes())
     }
 
+    /// Tries to append a given string slice onto the end of this `String`.
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// let mut s = String::from("foo");
+    ///
+    /// s.try_push_str("bar").unwrap();
+    ///
+    /// assert_eq!("foobar", s);
+    /// ```
+    #[inline]
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn try_push_str(&mut self, string: &str) -> Result<(), TryReserveError> {
+        self.vec.try_extend_from_slice(string.as_bytes())
+    }
+
     /// Copies elements from `src` range to the end of the string.
     ///
     /// ## Panics
@@ -1175,6 +1252,32 @@ impl String {
         self.vec.shrink_to_fit()
     }
 
+    /// Tries to shrink the capacity of this `String` to match its length.
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// let mut s = String::from("foo");
+    ///
+    /// s.reserve(100);
+    /// assert!(s.capacity() >= 100);
+    ///
+    /// s.try_shrink_to_fit().unwrap();
+    /// assert_eq!(3, s.capacity());
+    /// ```
+    #[inline]
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn try_shrink_to_fit(&mut self) -> Result<(), TryReserveError> {
+        self.vec.try_shrink_to_fit()
+    }
+
     /// Shrinks the capacity of this `String` with a lower bound.
     ///
     /// The capacity will remain at least as large as both the length
@@ -1224,6 +1327,35 @@ impl String {
         match ch.len_utf8() {
             1 => self.vec.push(ch as u8),
             _ => self.vec.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+        }
+    }
+
+    /// Tries to append the given [`char`] to the end of this `String`.
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// let mut s = String::from("abc");
+    ///
+    /// s.try_push('1').unwrap();
+    /// s.try_push('2').unwrap();
+    /// s.try_push('3').unwrap();
+    ///
+    /// assert_eq!("abc123", s);
+    /// ```
+    #[inline]
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn try_push(&mut self, ch: char) -> Result<(), TryReserveError> {
+        match ch.len_utf8() {
+            1 => self.vec.try_push(ch as u8),
+            _ => self.vec.try_extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
         }
     }
 
@@ -1839,6 +1971,33 @@ impl String {
     pub fn into_boxed_str(self) -> Box<str> {
         let slice = self.vec.into_boxed_slice();
         unsafe { from_boxed_utf8_unchecked(slice) }
+    }
+
+    /// Tries to convert this `String` into a [`Box`]`<`[`str`]`>`.
+    ///
+    /// This will drop any excess capacity.
+    ///
+    /// [`str`]: prim@str
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// let s = String::from("hello");
+    ///
+    /// let b = s.try_into_boxed_str().unwrap();
+    /// ```
+    #[stable(feature = "kernel", since = "1.0.0")]
+    #[inline]
+    pub fn try_into_boxed_str(self) -> Result<Box<str>, TryReserveError> {
+        let slice = self.vec.try_into_boxed_slice()?;
+        Ok(unsafe { from_boxed_utf8_unchecked(slice) })
     }
 }
 
@@ -2940,5 +3099,109 @@ impl From<char> for String {
     #[inline]
     fn from(c: char) -> Self {
         c.to_string()
+    }
+}
+
+/// A helper type implementing non-panicking version of [`Write`] trait for [`String`].
+///
+/// The `StringWriter` type is a helper type, that implements [`Write`] trait
+/// for a [`String`] type in a way that never panics during memory allocation.
+/// Instead, if any memory allocation during all writing and formatting
+/// operations executed on the `StringWriter` fail, it saves the error and
+/// returns it as a result when the result of the writing and formatting
+/// is requested.
+///
+/// [`Write`]: fmt::Write
+///
+/// # Panics
+///
+/// `Write` trait implementation for `StringWriter` panics if a formatting
+/// trait implementation returns an error. This indicates an incorrect
+/// implementation since `fmt::Write for String` never returns an error itself.
+///
+/// # Examples
+///
+/// Basic usage:
+/// ```
+/// use alloc::collections::TryReserveError;
+/// use core::fmt::Write;
+///
+/// fn write_hello_world() -> Result<String, TryReserveError> {
+///     let mut writer = StringWriter::try_with_capacity(0)?;
+///     writer.write_fmt(format_args!("Hello, {}!", "world")).unwrap();
+///     writer.into_string()
+/// }
+///
+/// assert_eq!(write_hello_world().unwrap(), "Hello, World!");
+/// ```
+#[stable(feature = "kernel", since = "1.0.0")]
+#[derive(Debug)]
+pub struct StringWriter {
+    buffer: String,
+    error: Option<TryReserveError>,
+}
+
+impl StringWriter {
+    /// Tries to create a new empty `StringWriter` with a particular capacity.
+    ///
+    /// The underlying string, used as a result buffer, will be created with
+    /// given capacity. Please see the [`try_with_capacity`] for `String`.
+    ///
+    /// [`try_with_capacity`]: String::try_with_capacity
+    ///
+    /// If the given capacity is `0`, no allocation will occur.
+    ///
+    /// # Errors
+    ///
+    /// If the capacity overflows, or the allocator reports a failure, then an error
+    /// is returned.
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError> {
+        Ok(Self {
+            buffer: String::try_with_capacity(capacity)?,
+            error: None,
+        })
+    }
+
+    /// Retrieves the result from the `StringWriter`.
+    ///
+    /// Consumes the `StringWriter` and returns the result of preceding
+    /// writing and formatting operations executed on the `StringWriter`.
+    ///
+    /// # Errors
+    ///
+    /// If during all the preceding writing and formatting operations executed
+    /// on the `StringWriter` instance the capacity of the internal buffer
+    /// overflows, or the allocator reports a failure, then an error is returned.
+    #[stable(feature = "kernel", since = "1.0.0")]
+    pub fn into_string(self) -> Result<String, TryReserveError> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+
+        Ok(self.buffer)
+    }
+}
+
+#[stable(feature = "kernel", since = "1.0.0")]
+impl fmt::Write for StringWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        if self.error.is_none() {
+            if let Err(error) = self.buffer.try_push_str(s) {
+                self.error = Some(error);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_char(&mut self, c: char) -> fmt::Result {
+        if self.error.is_none() {
+            if let Err(error) = self.buffer.try_push(c) {
+                self.error = Some(error);
+            }
+        }
+
+        Ok(())
     }
 }

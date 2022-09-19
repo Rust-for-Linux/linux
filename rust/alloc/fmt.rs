@@ -574,7 +574,7 @@ pub use core::fmt::{LowerExp, UpperExp};
 #[stable(feature = "rust1", since = "1.0.0")]
 pub use core::fmt::{LowerHex, Pointer, UpperHex};
 
-#[cfg(not(no_global_oom_handling))]
+use crate::collections::TryReserveError;
 use crate::string;
 
 /// The `format` function takes an [`Arguments`] struct and returns the resulting
@@ -611,4 +611,51 @@ pub fn format(args: Arguments<'_>) -> string::String {
     let mut output = string::String::with_capacity(capacity);
     output.write_fmt(args).expect("a formatting trait implementation returned an error");
     output
+}
+
+/// The `try_format` function takes an [`Arguments`] struct and returns the
+/// resulting formatted string if all memory allocations during formatting
+/// were succesful.
+///
+/// The [`Arguments`] instance can be created with the [`format_args!`] macro.
+///
+/// # Errors
+///
+/// If the capacity of overflows, or the allocator reports a failure, then an error
+/// is returned.
+///
+/// # Panics
+///
+/// Panics if a formatting trait implementation returns an error.
+/// This indicates an incorrect implementation
+/// since `fmt::Write for String` never returns an error itself.
+/// Never panics on memory allocation failure.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+/// ```
+/// use std::fmt;
+///
+/// let s = fmt::try_format(format_args!("Hello, {}!", "world")).unwrap();
+/// assert_eq!(s, "Hello, world!");
+/// ```
+///
+/// Please note that using [`try_format!`] might be preferable.
+/// Example:
+///
+/// ```
+/// let s = try_format!("Hello, {}!", "world").unwrap();
+/// assert_eq!(s, "Hello, world!");
+/// ```
+///
+/// [`format_args!`]: core::format_args
+/// [`try_format!`]: crate::try_format
+#[stable(feature = "kernel", since = "1.0.0")]
+pub fn try_format(args: Arguments<'_>) -> core::result::Result<string::String, TryReserveError> {
+    let capacity = args.estimated_capacity();
+    let mut writer = string::StringWriter::try_with_capacity(capacity)?;
+    writer.write_fmt(args).expect("a formatting trait implementation returned an error");
+    writer.into_string()
 }

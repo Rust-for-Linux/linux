@@ -2,6 +2,7 @@
 
 //! Rust minimal sample.
 
+use alloc::try_format;
 use kernel::prelude::*;
 
 module! {
@@ -22,7 +23,7 @@ impl kernel::Module for RustMinimal {
         pr_info!("Am I built-in? {}\n", !cfg!(MODULE));
 
         Ok(RustMinimal {
-            message: "on the heap!".try_to_owned()?,
+            message: try_format!("on the {}!", "heap")?,
         })
     }
 }
