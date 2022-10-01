@@ -166,3 +166,5 @@ impl<L: LockIniter> NeedsLockClass for L {
         self.init_lock(name, key);
     }
 }
+
+pub struct EmptyGuardContext;

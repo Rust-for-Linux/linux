@@ -7,7 +7,7 @@
 //! See <https://www.kernel.org/doc/Documentation/locking/spinlocks.txt>.
 
 use super::{
-    mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockInfo, LockIniter,
+    guard::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockInfo, LockIniter,
     WriteLock,
 };
 use crate::{bindings, str::CStr, Opaque, True};

@@ -7,7 +7,7 @@
 //! C header: [`include/linux/rwsem.h`](../../../../include/linux/rwsem.h)
 
 use super::{
-    mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter, ReadLock,
+    guard::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter, ReadLock,
     WriteLock,
 };
 use crate::{bindings, str::CStr, Opaque};

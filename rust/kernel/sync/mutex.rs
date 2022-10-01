@@ -4,7 +4,9 @@
 //!
 //! This module allows Rust code to use the kernel's [`struct mutex`].
 
-use super::{Guard, Lock, LockClassKey, LockFactory, LockIniter, WriteLock};
+use super::{
+    guard::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter, WriteLock,
+};
 use crate::{bindings, str::CStr, Opaque};
 use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
 
@@ -86,8 +88,6 @@ impl<T> LockIniter for Mutex<T> {
         unsafe { bindings::__mutex_init(self.mutex.get(), name.as_char_ptr(), key.get()) };
     }
 }
-
-pub struct EmptyGuardContext;
 
 // SAFETY: The underlying kernel `struct mutex` object ensures mutual exclusion.
 unsafe impl<T: ?Sized> Lock for Mutex<T> {

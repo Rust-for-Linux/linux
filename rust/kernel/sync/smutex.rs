@@ -46,7 +46,7 @@
 //! When the waiter queue is non-empty, unlocking the mutex always results in the first waiter being
 //! popped form the queue and awakened.
 
-use super::{mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter};
+use super::{guard::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter};
 use crate::{bindings, str::CStr, Opaque};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::{cell::UnsafeCell, pin::Pin};
