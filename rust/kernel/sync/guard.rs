@@ -8,7 +8,7 @@
 
 use super::{LockClassKey, NeedsLockClass};
 use crate::{str::CStr, Bool, False, True};
-use core::pin::Pin;
+use core::{marker::PhantomData, pin::Pin};
 
 /// Allows mutual exclusion primitives that implement the [`Lock`] trait to automatically unlock
 /// when a guard goes out of scope. It also provides a safe and convenient way to access the data
@@ -17,16 +17,21 @@ use core::pin::Pin;
 pub struct Guard<'a, L: Lock<I> + ?Sized, I: LockInfo = WriteLock> {
     pub(crate) lock: &'a L,
     pub(crate) context: L::GuardContext,
+    // prevent `Guard` to be `Send` and `Sync`
+    pub(crate) not_send: PhantomData<*mut ()>,
 }
 
-// SAFETY: `Guard` is sync when the data protected by the lock is also sync. This is more
-// conservative than the default compiler implementation; more details can be found on
+// SAFETY: `Guard` is sync when the data protected by the lock and the `GuardContext` is also sync.
+// This is more conservative than the default compiler implementation; more details can be found on
 // <https://github.com/rust-lang/rust/issues/41622> -- it refers to `MutexGuard` from the standard
 // library.
+// The `GuardContext` can be used by the Lock to explicitly opt out of the automatic `Sync`
+// implementation.
 unsafe impl<L, I> Sync for Guard<'_, L, I>
 where
     L: Lock<I> + ?Sized,
     L::Inner: Sync,
+    L::GuardContext: Sync,
     I: LockInfo,
 {
 }
@@ -61,7 +66,11 @@ impl<'a, L: Lock<I> + ?Sized, I: LockInfo> Guard<'a, L, I> {
     ///
     /// The caller must ensure that it owns the lock.
     pub(crate) unsafe fn new(lock: &'a L, context: L::GuardContext) -> Self {
-        Self { lock, context }
+        Self {
+            lock,
+            context,
+            not_send: PhantomData,
+        }
     }
 }
 
