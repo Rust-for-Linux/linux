@@ -11,7 +11,11 @@ use super::{
     WriteLock,
 };
 use crate::{bindings, str::CStr, Opaque, True};
-use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
+use core::{
+    cell::UnsafeCell,
+    marker::{PhantomData, PhantomPinned},
+    pin::Pin,
+};
 
 /// Safely initialises a [`SpinLock`] with the given name, generating a new lock class.
 #[macro_export]
@@ -173,20 +177,29 @@ unsafe impl<T: ?Sized> Lock for SpinLock<T> {
     }
 }
 
+pub struct IrqContext {
+    irq: core::ffi::c_ulong,
+    not_sync: PhantomData<*mut ()>,
+}
+
 // SAFETY: The underlying kernel `spinlock_t` object ensures mutual exclusion.
 unsafe impl<T: ?Sized> Lock<DisabledInterrupts> for SpinLock<T> {
     type Inner = T;
-    type GuardContext = core::ffi::c_ulong;
+    type GuardContext = IrqContext;
 
-    fn lock_noguard(&self) -> core::ffi::c_ulong {
+    fn lock_noguard(&self) -> IrqContext {
         // SAFETY: `spin_lock` points to valid memory.
-        unsafe { bindings::spin_lock_irqsave(self.spin_lock.get()) }
+        let irq = unsafe { bindings::spin_lock_irqsave(self.spin_lock.get()) };
+        IrqContext {
+            irq,
+            not_sync: PhantomData,
+        }
     }
 
-    unsafe fn unlock(&self, ctx: &mut core::ffi::c_ulong) {
+    unsafe fn unlock(&self, ctx: &mut IrqContext) {
         // SAFETY: The safety requirements of the function ensure that the spinlock is owned by
         // the caller.
-        unsafe { bindings::spin_unlock_irqrestore(self.spin_lock.get(), *ctx) }
+        unsafe { bindings::spin_unlock_irqrestore(self.spin_lock.get(), ctx.irq) }
     }
 
     fn locked_data(&self) -> &UnsafeCell<T> {
