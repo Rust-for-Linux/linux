@@ -10,8 +10,90 @@ use crate::{bindings, error::code::*, Error};
 
 /// Byte string without UTF-8 validity guarantee.
 ///
-/// `BStr` is simply an alias to `[u8]`, but has a more evident semantical meaning.
-pub type BStr = [u8];
+/// `BStr` is simply a wrapper over `[u8]`, but has a more evident semantical meaning.
+#[repr(transparent)]
+pub struct BStr([u8]);
+
+impl BStr {
+    /// Returns the length of this string.
+    #[inline]
+    pub const fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns `true` if the string is empty.
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Creates a [`BStr`] from a `[u8]`.
+    #[inline]
+    pub const fn from_bytes(bytes: &[u8]) -> &Self {
+        // SAFETY: BStr is transparent to [u8].
+        unsafe { &*(bytes as *const [u8] as *const BStr) }
+    }
+}
+
+impl fmt::Display for BStr {
+    /// Formats printable ASCII characters, escaping the rest.
+    ///
+    /// ```
+    /// # use kernel::{str::{BStr, CString}, b_str};
+    /// let ascii = b_str!("Hello, world!");
+    /// let s = CString::try_from_fmt(fmt!("{}", ascii)).unwrap();
+    /// assert_eq!(s.as_bytes(), "Hello, world!".as_bytes());
+    ///
+    /// let non_ascii = b_str!("🦀");
+    /// let s = CString::try_from_fmt(fmt!("{}", non_ascii)).unwrap();
+    /// assert_eq!(s.as_bytes(), "\\xf0\\x9f\\xa6\\x80".as_bytes());
+    /// ```
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for &b in &self.0 {
+            match b {
+                0x20..=0x7e => f.write_char(b as char)?,
+                _ => write!(f, "\\x{:02x}", b)?,
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for BStr {
+    /// Formats printable ASCII characters with a double quote on either end, escaping the rest.
+    ///
+    /// ```
+    /// # use kernel::{b_str, str::{BStr, CString}};
+    /// // Embedded double quotes are escaped.
+    /// let ascii = b_str!("Hello, \"world\"!");
+    /// let s = CString::try_from_fmt(fmt!("{:?}", ascii)).unwrap();
+    /// assert_eq!(s.as_bytes(), "\"Hello, \\\"world\\\"!\"".as_bytes());
+    ///
+    /// let non_ascii = b_str!("😺");
+    /// let s = CString::try_from_fmt(fmt!("{:?}", non_ascii)).unwrap();
+    /// assert_eq!(s.as_bytes(), "\"\\xf0\\x9f\\x98\\xba\"".as_bytes());
+    /// ```
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("\"")?;
+        for &b in &self.0 {
+            match b {
+                b'\"' => f.write_str("\\\"")?,
+                0x20..=0x7e => f.write_char(b as char)?,
+                _ => write!(f, "\\x{:02x}", b)?,
+            }
+        }
+        f.write_str("\"")
+    }
+}
+
+impl const Deref for BStr {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Creates a new [`BStr`] from a string literal.
 ///
@@ -29,7 +111,7 @@ pub type BStr = [u8];
 macro_rules! b_str {
     ($str:literal) => {{
         const S: &'static str = $str;
-        const C: &'static $crate::str::BStr = S.as_bytes();
+        const C: &'static $crate::str::BStr = BStr::from_bytes(S.as_bytes());
         C
     }};
 }
@@ -226,15 +308,7 @@ impl fmt::Display for CStr {
     /// assert_eq!(s.as_bytes_with_nul(), "so \"cool\"\0".as_bytes());
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for &c in self.as_bytes() {
-            if (0x20..0x7f).contains(&c) {
-                // Printable character.
-                f.write_char(c as char)?;
-            } else {
-                write!(f, "\\x{:02x}", c)?;
-            }
-        }
-        Ok(())
+        fmt::Display::fmt(self.as_ref(), f)
     }
 }
 
@@ -255,23 +329,14 @@ impl fmt::Debug for CStr {
     /// assert_eq!(s.as_bytes_with_nul(), "\"so \\\"cool\\\"\"\0".as_bytes());
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("\"")?;
-        for &c in self.as_bytes() {
-            match c {
-                // Printable characters.
-                b'\"' => f.write_str("\\\"")?,
-                0x20..=0x7e => f.write_char(c as char)?,
-                _ => write!(f, "\\x{:02x}", c)?,
-            }
-        }
-        f.write_str("\"")
+        fmt::Debug::fmt(self.as_ref(), f)
     }
 }
 
 impl AsRef<BStr> for CStr {
     #[inline]
     fn as_ref(&self) -> &BStr {
-        self.as_bytes()
+        BStr::from_bytes(self.as_bytes())
     }
 }
 
@@ -280,7 +345,7 @@ impl Deref for CStr {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.as_bytes()
+        self.as_ref()
     }
 }
 
@@ -327,7 +392,7 @@ where
 
     #[inline]
     fn index(&self, index: Idx) -> &Self::Output {
-        &self.as_bytes()[index]
+        &self.as_ref()[index]
     }
 }
 

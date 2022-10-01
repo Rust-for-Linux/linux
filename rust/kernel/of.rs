@@ -21,12 +21,12 @@ pub enum DeviceId {
 /// # Examples
 ///
 /// ```
-/// # use kernel::define_of_id_table;
+/// # use kernel::{define_of_id_table, str::BStr, b_str};
 /// use kernel::of;
 ///
 /// define_of_id_table! {u32, [
-///     (of::DeviceId::Compatible(b"test-device1,test-device2"), Some(0xff)),
-///     (of::DeviceId::Compatible(b"test-device3"), None),
+///     (of::DeviceId::Compatible(b_str!("test-device1,test-device2")), Some(0xff)),
+///     (of::DeviceId::Compatible(b_str!("test-device3")), None),
 /// ]};
 /// ```
 #[macro_export]

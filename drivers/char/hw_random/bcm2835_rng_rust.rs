@@ -3,8 +3,8 @@
 //! Broadcom BCM2835 Random Number Generator support.
 
 use kernel::{
-    device, file, file::File, io_buffer::IoBufferWriter, miscdev, module_platform_driver, of,
-    platform, prelude::*, sync::Ref,
+    b_str, device, file, file::File, io_buffer::IoBufferWriter, miscdev, module_platform_driver,
+    of, platform, prelude::*, str::BStr, sync::Ref,
 };
 
 module_platform_driver! {
@@ -41,7 +41,7 @@ impl platform::Driver for RngDriver {
     type Data = Ref<DeviceData>;
 
     kernel::define_of_id_table! {(), [
-        (of::DeviceId::Compatible(b"brcm,bcm2835-rng"), None),
+        (of::DeviceId::Compatible(b_str!("brcm,bcm2835-rng")), None),
     ]}
 
     fn probe(dev: &mut platform::Device, _id_info: Option<&Self::IdInfo>) -> Result<Self::Data> {

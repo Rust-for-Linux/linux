@@ -195,7 +195,7 @@ unsafe impl device::RawDevice for Device {
 /// # Examples
 ///
 /// ```ignore
-/// # use kernel::{platform, define_of_id_table, module_platform_driver};
+/// # use kernel::{platform, define_of_id_table, module_platform_driver, str::BStr, b_str};
 /// #
 /// struct MyDriver;
 /// impl platform::Driver for MyDriver {
@@ -204,7 +204,7 @@ unsafe impl device::RawDevice for Device {
 /// #       Ok(())
 /// #   }
 /// #   define_of_id_table! {(), [
-/// #       (of::DeviceId::Compatible(b"brcm,bcm2835-rng"), None),
+/// #       (of::DeviceId::Compatible(b_str!("brcm,bcm2835-rng")), None),
 /// #   ]}
 /// }
 ///
