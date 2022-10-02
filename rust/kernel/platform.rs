@@ -7,9 +7,7 @@
 //! C header: [`include/linux/platform_device.h`](../../../../include/linux/platform_device.h)
 
 use crate::{
-    bindings,
-    device::{self, RawDevice},
-    driver,
+    bindings, device, driver,
     error::{from_kernel_result, Result},
     of,
     str::CStr,
@@ -61,41 +59,13 @@ impl<T: Driver> driver::DriverOps for Adapter<T> {
 }
 
 impl<T: Driver> Adapter<T> {
-    fn get_id_info(dev: &Device) -> Option<&'static T::IdInfo> {
-        let table = T::OF_DEVICE_ID_TABLE?;
-
-        // SAFETY: `table` has static lifetime, so it is valid for read. `dev` is guaranteed to be
-        // valid while it's alive, so is the raw device returned by it.
-        let id = unsafe { bindings::of_match_device(table.as_ref(), dev.raw_device()) };
-        if id.is_null() {
-            return None;
-        }
-
-        // SAFETY: `id` is a pointer within the static table, so it's always valid.
-        let offset = unsafe { (*id).data };
-        if offset.is_null() {
-            return None;
-        }
-
-        // SAFETY: The offset comes from a previous call to `offset_from` in `IdArray::new`, which
-        // guarantees that the resulting pointer is within the table.
-        let ptr = unsafe {
-            id.cast::<u8>()
-                .offset(offset as _)
-                .cast::<Option<T::IdInfo>>()
-        };
-
-        // SAFETY: The id table has a static lifetime, so `ptr` is guaranteed to be valid for read.
-        unsafe { (&*ptr).as_ref() }
-    }
-
     extern "C" fn probe_callback(pdev: *mut bindings::platform_device) -> core::ffi::c_int {
         from_kernel_result! {
             // SAFETY: `pdev` is valid by the contract with the C code. `dev` is alive only for the
             // duration of this call, so it is guaranteed to remain alive for the lifetime of
             // `pdev`.
             let mut dev = unsafe { Device::from_ptr(pdev) };
-            let info = Self::get_id_info(&dev);
+            let info = driver::get_id_info(&dev, T::OF_DEVICE_ID_TABLE);
             let data = T::probe(&mut dev, info)?;
             // SAFETY: `pdev` is guaranteed to be a valid, non-null pointer.
             unsafe { bindings::platform_set_drvdata(pdev, data.into_pointer() as _) };

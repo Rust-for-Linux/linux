@@ -5,7 +5,9 @@
 //! Each bus/subsystem is expected to implement [`DriverOps`], which allows drivers to register
 //! using the [`Registration`] class.
 
-use crate::{error::code::*, str::CStr, sync::Ref, Result, ThisModule};
+use crate::{
+    device::RawDevice, driver, error::code::*, of, str::CStr, sync::Ref, Result, ThisModule,
+};
 use alloc::boxed::Box;
 use core::{cell::UnsafeCell, marker::PhantomData, ops::Deref, pin::Pin};
 
@@ -439,4 +441,94 @@ macro_rules! module_driver {
             $($f)*
         }
     }
+}
+
+/// Get info from `of_id`.
+///
+/// Some kinds of drivers, e.g. Platform drivers, need to get info from `of_id`.
+/// This function achieves this goal.
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::{
+///     bindings,
+///     device::RawDevice,
+///     driver,
+///     error::from_kernel_result,
+///     of,
+/// };
+///
+/// pub trait Driver {
+///     type IdInfo: 'static = ();
+///     const OF_DEVICE_ID_TABLE: Option<driver::IdTable<'static, of::DeviceId, Self::IdInfo>> = None;
+/// }
+///
+/// pub struct Device {
+///     ptr: *mut bindings::bar_device,
+/// }
+///
+/// impl Device {
+///    /// Creates a new device from the given pointer.
+///    ///
+///    /// # Safety
+///    ///
+///    /// `ptr` must be non-null and valid. It must remain valid for the lifetime of the
+///    /// returned instance.
+///    unsafe fn from_ptr(ptr: *mut bindings::bar_device) -> Self {
+///        // INVARIANT: The safety requirements of the function ensure the lifetime invariant.
+///        Self { ptr }
+///    }
+/// }
+///
+/// // SAFETY: The device returned by `raw_device` is the raw bar device.
+/// unsafe impl device::RawDevice for Device {
+///     fn raw_device(&self) -> *mut bindings::device {
+///         // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid.
+///         unsafe { &mut (*self.ptr).dev }
+///     }
+/// }
+///
+/// pub struct Foo<T: Driver>(T);
+///
+/// impl<T: Driver> Adapter<T> {
+///     extern "C" fn probe_callback(pdev: *mut bindings::bar_device) -> core::ffi::c_int {
+///         from_kernel_result! {
+///             // SAFETY: `pdev` is valid by the contract with the C code. `dev` is alive only for
+///             // the duration of this call, so it is guaranteed to remain alive for the lifetime
+///             // of `pdev`.
+///             let mut dev = unsafe { Device::from_ptr(pdev) };
+///             // Use `get_id_info` to get info from `of_id`
+///             let info = driver::get_id_info(&dev, T::OF_DEVICE_ID_TABLE);
+///             let data = T::probe(&mut dev, info)?;
+///             Ok(0)
+///         }
+///     }
+/// }
+/// ```
+pub fn get_id_info<T>(
+    dev: &impl RawDevice,
+    table: Option<driver::IdTable<'static, of::DeviceId, T>>,
+) -> Option<&'static T> {
+    let table = table?;
+
+    // SAFETY: `table` has static lifetime, so it is valid for read. `dev` is guaranteed to be
+    // valid while it's alive, so is the raw device returned by it.
+    let id = unsafe { bindings::of_match_device(table.as_ref(), dev.raw_device()) };
+    if id.is_null() {
+        return None;
+    }
+
+    // SAFETY: `id` is a pointer within the static table, so it's always valid.
+    let offset = unsafe { (*id).data };
+    if offset.is_null() {
+        return None;
+    }
+
+    // SAFETY: The offset comes from a previous call to `offset_from` in `IdArray::new`, which
+    // guarantees that the resulting pointer is within the table.
+    let ptr = unsafe { id.cast::<u8>().offset(offset as _).cast::<Option<T>>() };
+
+    // SAFETY: The id table has a static lifetime, so `ptr` is guaranteed to be valid for read.
+    unsafe { (&*ptr).as_ref() }
 }
