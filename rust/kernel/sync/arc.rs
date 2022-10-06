@@ -27,7 +27,7 @@ use core::{
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     pin::Pin,
-    ptr::{self, NonNull},
+    ptr::{self, addr_of_mut, NonNull},
 };
 
 /// A reference-counted pointer to an instance of `T`.
@@ -464,9 +464,33 @@ impl<T> UniqueArc<T> {
 
     /// Tries to allocate a new [`UniqueArc`] instance whose contents are not initialised yet.
     pub fn try_new_uninit() -> Result<UniqueArc<MaybeUninit<T>>> {
+        let layout = Layout::new::<ArcInner<MaybeUninit<T>>>();
+        // SAFETY: The layout size is guaranteed to be non-zero because `ArcInner` contains the
+        // reference count.
+        let inner = NonNull::new(unsafe { alloc(layout) })
+            .ok_or(ENOMEM)?
+            .cast::<ArcInner<MaybeUninit<T>>>();
+        // TODO do this using `pinned-init`
+
+        // INVARIANT: The refcount is initialised to a non-zero value.
+        let refcount = Opaque::new(new_refcount());
+        // SAFETY: `inner` is writable and properly aligned.
+        unsafe { addr_of_mut!((*inner.as_ptr()).refcount).write(refcount) };
+        // assert that there are only two fields: refcount and data (done in a closure to avoid
+        // overflowing the stack in debug mode with a big `T`)
+        #[allow(unreachable_code, clippy::diverging_sub_expression)]
+        let _check = || {
+            let _check: ArcInner<MaybeUninit<T>> = ArcInner {
+                refcount: todo!(),
+                data: todo!(),
+            };
+        };
+
+        // SAFETY: We just created `inner` with a reference count of 1, which is owned by the new
+        // `Arc` object.
         Ok(UniqueArc::<MaybeUninit<T>> {
             // INVARIANT: The newly-created object has a ref-count of 1.
-            inner: Arc::try_new(MaybeUninit::uninit())?,
+            inner: unsafe { Arc::from_inner(inner) },
         })
     }
 }
@@ -475,6 +499,17 @@ impl<T> UniqueArc<MaybeUninit<T>> {
     /// Converts a `UniqueArc<MaybeUninit<T>>` into a `UniqueArc<T>` by writing a value into it.
     pub fn write(mut self, value: T) -> UniqueArc<T> {
         self.deref_mut().write(value);
+        // SAFETY: we just initialized `self`
+        unsafe { self.assume_init() }
+    }
+
+    /// Unsafely assume that `self` is initialized.
+    ///
+    /// # Safety
+    ///
+    /// The caller guarantees that the value behind this pointer has been initialized. It is
+    /// *immediate* UB to call this when the value is not initialized.
+    pub unsafe fn assume_init(self) -> UniqueArc<T> {
         let inner = ManuallyDrop::new(self).inner.ptr;
         UniqueArc {
             // SAFETY: The new `Arc` is taking over `ptr` from `self.inner` (which won't be
