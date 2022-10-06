@@ -15,7 +15,7 @@ use core::{
     mem::MaybeUninit,
     ops::{self, Deref, DerefMut},
     pin::Pin,
-    ptr::NonNull,
+    ptr::{addr_of, NonNull},
 };
 
 /// Permissions.
@@ -315,6 +315,18 @@ impl<T> Opaque<T> {
     /// Returns a raw pointer to the opaque data.
     pub fn get(&self) -> *mut T {
         UnsafeCell::raw_get(self.0.as_ptr())
+    }
+
+    /// Gets the value behind `this`.
+    ///
+    /// This function is useful to get access to the value without creating intermeditate
+    /// references.
+    ///
+    /// # Safety
+    ///
+    /// The pointer supplied is valid.
+    pub unsafe fn raw_get(this: *const Self) -> *mut T {
+        UnsafeCell::raw_get(addr_of!((*this).0).cast::<UnsafeCell<T>>())
     }
 }
 
