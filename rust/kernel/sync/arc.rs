@@ -15,7 +15,12 @@
 //!
 //! [`Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
 
-use crate::{bindings, error::code::*, Error, Opaque, Result};
+use crate::{
+    bindings,
+    init::{Init, PinInit},
+    prelude::*,
+    Error, Opaque, Result,
+};
 use alloc::{
     alloc::{alloc, dealloc},
     vec::Vec,
@@ -95,6 +100,14 @@ impl<T> Arc<T> {
         // SAFETY: We just created `inner` with a reference count of 1, which is owned by the new
         // `Arc` object.
         Ok(unsafe { Self::from_inner(inner) })
+    }
+
+    /// Creates a new `Arc` and initializes its contenst with the given initializer.
+    pub fn pin_init<E>(init: impl PinInit<T, E>) -> Result<Self>
+    where
+        Error: From<E>,
+    {
+        UniqueArc::pin_init(init).map(|u| u.into())
     }
 
     /// Deconstructs a [`Arc`] object into a `usize`.

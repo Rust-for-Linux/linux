@@ -5,6 +5,8 @@
 mod concat_idents;
 mod helpers;
 mod module;
+mod pin_project;
+mod pinned_drop;
 mod vtable;
 
 use proc_macro::TokenStream;
@@ -188,4 +190,47 @@ pub fn vtable(attr: TokenStream, ts: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn concat_idents(ts: TokenStream) -> TokenStream {
     concat_idents::concat_idents(ts)
+}
+
+/// Used to specify the pin information of the fields of a struct.
+///
+/// This is somewhat similar in purpose as
+/// [pin-project-lite](https://crates.io/crates/pin-project-lite).
+/// Place this macro on a struct definition and then `#[pin]` in front of the attributes of each
+/// field you want to have structurally pinned.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// #[pin_data]
+/// struct A {
+///     #[pin]
+///     a: usize,
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn pin_project(inner: TokenStream, item: TokenStream) -> TokenStream {
+    pin_project::pin_project(inner, item)
+}
+
+/// Used to implement `PinnedDrop` safely.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// #[pin_project(PinnedDrop)]
+/// struct Foo {
+///     a: usize,
+/// }
+///
+/// #[pinned_drop]
+/// impl PinnedDrop for Foo {
+///     fn drop(self: Pin<&mut Self>) {
+///         pr_info!("dropping a Foo");
+///     }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn pinned_drop(args: TokenStream, input: TokenStream) -> TokenStream {
+    pinned_drop::pinned_drop(args, input)
 }

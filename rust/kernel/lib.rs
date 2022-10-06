@@ -25,6 +25,7 @@
 #![feature(ptr_metadata)]
 #![feature(receiver_trait)]
 #![feature(unsize)]
+#![feature(new_uninit)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
@@ -57,6 +58,7 @@ pub mod file;
 pub mod fs;
 pub mod gpio;
 pub mod hwrng;
+pub mod init;
 pub mod irq;
 pub mod kasync;
 pub mod miscdev;
