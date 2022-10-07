@@ -153,8 +153,8 @@ mod pinned_drop;
 /// ```
 #[macro_export]
 macro_rules! stack_init {
-    (let $var:ident = $val:expr) => {
-        let mut $var = $crate::init::__private::StackInit::uninit();
+    (let $var:ident $(: $t:ty)? = $val:expr) => {
+        let mut $var = $crate::init::__private::StackInit$(::<$t>)?::uninit();
         let val = $val;
         let mut $var = unsafe { $crate::init::__private::StackInit::init(&mut $var, val) };
     };

@@ -7,13 +7,23 @@
 //!
 //! See <https://www.kernel.org/doc/Documentation/locking/seqlock.rst>.
 
-use super::{Guard, Lock, LockClassKey, LockFactory, LockIniter, NeedsLockClass, ReadLock};
-use crate::{bindings, str::CStr, Opaque};
-use core::{cell::UnsafeCell, marker::PhantomPinned, ops::Deref, pin::Pin};
+use super::{Guard, Lock, LockClassKey, LockFactory, ReadLock};
+use crate::{
+    bindings,
+    init::{self, PinInit},
+    macros::pin_project,
+    pin_init,
+    str::CStr,
+    Opaque,
+};
+use core::{cell::UnsafeCell, marker::PhantomPinned, ops::Deref};
 
 /// Exposes sequential locks backed by the kernel's `seqcount_t`.
 ///
 /// The write-side critical section is protected by a lock implementing the [`LockFactory`] trait.
+///
+/// A [`SeqLock`] is created using the [initialization API][init]. You can call the `new`
+/// function to create one.
 ///
 /// # Examples
 ///
@@ -51,9 +61,14 @@ use core::{cell::UnsafeCell, marker::PhantomPinned, ops::Deref, pin::Pin};
 ///     guard.b.store(b + 1, Ordering::Relaxed);
 /// }
 /// ```
-pub struct SeqLock<L: Lock + ?Sized> {
+/// [init]: ../init/index.html
+#[pin_project]
+pub struct SeqLock<L: ?Sized + Lock> {
+    #[pin]
     _p: PhantomPinned,
+    #[pin]
     count: Opaque<bindings::seqcount>,
+    #[pin]
     write_lock: L,
 }
 
@@ -68,22 +83,39 @@ unsafe impl<L: Lock + Sync> Sync for SeqLock<L> where L::Inner: Sync {}
 
 impl<L: Lock> SeqLock<L> {
     /// Constructs a new instance of [`SeqLock`].
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`SeqLock::init`] before using the seqlock.
-    pub unsafe fn new(data: L::Inner) -> Self
+    #[allow(clippy::new_ret_no_self)]
+    pub const fn new(
+        data: L::Inner,
+        name: &'static CStr,
+        key1: &'static LockClassKey,
+        key2: &'static LockClassKey,
+    ) -> impl PinInit<Self, L::Error>
     where
         L: LockFactory<LockedType<L::Inner> = L>,
         L::Inner: Sized,
+        <L as LockFactory>::Error: From<core::convert::Infallible>,
     {
-        Self {
-            _p: PhantomPinned,
-            count: Opaque::uninit(),
-            // SAFETY: `L::init_lock` is called from `SeqLock::init`, which is required to be
-            // called by the function's safety requirements.
-            write_lock: unsafe { L::new_lock(data) },
+        fn init_count(
+            name: &'static CStr,
+            key2: &'static LockClassKey,
+        ) -> impl PinInit<Opaque<bindings::seqcount>> {
+            let init = move |place: *mut Opaque<bindings::seqcount>| {
+                unsafe {
+                    bindings::__seqcount_init(
+                        Opaque::raw_get(place),
+                        name.as_char_ptr(),
+                        key2.get(),
+                    )
+                };
+                Ok(())
+            };
+            unsafe { init::pin_init_from_closure(init) }
         }
+        pin_init!(Self {
+            _p: PhantomPinned,
+            count: init_count(name, key2),
+            write_lock: L::new_lock(data, name, key1),
+        })
     }
 }
 
@@ -126,21 +158,6 @@ impl<L: Lock + ?Sized> SeqLock<L> {
         let ctx = self.lock_noguard();
         // SAFETY: The seqlock was just acquired.
         unsafe { Guard::new(self, ctx) }
-    }
-}
-
-impl<L: LockIniter + Lock + ?Sized> NeedsLockClass for SeqLock<L> {
-    fn init(
-        mut self: Pin<&mut Self>,
-        name: &'static CStr,
-        key1: &'static LockClassKey,
-        key2: &'static LockClassKey,
-    ) {
-        // SAFETY: `write_lock` is pinned when `self` is.
-        let pinned = unsafe { self.as_mut().map_unchecked_mut(|s| &mut s.write_lock) };
-        pinned.init_lock(name, key1);
-        // SAFETY: `key2` is valid as it has a static lifetime.
-        unsafe { bindings::__seqcount_init(self.count.get(), name.as_char_ptr(), key2.get()) };
     }
 }
 

@@ -7,17 +7,23 @@
 //! See <https://www.kernel.org/doc/Documentation/locking/spinlocks.txt>.
 
 use super::{
-    mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockInfo, LockIniter,
-    WriteLock,
+    mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockInfo, WriteLock,
 };
-use crate::{bindings, str::CStr, Opaque, True};
-use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
+use crate::{
+    bindings,
+    init::{self, PinInit},
+    macros::pin_project,
+    pin_init,
+    str::CStr,
+    Opaque, True,
+};
+use core::{cell::UnsafeCell, marker::PhantomPinned};
 
 /// Safely initialises a [`SpinLock`] with the given name, generating a new lock class.
 #[macro_export]
-macro_rules! spinlock_init {
-    ($spinlock:expr, $name:literal) => {
-        $crate::init_with_lockdep!($spinlock, $name)
+macro_rules! new_spinlock {
+    ($value:expr, $name:literal) => {
+        $crate::new_with_lockdep!($crate::sync::SpinLock<_>, $name, $value)
     };
 }
 
@@ -25,9 +31,8 @@ macro_rules! spinlock_init {
 /// one at a time is allowed to progress, the others will block (spinning) until the spinlock is
 /// unlocked, at which point another CPU will be allowed to make progress.
 ///
-/// A [`SpinLock`] must first be initialised with a call to [`SpinLock::init_lock`] before it can be
-/// used. The [`spinlock_init`] macro is provided to automatically assign a new lock class to a
-/// spinlock instance.
+/// A [`SpinLock`] is created using the [initialization API][init]. You can either call the `new`
+/// function or use the [`new_spinlock!`] macro which automatically creates the [`LockClassKey`] for you.
 ///
 /// There are two ways to acquire the lock:
 ///  - [`SpinLock::lock`], which doesn't manage interrupt state, so it should be used in only two
@@ -41,7 +46,7 @@ macro_rules! spinlock_init {
 /// # Examples
 ///
 /// ```
-/// # use kernel::sync::SpinLock;
+/// # use kernel::{new_spinlock, stack_init, sync::SpinLock};
 /// # use core::pin::Pin;
 ///
 /// struct Example {
@@ -64,10 +69,8 @@ macro_rules! spinlock_init {
 /// }
 ///
 /// // Initialises a spinlock.
-/// // SAFETY: `spinlock_init` is called below.
-/// let mut value = unsafe { SpinLock::new(Example { a: 1, b: 2 }) };
-/// // SAFETY: We don't move `value`.
-/// kernel::spinlock_init!(unsafe { Pin::new_unchecked(&mut value) }, "value");
+/// stack_init!(let value = new_spinlock!(Example { a: 1, b: 2 }, "value"));
+/// let value = value.unwrap();
 ///
 /// // Calls the example functions.
 /// assert_eq!(value.lock().a, 1);
@@ -78,11 +81,15 @@ macro_rules! spinlock_init {
 /// ```
 ///
 /// [`spinlock_t`]: ../../../include/linux/spinlock.h
+/// [init]: ../init/index.html
+#[pin_project]
 pub struct SpinLock<T: ?Sized> {
+    #[pin]
     spin_lock: Opaque<bindings::spinlock>,
 
     /// Spinlocks are architecture-defined. So we conservatively require them to be pinned in case
     /// some architecture uses self-references now or in the future.
+    #[pin]
     _pin: PhantomPinned,
 
     data: UnsafeCell<T>,
@@ -97,16 +104,45 @@ unsafe impl<T: ?Sized + Send> Sync for SpinLock<T> {}
 
 impl<T> SpinLock<T> {
     /// Constructs a new spinlock.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`SpinLock::init_lock`] before using the spinlock.
-    pub const unsafe fn new(t: T) -> Self {
-        Self {
-            spin_lock: Opaque::uninit(),
-            data: UnsafeCell::new(t),
-            _pin: PhantomPinned,
+    #[allow(clippy::new_ret_no_self)]
+    pub const fn new(
+        data: T,
+        name: &'static CStr,
+        key: &'static LockClassKey,
+    ) -> impl PinInit<Self> {
+        Init { data, name, key }
+    }
+}
+
+#[doc(hidden)]
+pub struct Init<T> {
+    name: &'static CStr,
+    key: &'static LockClassKey,
+    data: T,
+}
+
+unsafe impl<T> PinInit<SpinLock<T>> for Init<T> {
+    unsafe fn __pinned_init(
+        self,
+        slot: *mut SpinLock<T>,
+    ) -> core::result::Result<(), core::convert::Infallible> {
+        fn init_spinlock(
+            name: &'static CStr,
+            key: &'static LockClassKey,
+        ) -> impl PinInit<Opaque<bindings::spinlock>> {
+            let init = move |slot: *mut Opaque<bindings::spinlock>| unsafe {
+                bindings::__spin_lock_init(Opaque::raw_get(slot), name.as_char_ptr(), key.get());
+                Ok(())
+            };
+            unsafe { init::pin_init_from_closure(init) }
         }
+        let init = pin_init!(SpinLock<T> {
+            spin_lock: init_spinlock(self.name, self.key),
+            data: UnsafeCell::new(self.data),
+            _pin: PhantomPinned,
+        });
+        // SAFETY: we are inside of an initializer
+        unsafe { init.__pinned_init(slot) }
     }
 }
 
@@ -132,16 +168,11 @@ impl<T: ?Sized> SpinLock<T> {
 
 impl<T> LockFactory for SpinLock<T> {
     type LockedType<U> = SpinLock<U>;
+    type Error = core::convert::Infallible;
+    type Init<U> = Init<U>;
 
-    unsafe fn new_lock<U>(data: U) -> SpinLock<U> {
-        // SAFETY: The safety requirements of `new_lock` also require that `init_lock` be called.
-        unsafe { SpinLock::new(data) }
-    }
-}
-
-impl<T> LockIniter for SpinLock<T> {
-    fn init_lock(self: Pin<&mut Self>, name: &'static CStr, key: &'static LockClassKey) {
-        unsafe { bindings::__spin_lock_init(self.spin_lock.get(), name.as_char_ptr(), key.get()) };
+    fn new_lock<U>(data: U, name: &'static CStr, key: &'static LockClassKey) -> Self::Init<U> {
+        Init { data, name, key }
     }
 }
 
@@ -196,9 +227,9 @@ unsafe impl<T: ?Sized> Lock<DisabledInterrupts> for SpinLock<T> {
 
 /// Safely initialises a [`RawSpinLock`] with the given name, generating a new lock class.
 #[macro_export]
-macro_rules! rawspinlock_init {
-    ($spinlock:expr, $name:literal) => {
-        $crate::init_with_lockdep!($spinlock, $name)
+macro_rules! new_rawspinlock {
+    ($value:expr, $name:literal) => {
+        $crate::new_with_lockdep!($crate::sync::RawSpinLock<_>, $name, $value)
     };
 }
 
@@ -210,7 +241,7 @@ macro_rules! rawspinlock_init {
 /// # Examples
 ///
 /// ```
-/// # use kernel::sync::RawSpinLock;
+/// # use kernel::{sync::RawSpinLock, stack_init, new_rawspinlock};
 /// # use core::pin::Pin;
 ///
 /// struct Example {
@@ -234,21 +265,22 @@ macro_rules! rawspinlock_init {
 ///
 /// // Initialises a raw spinlock and calls the example functions.
 /// fn spinlock_example() {
-///     // SAFETY: `rawspinlock_init` is called below.
-///     let mut value = unsafe { RawSpinLock::new(Example { a: 1, b: 2 }) };
-///     // SAFETY: We don't move `value`.
-///     kernel::rawspinlock_init!(unsafe { Pin::new_unchecked(&mut value) }, "value");
+///     stack_init!(let value = new_rawspinlock!(Example { a: 1, b: 2 }, "value"));
+///     let value = value.unwrap();
 ///     lock_example(&value);
 ///     lock_irqdisable_example(&value);
 /// }
 /// ```
 ///
 /// [`raw_spinlock_t`]: ../../../include/linux/spinlock.h
+#[pin_project]
 pub struct RawSpinLock<T: ?Sized> {
+    #[pin]
     spin_lock: Opaque<bindings::raw_spinlock>,
 
     // Spinlocks are architecture-defined. So we conservatively require them to be pinned in case
     // some architecture uses self-references now or in the future.
+    #[pin]
     _pin: PhantomPinned,
 
     data: UnsafeCell<T>,
@@ -263,16 +295,49 @@ unsafe impl<T: ?Sized + Send> Sync for RawSpinLock<T> {}
 
 impl<T> RawSpinLock<T> {
     /// Constructs a new raw spinlock.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`RawSpinLock::init_lock`] before using the raw spinlock.
-    pub const unsafe fn new(t: T) -> Self {
-        Self {
-            spin_lock: Opaque::uninit(),
-            data: UnsafeCell::new(t),
-            _pin: PhantomPinned,
+    #[allow(clippy::new_ret_no_self)]
+    pub const fn new(
+        data: T,
+        name: &'static CStr,
+        key: &'static LockClassKey,
+    ) -> impl PinInit<Self> {
+        RInit { data, name, key }
+    }
+}
+
+#[doc(hidden)]
+pub struct RInit<T> {
+    name: &'static CStr,
+    key: &'static LockClassKey,
+    data: T,
+}
+
+unsafe impl<T> PinInit<RawSpinLock<T>> for RInit<T> {
+    unsafe fn __pinned_init(
+        self,
+        slot: *mut RawSpinLock<T>,
+    ) -> core::result::Result<(), core::convert::Infallible> {
+        fn init_spinlock(
+            name: &'static CStr,
+            key: &'static LockClassKey,
+        ) -> impl PinInit<Opaque<bindings::raw_spinlock>> {
+            let init = move |place: *mut Opaque<bindings::raw_spinlock>| unsafe {
+                bindings::_raw_spin_lock_init(
+                    Opaque::raw_get(place),
+                    name.as_char_ptr(),
+                    key.get(),
+                );
+                Ok(())
+            };
+            unsafe { init::pin_init_from_closure(init) }
         }
+        let init = pin_init!(RawSpinLock<T> {
+            spin_lock: init_spinlock(self.name, self.key),
+            data: UnsafeCell::new(self.data),
+            _pin: PhantomPinned,
+        });
+        // SAFETY: we are inside of an initializer
+        unsafe { init.__pinned_init(slot) }
     }
 }
 
@@ -298,18 +363,11 @@ impl<T: ?Sized> RawSpinLock<T> {
 
 impl<T> LockFactory for RawSpinLock<T> {
     type LockedType<U> = RawSpinLock<U>;
+    type Error = core::convert::Infallible;
+    type Init<U> = RInit<U>;
 
-    unsafe fn new_lock<U>(data: U) -> RawSpinLock<U> {
-        // SAFETY: The safety requirements of `new_lock` also require that `init_lock` be called.
-        unsafe { RawSpinLock::new(data) }
-    }
-}
-
-impl<T> LockIniter for RawSpinLock<T> {
-    fn init_lock(self: Pin<&mut Self>, name: &'static CStr, key: &'static LockClassKey) {
-        unsafe {
-            bindings::_raw_spin_lock_init(self.spin_lock.get(), name.as_char_ptr(), key.get())
-        };
+    fn new_lock<U>(data: U, name: &'static CStr, key: &'static LockClassKey) -> Self::Init<U> {
+        RInit { data, name, key }
     }
 }
 

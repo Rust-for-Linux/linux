@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 
 use kernel::{
-    bindings,
+    bindings, new_mutex,
     prelude::*,
     security,
-    sync::{Arc, Mutex, UniqueArc},
+    sync::{Arc, Mutex},
 };
 
 use crate::{
@@ -17,7 +17,9 @@ struct Manager {
     uid: Option<bindings::kuid_t>,
 }
 
+#[pin_project]
 pub(crate) struct Context {
+    #[pin]
     manager: Mutex<Manager>,
 }
 
@@ -27,21 +29,15 @@ unsafe impl Sync for Context {}
 
 impl Context {
     pub(crate) fn new() -> Result<Arc<Self>> {
-        let mut ctx = Pin::from(UniqueArc::try_new(Self {
-            // SAFETY: Init is called below.
-            manager: unsafe {
-                Mutex::new(Manager {
+        Arc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+            manager: new_mutex!(
+                Manager {
                     node: None,
                     uid: None,
-                })
-            },
-        })?);
-
-        // SAFETY: `manager` is also pinned when `ctx` is.
-        let manager = unsafe { ctx.as_mut().map_unchecked_mut(|c| &mut c.manager) };
-        kernel::mutex_init!(manager, "Context::manager");
-
-        Ok(ctx.into())
+                },
+                "Contex::manager"
+            ),
+        }))
     }
 
     pub(crate) fn set_manager_node(&self, node_ref: NodeRef) -> Result {

@@ -5,7 +5,9 @@
 use super::{ArcWake, AutoStopHandle};
 use crate::{
     error::code::*,
-    mutex_init,
+    macros::pin_project,
+    new_mutex, pin_init,
+    prelude::*,
     revocable::AsyncRevocable,
     sync::{Arc, ArcBorrow, LockClassKey, Mutex, UniqueArc},
     unsafe_list,
@@ -188,9 +190,12 @@ struct ExecutorInner {
 ///
 /// # Ok::<(), Error>(())
 /// ```
+#[pin_project]
 pub struct Executor {
     queue: Either<BoxedQueue, &'static Queue>,
+    #[pin]
     inner: Mutex<ExecutorInner>,
+    #[pin]
     _pin: PhantomPinned,
 }
 
@@ -217,22 +222,20 @@ impl Executor {
     ///
     /// It uses the given work queue to run its tasks.
     fn new_internal(queue: Either<BoxedQueue, &'static Queue>) -> Result<AutoStopHandle<Self>> {
-        let mut e = Pin::from(UniqueArc::try_new(Self {
-            queue,
-            _pin: PhantomPinned,
-            // SAFETY: `mutex_init` is called below.
-            inner: unsafe {
-                Mutex::new(ExecutorInner {
-                    stopped: false,
-                    tasks: unsafe_list::List::new(),
-                })
-            },
-        })?);
-        // SAFETY: `tasks` is pinned when the executor is.
-        let pinned = unsafe { e.as_mut().map_unchecked_mut(|e| &mut e.inner) };
-        mutex_init!(pinned, "Executor::inner");
-
-        Ok(AutoStopHandle::new(e.into()))
+        Ok(AutoStopHandle::new(
+            UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+                inner: new_mutex!(
+                    ExecutorInner {
+                        stopped: false,
+                        tasks: unsafe_list::List::new()
+                    },
+                    "Executor::inner"
+                ),
+                queue,
+                _pin: PhantomPinned,
+            }))?
+            .into(),
+        ))
     }
 }
 

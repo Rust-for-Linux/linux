@@ -3,8 +3,11 @@
 //! Synchronisation primitives where access to their contents can be revoked at runtime.
 
 use crate::{
+    init::PinInit,
+    macros::pin_project,
+    pin_init,
     str::CStr,
-    sync::{Guard, Lock, LockClassKey, LockFactory, LockInfo, NeedsLockClass, ReadLock, WriteLock},
+    sync::{Guard, Lock, LockClassKey, LockFactory, LockInfo, ReadLock, WriteLock},
     True,
 };
 use core::{
@@ -69,11 +72,14 @@ impl<T> Drop for Inner<T> {
 /// sleep while holding on to a guard should use [`crate::revocable::Revocable`] instead, which is
 /// more efficient as it uses RCU to keep objects alive.
 ///
+/// A [`Revocable`] is created using the [initialization API][init]. You can either call the `new`
+/// function or use the [`new_revocable!`] macro which automatically creates the [`LockClassKey`] for you.
+///
 /// # Examples
 ///
 /// ```
 /// # use kernel::sync::{Mutex, Revocable};
-/// # use kernel::revocable_init;
+/// # use kernel::{new_revocable, stack_init};
 /// # use core::pin::Pin;
 ///
 /// struct Example {
@@ -88,56 +94,39 @@ impl<T> Drop for Inner<T> {
 ///     Some(guard.a + guard.b)
 /// }
 ///
-/// // SAFETY: We call `revocable_init` immediately below.
-/// let mut v = unsafe { Revocable::<Mutex<()>, Example>::new(Example { a: 10, b: 20 }) };
-/// // SAFETY: We never move out of `v`.
-/// let pinned = unsafe { Pin::new_unchecked(&mut v) };
-/// revocable_init!(pinned, "example::v");
+/// stack_init!(let v: Revocable::<Mutex<()>, Example> = new_revocable!(Example { a: 10, b: 20 }, "example::v"));
+/// let v = v.unwrap();
 /// assert_eq!(add_two(&v), Some(34));
 /// v.revoke();
 /// assert_eq!(add_two(&v), None);
 /// ```
+/// [init]: ../init/index.html
+/// [`new_revocable!`]: kernel::new_revocable
+#[pin_project]
 pub struct Revocable<F: LockFactory, T> {
-    inner: F::LockedType<Inner<T>>,
+    #[pin]
+    inner: <F as LockFactory>::LockedType<Inner<T>>,
 }
 
 /// Safely initialises a [`Revocable`] instance with the given name, generating a new lock class.
 #[macro_export]
-macro_rules! revocable_init {
-    ($mutex:expr, $name:literal) => {
-        $crate::init_with_lockdep!($mutex, $name)
+macro_rules! new_revocable {
+    ($value:expr, $name:literal) => {
+        $crate::new_with_lockdep!($crate::sync::Revocable<_, _>, $name, $value)
     };
 }
 
 impl<F: LockFactory, T> Revocable<F, T> {
     /// Creates a new revocable instance of the given lock.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`Revocable::init`] before using the revocable synch primitive.
-    pub unsafe fn new(data: T) -> Self {
-        Self {
-            // SAFETY: The safety requirements of this function require that `Revocable::init`
-            // be called before the returned object can be used. Lock initialisation is called
-            // from `Revocable::init`.
-            inner: unsafe { F::new_lock(Inner::new(data)) },
-        }
-    }
-}
-
-impl<F: LockFactory, T> NeedsLockClass for Revocable<F, T>
-where
-    F::LockedType<Inner<T>>: NeedsLockClass,
-{
-    fn init(
-        self: Pin<&mut Self>,
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(
+        data: T,
         name: &'static CStr,
-        key1: &'static LockClassKey,
-        key2: &'static LockClassKey,
-    ) {
-        // SAFETY: `inner` is pinned when `self` is.
-        let inner = unsafe { self.map_unchecked_mut(|r| &mut r.inner) };
-        inner.init(name, key1, key2);
+        key: &'static LockClassKey,
+    ) -> impl PinInit<Self, F::Error> {
+        pin_init!(Self {
+            inner: F::new_lock(Inner::new(data), name, key),
+        })
     }
 }
 

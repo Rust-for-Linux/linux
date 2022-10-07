@@ -6,9 +6,8 @@
 //! the ([`Lock`]) trait. It also contains the definition of the trait, which can be leveraged by
 //! other constructs to work on generic locking primitives.
 
-use super::{LockClassKey, NeedsLockClass};
-use crate::{str::CStr, Bool, False, True};
-use core::pin::Pin;
+use super::LockClassKey;
+use crate::{init::PinInit, str::CStr, Bool, False, True};
 
 /// Allows mutual exclusion primitives that implement the [`Lock`] trait to automatically unlock
 /// when a guard goes out of scope. It also provides a safe and convenient way to access the data
@@ -132,28 +131,11 @@ pub unsafe trait Lock<I: LockInfo = WriteLock> {
 pub trait LockFactory {
     /// The parametrised type of the mutual exclusion primitive that can be created by this factory.
     type LockedType<T>;
+    /// Error that can occur when creating a lock of this kind.
+    type Error;
+    /// the initializer used to initialize a lock of this kind.
+    type Init<T>: PinInit<Self::LockedType<T>, Self::Error>;
 
     /// Constructs a new instance of the mutual exclusion primitive.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`LockIniter::init_lock`] before using the lock.
-    unsafe fn new_lock<T>(data: T) -> Self::LockedType<T>;
-}
-
-/// A lock that can be initialised with a single lock class key.
-pub trait LockIniter {
-    /// Initialises the lock instance so that it can be safely used.
-    fn init_lock(self: Pin<&mut Self>, name: &'static CStr, key: &'static LockClassKey);
-}
-
-impl<L: LockIniter> NeedsLockClass for L {
-    fn init(
-        self: Pin<&mut Self>,
-        name: &'static CStr,
-        key: &'static LockClassKey,
-        _: &'static LockClassKey,
-    ) {
-        self.init_lock(name, key);
-    }
+    fn new_lock<T>(data: T, name: &'static CStr, key: &'static LockClassKey) -> Self::Init<T>;
 }

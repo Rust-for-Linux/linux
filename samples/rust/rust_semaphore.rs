@@ -15,11 +15,11 @@
 
 use core::sync::atomic::{AtomicU64, Ordering};
 use kernel::{
-    condvar_init,
     file::{self, File, IoctlCommand, IoctlHandler},
     io_buffer::{IoBufferReader, IoBufferWriter},
+    macros::pin_project,
     miscdev::Registration,
-    mutex_init,
+    new_condvar, new_mutex, pin_init,
     prelude::*,
     sync::{Arc, CondVar, Mutex, UniqueArc},
     user_ptr::{UserSlicePtrReader, UserSlicePtrWriter},
@@ -38,8 +38,11 @@ struct SemaphoreInner {
     max_seen: usize,
 }
 
+#[pin_project]
 struct Semaphore {
+    #[pin]
     changed: CondVar,
+    #[pin]
     inner: Mutex<SemaphoreInner>,
 }
 
@@ -109,26 +112,16 @@ impl kernel::Module for RustSemaphore {
     fn init(name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust semaphore sample (init)\n");
 
-        let mut sema = Pin::from(UniqueArc::try_new(Semaphore {
-            // SAFETY: `condvar_init!` is called below.
-            changed: unsafe { CondVar::new() },
-
-            // SAFETY: `mutex_init!` is called below.
-            inner: unsafe {
-                Mutex::new(SemaphoreInner {
+        let sema = UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Semaphore {
+            changed: new_condvar!("Semaphore::changed"),
+            inner: new_mutex!(
+                SemaphoreInner {
                     count: 0,
                     max_seen: 0,
-                })
-            },
-        })?);
-
-        // SAFETY: `changed` is pinned when `sema` is.
-        let pinned = unsafe { sema.as_mut().map_unchecked_mut(|s| &mut s.changed) };
-        condvar_init!(pinned, "Semaphore::changed");
-
-        // SAFETY: `inner` is pinned when `sema` is.
-        let pinned = unsafe { sema.as_mut().map_unchecked_mut(|s| &mut s.inner) };
-        mutex_init!(pinned, "Semaphore::inner");
+                },
+                "Semaphore::inner"
+            ),
+        }))?;
 
         Ok(Self {
             _dev: Registration::new_pinned(fmt!("{name}"), sema.into())?,

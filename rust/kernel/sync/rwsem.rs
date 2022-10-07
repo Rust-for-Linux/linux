@@ -7,17 +7,23 @@
 //! C header: [`include/linux/rwsem.h`](../../../../include/linux/rwsem.h)
 
 use super::{
-    mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter, ReadLock,
-    WriteLock,
+    mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, ReadLock, WriteLock,
 };
-use crate::{bindings, str::CStr, Opaque};
-use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
+use crate::{
+    bindings,
+    init::{self, PinInit},
+    macros::pin_project,
+    pin_init,
+    str::CStr,
+    Opaque,
+};
+use core::{cell::UnsafeCell, marker::PhantomPinned};
 
 /// Safely initialises a [`RwSemaphore`] with the given name, generating a new lock class.
 #[macro_export]
-macro_rules! rwsemaphore_init {
-    ($rwsem:expr, $name:literal) => {
-        $crate::init_with_lockdep!($rwsem, $name)
+macro_rules! new_rwsemaphore {
+    ($value:expr, $name:literal) => {
+        $crate::new_with_lockdep!($crate::sync::RwSemaphore<_>, $name, $value)
     };
 }
 
@@ -26,19 +32,22 @@ macro_rules! rwsemaphore_init {
 /// It's a read/write mutex. That is, it allows multiple readers to acquire it concurrently, but
 /// only one writer at a time. On contention, waiters sleep.
 ///
-/// A [`RwSemaphore`] must first be initialised with a call to [`RwSemaphore::init_lock`] before it
-/// can be used. The [`rwsemaphore_init`] macro is provided to automatically assign a new lock
-/// class to an [`RwSemaphore`] instance.
+/// A [`RwSemaphore`] is created using the [initialization API][init]. You can either call the `new`
+/// function or use the [`new_rwsemaphore!`] macro which automatically creates the [`LockClassKey`] for you.
 ///
 /// Since it may block, [`RwSemaphore`] needs to be used with care in atomic contexts.
 ///
 /// [`struct rw_semaphore`]: ../../../include/linux/rwsem.h
+/// [init]: ../init/index.html
+#[pin_project]
 pub struct RwSemaphore<T: ?Sized> {
     /// The kernel `struct rw_semaphore` object.
+    #[pin]
     rwsem: Opaque<bindings::rw_semaphore>,
 
     /// An rwsem needs to be pinned because it contains a [`struct list_head`] that is
     /// self-referential, so it cannot be safely moved once it is initialised.
+    #[pin]
     _pin: PhantomPinned,
 
     /// The data protected by the rwsem.
@@ -57,16 +66,41 @@ unsafe impl<T: ?Sized + Send + Sync> Sync for RwSemaphore<T> {}
 
 impl<T> RwSemaphore<T> {
     /// Constructs a new rw semaphore.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`RwSemaphore::init_lock`] before using the rw semaphore.
-    pub unsafe fn new(t: T) -> Self {
-        Self {
-            rwsem: Opaque::uninit(),
-            data: UnsafeCell::new(t),
-            _pin: PhantomPinned,
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(data: T, name: &'static CStr, key: &'static LockClassKey) -> impl PinInit<Self> {
+        Init { data, name, key }
+    }
+}
+
+#[doc(hidden)]
+pub struct Init<T> {
+    name: &'static CStr,
+    key: &'static LockClassKey,
+    data: T,
+}
+
+unsafe impl<T> PinInit<RwSemaphore<T>> for Init<T> {
+    unsafe fn __pinned_init(
+        self,
+        slot: *mut RwSemaphore<T>,
+    ) -> core::result::Result<(), core::convert::Infallible> {
+        fn init_rw_semaphore(
+            name: &'static CStr,
+            key: &'static LockClassKey,
+        ) -> impl PinInit<Opaque<bindings::rw_semaphore>> {
+            let init = move |slot: *mut Opaque<bindings::rw_semaphore>| unsafe {
+                bindings::__init_rwsem(Opaque::raw_get(slot), name.as_char_ptr(), key.get());
+                Ok(())
+            };
+            unsafe { init::pin_init_from_closure(init) }
         }
+        let init = pin_init!(RwSemaphore<T> {
+            rwsem: init_rw_semaphore(self.name, self.key),
+            data: UnsafeCell::new(self.data),
+            _pin: PhantomPinned,
+        });
+        // SAFETY: we are inside of an initializer
+        unsafe { init.__pinned_init(slot) }
     }
 }
 
@@ -90,16 +124,11 @@ impl<T: ?Sized> RwSemaphore<T> {
 
 impl<T> LockFactory for RwSemaphore<T> {
     type LockedType<U> = RwSemaphore<U>;
+    type Error = core::convert::Infallible;
+    type Init<U> = Init<U>;
 
-    unsafe fn new_lock<U>(data: U) -> RwSemaphore<U> {
-        // SAFETY: The safety requirements of `new_lock` also require that `init_lock` be called.
-        unsafe { RwSemaphore::new(data) }
-    }
-}
-
-impl<T> LockIniter for RwSemaphore<T> {
-    fn init_lock(self: Pin<&mut Self>, name: &'static CStr, key: &'static LockClassKey) {
-        unsafe { bindings::__init_rwsem(self.rwsem.get(), name.as_char_ptr(), key.get()) };
+    fn new_lock<U>(data: U, name: &'static CStr, key: &'static LockClassKey) -> Self::Init<U> {
+        Init { data, name, key }
     }
 }
 
@@ -158,7 +187,7 @@ unsafe impl<T: ?Sized> Lock<ReadLock> for RwSemaphore<T> {
 ///
 /// ```
 /// # use kernel::sync::RevocableRwSemaphore;
-/// # use kernel::revocable_init;
+/// # use kernel::{new_revocable, stack_init};
 /// # use core::pin::Pin;
 ///
 /// struct Example {
@@ -178,11 +207,8 @@ unsafe impl<T: ?Sized> Lock<ReadLock> for RwSemaphore<T> {
 ///     Some(guard.a + guard.b)
 /// }
 ///
-/// // SAFETY: We call `revocable_init` immediately below.
-/// let mut v = unsafe { RevocableRwSemaphore::new(Example { a: 10, b: 20 }) };
-/// // SAFETY: We never move out of `v`.
-/// let pinned = unsafe { Pin::new_unchecked(&mut v) };
-/// revocable_init!(pinned, "example::v");
+/// stack_init!(let v: RevocableRwSemaphore<_> = new_revocable!(Example { a: 10, b: 20 }, "example::v"));
+/// let v = v.unwrap();
 /// assert_eq!(read_sum(&v), Some(30));
 /// assert_eq!(add_two(&v), Some(34));
 /// v.revoke();

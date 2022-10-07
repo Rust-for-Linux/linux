@@ -202,7 +202,7 @@ pub fn concat_idents(ts: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```rust,ignore
-/// #[pin_data]
+/// #[pin_project]
 /// struct A {
 ///     #[pin]
 ///     a: usize,

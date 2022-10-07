@@ -7,7 +7,7 @@ use kernel::{
     file::{self, File, IoctlCommand, IoctlHandler, PollTable},
     io_buffer::{IoBufferReader, IoBufferWriter},
     linked_list::List,
-    mm,
+    mm, new_mutex,
     pages::Pages,
     prelude::*,
     rbtree::RBTree,
@@ -242,6 +242,7 @@ impl ProcessNodeRefs {
     }
 }
 
+#[pin_project]
 pub(crate) struct Process {
     ctx: Arc<Context>,
 
@@ -255,10 +256,12 @@ pub(crate) struct Process {
     // lock. We may want to split up the process state at some point to use a spin lock for the
     // other fields.
     // TODO: Make this private again.
+    #[pin]
     pub(crate) inner: Mutex<ProcessInner>,
 
     // References are in a different mutex to avoid recursive acquisition when
     // incrementing/decrementing a node in another process.
+    #[pin]
     node_refs: Mutex<ProcessNodeRefs>,
 }
 
@@ -268,25 +271,13 @@ unsafe impl Sync for Process {}
 
 impl Process {
     fn new(ctx: Arc<Context>, cred: ARef<Credential>) -> Result<Arc<Self>> {
-        let mut process = Pin::from(UniqueArc::try_new(Self {
+        Arc::pin_init::<core::convert::Infallible>(pin_init!(Self {
             ctx,
             cred,
-            task: Task::current().group_leader().into(),
-            // SAFETY: `inner` is initialised in the call to `mutex_init` below.
-            inner: unsafe { Mutex::new(ProcessInner::new()) },
-            // SAFETY: `node_refs` is initialised in the call to `mutex_init` below.
-            node_refs: unsafe { Mutex::new(ProcessNodeRefs::new()) },
-        })?);
-
-        // SAFETY: `inner` is pinned when `Process` is.
-        let pinned = unsafe { process.as_mut().map_unchecked_mut(|p| &mut p.inner) };
-        kernel::mutex_init!(pinned, "Process::inner");
-
-        // SAFETY: `node_refs` is pinned when `Process` is.
-        let pinned = unsafe { process.as_mut().map_unchecked_mut(|p| &mut p.node_refs) };
-        kernel::mutex_init!(pinned, "Process::node_refs");
-
-        Ok(process.into())
+            task: ARef::from(Task::current().group_leader()),
+            inner: new_mutex!(ProcessInner::new(), "Process::inner"),
+            node_refs: new_mutex!(ProcessNodeRefs::new(), "Process::node_refs"),
+        }))
     }
 
     /// Attempts to fetch a work item from the process queue.
@@ -714,14 +705,15 @@ impl Process {
             return Ok(());
         }
 
-        let death = {
-            let mut pinned = Pin::from(death.write(
-                // SAFETY: `init` is called below.
-                unsafe { NodeDeath::new(info.node_ref.node.clone(), self.clone(), cookie) },
-            ));
-            pinned.as_mut().init();
-            Arc::<NodeDeath>::from(pinned)
-        };
+        let death = Arc::<NodeDeath>::from(
+            death
+                .pin_init_now::<core::convert::Infallible>(NodeDeath::new(
+                    info.node_ref.node.clone(),
+                    self.clone(),
+                    cookie,
+                ))
+                .map_err(|(i, _)| i)?,
+        );
 
         info.death = Some(death.clone());
 

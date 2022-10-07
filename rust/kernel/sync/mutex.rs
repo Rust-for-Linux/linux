@@ -4,15 +4,22 @@
 //!
 //! This module allows Rust code to use the kernel's [`struct mutex`].
 
-use super::{Guard, Lock, LockClassKey, LockFactory, LockIniter, WriteLock};
-use crate::{bindings, str::CStr, Opaque};
-use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
+use super::{Guard, Lock, LockClassKey, LockFactory, WriteLock};
+use crate::{
+    bindings,
+    init::{self, PinInit},
+    macros::pin_project,
+    pin_init,
+    str::CStr,
+    Opaque,
+};
+use core::{cell::UnsafeCell, marker::PhantomPinned};
 
 /// Safely initialises a [`Mutex`] with the given name, generating a new lock class.
 #[macro_export]
-macro_rules! mutex_init {
-    ($mutex:expr, $name:literal) => {
-        $crate::init_with_lockdep!($mutex, $name)
+macro_rules! new_mutex {
+    ($value:expr, $name:literal) => {
+        $crate::new_with_lockdep!($crate::sync::Mutex<_>, $name, $value)
     };
 }
 
@@ -20,19 +27,22 @@ macro_rules! mutex_init {
 /// only one at a time is allowed to progress, the others will block (sleep) until the mutex is
 /// unlocked, at which point another thread will be allowed to wake up and make progress.
 ///
-/// A [`Mutex`] must first be initialised with a call to [`Mutex::init_lock`] before it can be
-/// used. The [`mutex_init`] macro is provided to automatically assign a new lock class to a mutex
-/// instance.
+/// A [`Mutex`] is created using the [initialization API][init]. You can either call the `new`
+/// function or use the [`new_mutex!`] macro which automatically creates the [`LockClassKey`] for you.
 ///
 /// Since it may block, [`Mutex`] needs to be used with care in atomic contexts.
 ///
 /// [`struct mutex`]: ../../../include/linux/mutex.h
+/// [init]: ../init/index.html
+#[pin_project]
 pub struct Mutex<T: ?Sized> {
     /// The kernel `struct mutex` object.
+    #[pin]
     mutex: Opaque<bindings::mutex>,
 
     /// A mutex needs to be pinned because it contains a [`struct list_head`] that is
     /// self-referential, so it cannot be safely moved once it is initialised.
+    #[pin]
     _pin: PhantomPinned,
 
     /// The data protected by the mutex.
@@ -49,16 +59,46 @@ unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 
 impl<T> Mutex<T> {
     /// Constructs a new mutex.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call [`Mutex::init_lock`] before using the mutex.
-    pub const unsafe fn new(t: T) -> Self {
-        Self {
-            mutex: Opaque::uninit(),
-            data: UnsafeCell::new(t),
-            _pin: PhantomPinned,
+    #[allow(clippy::new_ret_no_self)]
+    pub const fn new(
+        data: T,
+        name: &'static CStr,
+        key: &'static LockClassKey,
+    ) -> impl PinInit<Self> {
+        MutexInit { data, name, key }
+    }
+}
+
+#[doc(hidden)]
+pub struct MutexInit<T> {
+    name: &'static CStr,
+    key: &'static LockClassKey,
+    data: T,
+}
+
+unsafe impl<T> PinInit<Mutex<T>> for MutexInit<T> {
+    unsafe fn __pinned_init(
+        self,
+        slot: *mut Mutex<T>,
+    ) -> core::result::Result<(), core::convert::Infallible> {
+        fn init_mutex(
+            name: &'static CStr,
+            key: &'static LockClassKey,
+        ) -> impl PinInit<Opaque<bindings::mutex>> {
+            let init = move |slot: *mut Opaque<bindings::mutex>| unsafe {
+                bindings::__mutex_init(Opaque::raw_get(slot), name.as_char_ptr(), key.get());
+                Ok(())
+            };
+            // SAFETY: mutex has been initialized
+            unsafe { init::pin_init_from_closure(init) }
         }
+        let init = pin_init!(Mutex<T> {
+            mutex: init_mutex(self.name, self.key),
+            data: UnsafeCell::new(self.data),
+            _pin: PhantomPinned,
+        });
+        // SAFETY: we are inside of an initializer
+        unsafe { init.__pinned_init(slot) }
     }
 }
 
@@ -74,16 +114,11 @@ impl<T: ?Sized> Mutex<T> {
 
 impl<T> LockFactory for Mutex<T> {
     type LockedType<U> = Mutex<U>;
+    type Error = core::convert::Infallible;
+    type Init<U> = MutexInit<U>;
 
-    unsafe fn new_lock<U>(data: U) -> Mutex<U> {
-        // SAFETY: The safety requirements of `new_lock` also require that `init_lock` be called.
-        unsafe { Mutex::new(data) }
-    }
-}
-
-impl<T> LockIniter for Mutex<T> {
-    fn init_lock(self: Pin<&mut Self>, name: &'static CStr, key: &'static LockClassKey) {
-        unsafe { bindings::__mutex_init(self.mutex.get(), name.as_char_ptr(), key.get()) };
+    fn new_lock<U>(data: U, name: &'static CStr, key: &'static LockClassKey) -> Self::Init<U> {
+        MutexInit { data, name, key }
     }
 }
 
@@ -120,7 +155,7 @@ unsafe impl<T: ?Sized> Lock for Mutex<T> {
 ///
 /// ```
 /// # use kernel::sync::RevocableMutex;
-/// # use kernel::revocable_init;
+/// # use kernel::{new_revocable, stack_init};
 /// # use core::pin::Pin;
 ///
 /// struct Example {
@@ -133,11 +168,8 @@ unsafe impl<T: ?Sized> Lock for Mutex<T> {
 ///     Some(guard.a + guard.b)
 /// }
 ///
-/// // SAFETY: We call `revocable_init` immediately below.
-/// let mut v = unsafe { RevocableMutex::new(Example { a: 10, b: 20 }) };
-/// // SAFETY: We never move out of `v`.
-/// let pinned = unsafe { Pin::new_unchecked(&mut v) };
-/// revocable_init!(pinned, "example::v");
+/// stack_init!(let v: RevocableMutex<_> = new_revocable!(Example { a: 10, b: 20 }, "example::v"));
+/// let v = v.unwrap();
 /// assert_eq!(read_sum(&v), Some(30));
 /// v.revoke();
 /// assert_eq!(read_sum(&v), None);

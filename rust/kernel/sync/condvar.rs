@@ -5,15 +5,23 @@
 //! This module allows Rust code to use the kernel's [`struct wait_queue_head`] as a condition
 //! variable.
 
-use super::{Guard, Lock, LockClassKey, LockInfo, NeedsLockClass};
-use crate::{bindings, str::CStr, task::Task, Opaque};
-use core::{marker::PhantomPinned, pin::Pin};
+use super::{Guard, Lock, LockClassKey, LockInfo};
+use crate::{
+    bindings,
+    init::{self, PinInit},
+    macros::pin_project,
+    pin_init,
+    str::CStr,
+    task::Task,
+    Opaque,
+};
+use core::marker::PhantomPinned;
 
 /// Safely initialises a [`CondVar`] with the given name, generating a new lock class.
 #[macro_export]
-macro_rules! condvar_init {
-    ($condvar:expr, $name:literal) => {
-        $crate::init_with_lockdep!($condvar, $name)
+macro_rules! new_condvar {
+    ($name:literal) => {
+        $crate::new_with_lockdep!($crate::sync::CondVar, $name)
     };
 }
 
@@ -25,8 +33,14 @@ const POLLFREE: u32 = 0x4000;
 /// it wakes up when notified by another thread (via [`CondVar::notify_one`] or
 /// [`CondVar::notify_all`]) or because the thread received a signal.
 ///
+/// A [`CondVar`] is created using the [initialization API][init]. You can either call the `new`
+/// function or use the [`new_condvar!`] macro which automatically creates the [`LockClassKey`] for you.
+///
 /// [`struct wait_queue_head`]: ../../../include/linux/wait.h
+/// [init]: ../init/index.html
+#[pin_project]
 pub struct CondVar {
+    #[pin]
     pub(crate) wait_list: Opaque<bindings::wait_queue_head>,
 
     /// A condvar needs to be pinned because it contains a [`struct list_head`] that is
@@ -44,15 +58,27 @@ unsafe impl Sync for CondVar {}
 
 impl CondVar {
     /// Constructs a new conditional variable.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call `CondVar::init` before using the conditional variable.
-    pub const unsafe fn new() -> Self {
-        Self {
-            wait_list: Opaque::uninit(),
-            _pin: PhantomPinned,
+    #[allow(clippy::new_ret_no_self)]
+    pub const fn new(name: &'static CStr, key: &'static LockClassKey) -> impl PinInit<Self> {
+        fn init_wait_list(
+            name: &'static CStr,
+            key: &'static LockClassKey,
+        ) -> impl PinInit<Opaque<bindings::wait_queue_head>> {
+            let init = move |place: *mut Opaque<bindings::wait_queue_head>| unsafe {
+                bindings::__init_waitqueue_head(
+                    Opaque::raw_get(place),
+                    name.as_char_ptr(),
+                    key.get(),
+                );
+                Ok(())
+            };
+            // SAFETY: waitqueue has been initialized
+            unsafe { init::pin_init_from_closure(init) }
         }
+        pin_init!(Self {
+            wait_list: init_wait_list(name, key),
+            _pin: PhantomPinned,
+        })
     }
 
     /// Atomically releases the given lock (whose ownership is proven by the guard) and puts the
@@ -123,18 +149,5 @@ impl CondVar {
     /// threads that use `epoll`.
     pub fn free_waiters(&self) {
         self.notify(1, bindings::POLLHUP | POLLFREE);
-    }
-}
-
-impl NeedsLockClass for CondVar {
-    fn init(
-        self: Pin<&mut Self>,
-        name: &'static CStr,
-        key: &'static LockClassKey,
-        _: &'static LockClassKey,
-    ) {
-        unsafe {
-            bindings::__init_waitqueue_head(self.wait_list.get(), name.as_char_ptr(), key.get())
-        };
     }
 }

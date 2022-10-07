@@ -46,10 +46,15 @@
 //! When the waiter queue is non-empty, unlocking the mutex always results in the first waiter being
 //! popped form the queue and awakened.
 
-use super::{mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter};
-use crate::{bindings, str::CStr, Opaque};
+use super::{mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory};
+use crate::{
+    bindings,
+    init::{Init, PinInit},
+    str::CStr,
+    Opaque,
+};
+use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use core::{cell::UnsafeCell, pin::Pin};
 
 /// The value that is OR'd into the [`Mutex::waiter_stack`] when the mutex is locked.
 const LOCKED: usize = 1;
@@ -144,16 +149,39 @@ impl<T: ?Sized> Mutex<T> {
     }
 }
 
-impl<T> LockFactory for Mutex<T> {
-    type LockedType<U> = Mutex<U>;
+#[doc(hidden)]
+pub struct MutexInit<T> {
+    data: T,
+}
 
-    unsafe fn new_lock<U>(data: U) -> Mutex<U> {
-        Mutex::new(data)
+unsafe impl<T> PinInit<Mutex<T>> for MutexInit<T> {
+    unsafe fn __pinned_init(
+        self,
+        slot: *mut Mutex<T>,
+    ) -> core::result::Result<(), core::convert::Infallible> {
+        unsafe { self.__init(slot) }
     }
 }
 
-impl<T> LockIniter for Mutex<T> {
-    fn init_lock(self: Pin<&mut Self>, _name: &'static CStr, _key: &'static LockClassKey) {}
+unsafe impl<T> Init<Mutex<T>> for MutexInit<T> {
+    unsafe fn __init(
+        self,
+        slot: *mut Mutex<T>,
+    ) -> core::result::Result<(), core::convert::Infallible> {
+        // SAFETY: pointer is valid
+        unsafe { slot.write(Mutex::new(self.data)) };
+        Ok(())
+    }
+}
+
+impl<T> LockFactory for Mutex<T> {
+    type LockedType<U> = Mutex<U>;
+    type Error = core::convert::Infallible;
+    type Init<U> = MutexInit<U>;
+
+    fn new_lock<U>(data: U, _: &'static CStr, _: &'static LockClassKey) -> Self::Init<U> {
+        MutexInit { data }
+    }
 }
 
 // SAFETY: The mutex implementation ensures mutual exclusion.

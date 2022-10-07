@@ -516,6 +516,33 @@ impl<T> UniqueArc<MaybeUninit<T>> {
         unsafe { self.assume_init() }
     }
 
+    /// Initialize the value after creating the `UniqueArc`.
+    #[allow(clippy::type_complexity)]
+    pub fn pin_init_now<E>(
+        mut self,
+        init: impl PinInit<T, E>,
+    ) -> core::result::Result<Pin<UniqueArc<T>>, (E, UniqueArc<MaybeUninit<T>>)> {
+        unsafe {
+            match init.__pinned_init(self.deref_mut().as_mut_ptr()) {
+                Ok(()) => Ok(Pin::from(self.assume_init())),
+                Err(e) => Err((e, self)),
+            }
+        }
+    }
+
+    /// Initialize the value after creating the `UniqueArc`.
+    pub fn init_now<E>(
+        mut self,
+        init: impl Init<T, E>,
+    ) -> core::result::Result<UniqueArc<T>, (E, UniqueArc<MaybeUninit<T>>)> {
+        unsafe {
+            match init.__init(self.deref_mut().as_mut_ptr()) {
+                Ok(()) => Ok(self.assume_init()),
+                Err(e) => Err((e, self)),
+            }
+        }
+    }
+
     /// Unsafely assume that `self` is initialized.
     ///
     /// # Safety

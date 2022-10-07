@@ -8,21 +8,19 @@
 //! # Examples
 //!
 //! ```
-//! # use kernel::mutex_init;
+//! # use kernel::new_mutex;
 //! # use kernel::sync::Mutex;
 //! # use alloc::boxed::Box;
 //! # use core::pin::Pin;
-//! // SAFETY: `init` is called below.
-//! let mut data = Pin::from(Box::try_new(unsafe { Mutex::new(10) }).unwrap());
-//! mutex_init!(data.as_mut(), "test::data");
+//! let data = Box::pin_init(new_mutex!(10, "test::data")).unwrap();
 //!
 //! assert_eq!(*data.lock(), 10);
 //! *data.lock() = 20;
 //! assert_eq!(*data.lock(), 20);
 //! ```
 
-use crate::{bindings, str::CStr};
-use core::{cell::UnsafeCell, mem::MaybeUninit, pin::Pin};
+use crate::{bindings, init::PinInit};
+use core::{cell::UnsafeCell, mem::MaybeUninit};
 
 mod arc;
 mod condvar;
@@ -39,7 +37,7 @@ mod spinlock;
 
 pub use arc::{new_refcount, Arc, ArcBorrow, StaticArc, UniqueArc};
 pub use condvar::CondVar;
-pub use guard::{Guard, Lock, LockFactory, LockInfo, LockIniter, ReadLock, WriteLock};
+pub use guard::{Guard, Lock, LockFactory, LockInfo, ReadLock, WriteLock};
 pub use locked_by::LockedBy;
 pub use mutex::{Mutex, RevocableMutex, RevocableMutexGuard};
 pub use nowait::{NoWaitLock, NoWaitLockGuard};
@@ -72,31 +70,12 @@ impl LockClassKey {
 /// specialised name that uses this macro.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! init_with_lockdep {
-    ($obj:expr, $name:expr) => {{
+macro_rules! new_with_lockdep {
+    ($what:ty,  $name:expr $(, $obj:expr $(,)?)?) => {{
         static CLASS1: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
-        static CLASS2: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
-        let obj = $obj;
         let name = $crate::c_str!($name);
-        $crate::sync::NeedsLockClass::init(obj, name, &CLASS1, &CLASS2)
+        <$what>::new($($obj,)? name, &CLASS1)
     }};
-}
-
-/// A trait for types that need a lock class during initialisation.
-///
-/// Implementers of this trait benefit from the [`init_with_lockdep`] macro that generates a new
-/// class for each initialisation call site.
-pub trait NeedsLockClass {
-    /// Initialises the type instance so that it can be safely used.
-    ///
-    /// Callers are encouraged to use the [`init_with_lockdep`] macro as it automatically creates a
-    /// new lock class on each usage.
-    fn init(
-        self: Pin<&mut Self>,
-        name: &'static CStr,
-        key1: &'static LockClassKey,
-        key2: &'static LockClassKey,
-    );
 }
 
 /// Automatically initialises static instances of synchronisation primitives.
@@ -131,35 +110,70 @@ macro_rules! init_static_sync {
     ($($(#[$outer:meta])* $v:vis static $id:ident : $t:ty $(= $value:expr)?;)*) => {
         $(
             $(#[$outer])*
-            $v static $id: $t = {
+            $v static $id: $crate::sync::StaticInit<$t> = {
                 #[link_section = ".init_array"]
                 #[used]
                 static TMP: extern "C" fn() = {
                     extern "C" fn constructor() {
                         // SAFETY: This locally-defined function is only called from a constructor,
                         // which guarantees that `$id` is not accessible from other threads
-                        // concurrently.
-                        #[allow(clippy::cast_ref_to_mut)]
-                        let mutable = unsafe { &mut *(&$id as *const _ as *mut $t) };
-                        // SAFETY: It's a shared static, so it cannot move.
-                        let pinned = unsafe { core::pin::Pin::new_unchecked(mutable) };
-                        $crate::init_with_lockdep!(pinned, stringify!($id));
+                        // concurrently and this is only called once.
+                        unsafe { $crate::sync::StaticInit::init(&$id, $crate::new_with_lockdep!($t, stringify!($id) $(, $value)? )) };
                     }
                     constructor
                 };
-                $crate::init_static_sync!(@call_new $t, $($value)?)
+                // SAFETY: the initializer is called above in the ctor
+                unsafe { $crate::sync::StaticInit::uninit() }
             };
         )*
     };
-    (@call_new $t:ty, $value:expr) => {{
-        let v = $value;
-        // SAFETY: the initialisation function is called by the constructor above.
-        unsafe { <$t>::new(v) }
-    }};
-    (@call_new $t:ty,) => {
-        // SAFETY: the initialisation function is called by the constructor above.
-        unsafe { <$t>::new() }
-    };
+}
+
+/// A statically initialized value.
+pub struct StaticInit<T> {
+    inner: MaybeUninit<UnsafeCell<T>>,
+}
+
+unsafe impl<T: Sync> Sync for StaticInit<T> {}
+unsafe impl<T: Send> Send for StaticInit<T> {}
+
+impl<T> StaticInit<T> {
+    /// Creates a new `StaticInit` that is uninitialized.
+    ///
+    /// # Safety
+    ///
+    /// The caller calls `Self::init` exactly once before using this value.
+    pub const unsafe fn uninit() -> Self {
+        Self {
+            inner: MaybeUninit::uninit(),
+        }
+    }
+
+    /// Initializes the contents of `self`.
+    ///
+    /// # Safety
+    ///
+    /// The caller calls this function exactly once and before any other function (even implicitly
+    /// derefing) of `self` is called.
+    pub unsafe fn init<E>(&self, init: impl PinInit<T, E>)
+    where
+        E: Into<core::convert::Infallible>,
+    {
+        unsafe {
+            let ptr = UnsafeCell::raw_get(self.inner.as_ptr());
+            match init.__pinned_init(ptr).map_err(|e| e.into()) {
+                Ok(()) => {}
+                Err(e) => match e {},
+            }
+        }
+    }
+}
+
+impl<T> core::ops::Deref for StaticInit<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.inner.assume_init_ref().get() }
+    }
 }
 
 /// Reschedules the caller's task if needed.

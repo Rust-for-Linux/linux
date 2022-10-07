@@ -7,6 +7,8 @@ use kernel::{
     io_buffer::IoBufferWriter,
     linked_list::List,
     linked_list::{GetLinks, Links},
+    macros::pinned_drop,
+    new_spinlock,
     prelude::*,
     sync::{Arc, SpinLock, UniqueArc},
     user_ptr::UserSlicePtrWriter,
@@ -26,7 +28,9 @@ struct TransactionInner {
     file_list: List<Box<FileInfo>>,
 }
 
+#[pin_project(PinnedDrop)]
 pub(crate) struct Transaction {
+    #[pin]
     inner: SpinLock<TransactionInner>,
     // TODO: Node should be released when the buffer is released.
     node_ref: Option<NodeRef>,
@@ -55,26 +59,20 @@ impl Transaction {
         let data_address = alloc.ptr;
         let file_list = alloc.take_file_list();
         alloc.keep_alive();
-        let mut tr = Pin::from(UniqueArc::try_new(Self {
-            // SAFETY: `spinlock_init` is called below.
-            inner: unsafe { SpinLock::new(TransactionInner { file_list }) },
+        let tr = UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+            inner: new_spinlock!(TransactionInner { file_list }, "Transaction::inner"),
             node_ref: Some(node_ref),
             stack_next,
             from: from.clone(),
             to,
             code: tr.code,
             flags: tr.flags,
-            data_size: tr.data_size as _,
+            data_size: tr.data_size as usize,
             data_address,
-            offsets_size: tr.offsets_size as _,
+            offsets_size: tr.offsets_size as usize,
             links: Links::new(),
             free_allocation: AtomicBool::new(true),
-        })?);
-
-        // SAFETY: `inner` is pinned when `tr` is.
-        let pinned = unsafe { tr.as_mut().map_unchecked_mut(|t| &mut t.inner) };
-        kernel::spinlock_init!(pinned, "Transaction::inner");
-
+        }))?;
         Ok(tr.into())
     }
 
@@ -88,26 +86,20 @@ impl Transaction {
         let data_address = alloc.ptr;
         let file_list = alloc.take_file_list();
         alloc.keep_alive();
-        let mut tr = Pin::from(UniqueArc::try_new(Self {
-            // SAFETY: `spinlock_init` is called below.
-            inner: unsafe { SpinLock::new(TransactionInner { file_list }) },
+        let tr = UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+            inner: new_spinlock!(TransactionInner { file_list }, "Transaction::inner"),
             node_ref: None,
             stack_next: None,
             from: from.clone(),
             to,
             code: tr.code,
             flags: tr.flags,
-            data_size: tr.data_size as _,
+            data_size: tr.data_size as usize,
             data_address,
-            offsets_size: tr.offsets_size as _,
+            offsets_size: tr.offsets_size as usize,
             links: Links::new(),
             free_allocation: AtomicBool::new(true),
-        })?);
-
-        // SAFETY: `inner` is pinned when `tr` is.
-        let pinned = unsafe { tr.as_mut().map_unchecked_mut(|t| &mut t.inner) };
-        kernel::spinlock_init!(pinned, "Transaction::inner");
-
+        }))?;
         Ok(tr.into())
     }
 
@@ -285,8 +277,9 @@ impl DeliverToRead for Transaction {
     }
 }
 
-impl Drop for Transaction {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl PinnedDrop for Transaction {
+    fn drop(self: Pin<&mut Self>) {
         if self.free_allocation.load(Ordering::Relaxed) {
             self.to.buffer_get(self.data_address);
         }

@@ -2,8 +2,10 @@
 
 use core::sync::atomic::{AtomicU64, Ordering};
 use kernel::{
+    init::PinInit,
     io_buffer::IoBufferWriter,
     linked_list::{GetLinks, Links, List},
+    new_spinlock,
     prelude::*,
     sync::{Arc, Guard, LockedBy, Mutex, SpinLock},
     user_ptr::UserSlicePtrWriter,
@@ -54,6 +56,7 @@ struct NodeDeathInner {
     aborted: bool,
 }
 
+#[pin_project]
 pub(crate) struct NodeDeath {
     node: Arc<Node>,
     process: Arc<Process>,
@@ -63,37 +66,30 @@ pub(crate) struct NodeDeath {
     // TODO: Add the moment we're using this for two lists, which isn't safe because we want to
     // remove from the list without knowing the list it's in. We need to separate this out.
     death_links: Links<NodeDeath>,
+    #[pin]
     inner: SpinLock<NodeDeathInner>,
 }
 
 impl NodeDeath {
     /// Constructs a new node death notification object.
-    ///
-    /// # Safety
-    ///
-    /// The caller must call `NodeDeath::init` before using the notification object.
-    pub(crate) unsafe fn new(node: Arc<Node>, process: Arc<Process>, cookie: usize) -> Self {
-        Self {
+    #[allow(clippy::new_ret_no_self)]
+    pub(crate) fn new(node: Arc<Node>, process: Arc<Process>, cookie: usize) -> impl PinInit<Self> {
+        pin_init!(Self {
             node,
             process,
             cookie,
             work_links: Links::new(),
             death_links: Links::new(),
-            inner: unsafe {
-                SpinLock::new(NodeDeathInner {
+            inner: new_spinlock!(
+                NodeDeathInner {
                     dead: false,
                     cleared: false,
                     notification_done: false,
                     aborted: false,
-                })
-            },
-        }
-    }
-
-    pub(crate) fn init(self: Pin<&mut Self>) {
-        // SAFETY: `inner` is pinned when `self` is.
-        let inner = unsafe { self.map_unchecked_mut(|n| &mut n.inner) };
-        kernel::spinlock_init!(inner, "NodeDeath::inner");
+                },
+                "NodeDeath::inner"
+            ),
+        })
     }
 
     /// Sets the cleared flag to `true`.

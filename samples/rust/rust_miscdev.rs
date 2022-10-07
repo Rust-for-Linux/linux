@@ -6,7 +6,8 @@ use kernel::prelude::*;
 use kernel::{
     file::{self, File},
     io_buffer::{IoBufferReader, IoBufferWriter},
-    miscdev,
+    macros::pin_project,
+    miscdev, new_condvar, new_mutex, pin_init,
     sync::{Arc, ArcBorrow, CondVar, Mutex, UniqueArc},
 };
 
@@ -24,29 +25,23 @@ struct SharedStateInner {
     token_count: usize,
 }
 
+#[pin_project]
 struct SharedState {
+    #[pin]
     state_changed: CondVar,
+    #[pin]
     inner: Mutex<SharedStateInner>,
 }
 
 impl SharedState {
     fn try_new() -> Result<Arc<Self>> {
-        let mut state = Pin::from(UniqueArc::try_new(Self {
-            // SAFETY: `condvar_init!` is called below.
-            state_changed: unsafe { CondVar::new() },
-            // SAFETY: `mutex_init!` is called below.
-            inner: unsafe { Mutex::new(SharedStateInner { token_count: 0 }) },
-        })?);
-
-        // SAFETY: `state_changed` is pinned when `state` is.
-        let pinned = unsafe { state.as_mut().map_unchecked_mut(|s| &mut s.state_changed) };
-        kernel::condvar_init!(pinned, "SharedState::state_changed");
-
-        // SAFETY: `inner` is pinned when `state` is.
-        let pinned = unsafe { state.as_mut().map_unchecked_mut(|s| &mut s.inner) };
-        kernel::mutex_init!(pinned, "SharedState::inner");
-
-        Ok(state.into())
+        Ok(
+            UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+                state_changed: new_condvar!("SharedState::state_changed"),
+                inner: new_mutex!(SharedStateInner { token_count: 0 }, "SharedState::inner"),
+            }))?
+            .into(),
+        )
     }
 }
 

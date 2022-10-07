@@ -9,9 +9,12 @@ use crate::{clk::Clk, error::from_kernel_err_ptr};
 
 use crate::{
     bindings,
+    macros::pin_project,
+    pin_init,
+    prelude::*,
     revocable::{Revocable, RevocableGuard},
     str::CStr,
-    sync::{LockClassKey, NeedsLockClass, RevocableMutex, RevocableMutexGuard, UniqueArc},
+    sync::{LockClassKey, RevocableMutex, RevocableMutexGuard, UniqueArc},
     Result,
 };
 use core::{
@@ -246,7 +249,9 @@ impl Drop for Device {
 ///
 /// This struct implements the `DeviceRemoval` trait so that it can clean resources up even if not
 /// explicitly called by the device drivers.
+#[pin_project]
 pub struct Data<T, U, V> {
+    #[pin]
     registrations: RevocableMutex<T>,
     resources: Revocable<U>,
     general: V,
@@ -258,12 +263,11 @@ pub struct Data<T, U, V> {
 macro_rules! new_device_data {
     ($reg:expr, $res:expr, $gen:expr, $name:literal) => {{
         static CLASS1: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
-        static CLASS2: $crate::sync::LockClassKey = $crate::sync::LockClassKey::new();
         let regs = $reg;
         let res = $res;
         let gen = $gen;
         let name = $crate::c_str!($name);
-        $crate::device::Data::try_new(regs, res, gen, name, &CLASS1, &CLASS2)
+        $crate::device::Data::try_new(regs, res, gen, name, &CLASS1)
     }};
 }
 
@@ -278,19 +282,12 @@ impl<T, U, V> Data<T, U, V> {
         general: V,
         name: &'static CStr,
         key1: &'static LockClassKey,
-        key2: &'static LockClassKey,
     ) -> Result<Pin<UniqueArc<Self>>> {
-        let mut ret = Pin::from(UniqueArc::try_new(Self {
-            // SAFETY: We call `RevocableMutex::init` below.
-            registrations: unsafe { RevocableMutex::new(registrations) },
+        UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+            registrations: RevocableMutex::new(registrations, name, key1),
             resources: Revocable::new(resources),
             general,
-        })?);
-
-        // SAFETY: `Data::registrations` is pinned when `Data` is.
-        let pinned = unsafe { ret.as_mut().map_unchecked_mut(|d| &mut d.registrations) };
-        pinned.init(name, key1, key2);
-        Ok(ret)
+        }))
     }
 
     /// Returns the resources if they're still available.

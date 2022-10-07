@@ -10,9 +10,10 @@ use kernel::{
     file::{File, PollTable},
     io_buffer::{IoBufferReader, IoBufferWriter},
     linked_list::{GetLinks, Links, List},
+    new_condvar, new_spinlock,
     prelude::*,
     security,
-    sync::{Arc, CondVar, SpinLock, UniqueArc},
+    sync::{Arc, CondVar, SpinLock},
     user_ptr::{UserSlicePtr, UserSlicePtrWriter},
     Either,
 };
@@ -229,10 +230,13 @@ impl InnerThread {
     }
 }
 
+#[pin_project]
 pub(crate) struct Thread {
     pub(crate) id: i32,
     pub(crate) process: Arc<Process>,
+    #[pin]
     inner: SpinLock<InnerThread>,
+    #[pin]
     work_condvar: CondVar,
     links: Links<Thread>,
 }
@@ -241,23 +245,13 @@ impl Thread {
     pub(crate) fn new(id: i32, process: Arc<Process>) -> Result<Arc<Self>> {
         let return_work = Arc::try_new(ThreadError::new(InnerThread::set_return_work))?;
         let reply_work = Arc::try_new(ThreadError::new(InnerThread::set_reply_work))?;
-        let mut thread = Pin::from(UniqueArc::try_new(Self {
+        let thread = Arc::pin_init::<core::convert::Infallible>(pin_init!(Self {
             id,
             process,
-            // SAFETY: `inner` is initialised in the call to `spinlock_init` below.
-            inner: unsafe { SpinLock::new(InnerThread::new()) },
-            // SAFETY: `work_condvar` is initialised in the call to `condvar_init` below.
-            work_condvar: unsafe { CondVar::new() },
+            inner: new_spinlock!(InnerThread::new(), "Thread::inner"),
+            work_condvar: new_condvar!("Thread::work_condvar"),
             links: Links::new(),
-        })?);
-
-        // SAFETY: `inner` is pinned when `thread` is.
-        let inner = unsafe { thread.as_mut().map_unchecked_mut(|t| &mut t.inner) };
-        kernel::spinlock_init!(inner, "Thread::inner");
-
-        // SAFETY: `work_condvar` is pinned when `thread` is.
-        let condvar = unsafe { thread.as_mut().map_unchecked_mut(|t| &mut t.work_condvar) };
-        kernel::condvar_init!(condvar, "Thread::work_condvar");
+        }))?;
 
         {
             let mut inner = thread.inner.lock();
@@ -265,7 +259,7 @@ impl Thread {
             inner.set_return_work(return_work);
         }
 
-        Ok(thread.into())
+        Ok(thread)
     }
 
     pub(crate) fn set_current_transaction(&self, transaction: Arc<Transaction>) {
