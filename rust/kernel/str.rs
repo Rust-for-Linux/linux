@@ -602,6 +602,8 @@ macro_rules! fmt {
 ///
 /// ```
 /// # use kernel::str::trim_whitespace;
+/// assert_eq!(trim_whitespace(b""       ), b"");
+/// assert_eq!(trim_whitespace(b"       "), b"");
 /// assert_eq!(trim_whitespace(b"foo    "), b"foo");
 /// assert_eq!(trim_whitespace(b"    foo"), b"foo");
 /// assert_eq!(trim_whitespace(b"  foo  "), b"foo");
