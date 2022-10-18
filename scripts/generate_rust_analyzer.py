@@ -65,7 +65,7 @@ def generate_crates(srctree, objtree, sysroot_src):
         [],
         is_proc_macro=True,
     )
-    crates[-1]["proc_macro_dylib_path"] = "rust/libmacros.so"
+    crates[-1]["proc_macro_dylib_path"] = str((objtree / "rust/libmacros.so").resolve(True))
 
     append_crate(
         "build_error",
