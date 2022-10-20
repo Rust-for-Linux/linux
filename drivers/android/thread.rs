@@ -245,7 +245,7 @@ impl Thread {
     pub(crate) fn new(id: i32, process: Arc<Process>) -> Result<Arc<Self>> {
         let return_work = Arc::try_new(ThreadError::new(InnerThread::set_return_work))?;
         let reply_work = Arc::try_new(ThreadError::new(InnerThread::set_reply_work))?;
-        let thread = Arc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+        let thread = Arc::pin_init(pin_init!(Self {
             id,
             process,
             inner: new_spinlock!(InnerThread::new(), "Thread::inner"),

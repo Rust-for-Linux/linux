@@ -271,7 +271,7 @@ unsafe impl Sync for Process {}
 
 impl Process {
     fn new(ctx: Arc<Context>, cred: ARef<Credential>) -> Result<Arc<Self>> {
-        Arc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+        Arc::pin_init(pin_init!(Self {
             ctx,
             cred,
             task: ARef::from(Task::current().group_leader()),

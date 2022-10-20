@@ -283,7 +283,7 @@ impl<T, U, V> Data<T, U, V> {
         name: &'static CStr,
         key1: &'static LockClassKey,
     ) -> Result<Pin<UniqueArc<Self>>> {
-        UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+        UniqueArc::pin_init(pin_init!(Self {
             registrations: RevocableMutex::new(registrations, name, key1),
             resources: Revocable::new(resources),
             general,

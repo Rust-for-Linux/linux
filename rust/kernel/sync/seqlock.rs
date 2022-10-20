@@ -12,9 +12,8 @@ use crate::{
     bindings,
     init::{self, PinInit},
     macros::pin_project,
-    pin_init,
     str::CStr,
-    Opaque,
+    try_pin_init, Opaque,
 };
 use core::{cell::UnsafeCell, marker::PhantomPinned, ops::Deref};
 
@@ -111,11 +110,11 @@ impl<L: Lock> SeqLock<L> {
             };
             unsafe { init::pin_init_from_closure(init) }
         }
-        pin_init!(Self {
+        try_pin_init!(Self {
             _p: PhantomPinned,
             count: init_count(name, key2),
             write_lock: L::new_lock(data, name, key1),
-        })
+        }? L::Error)
     }
 }
 

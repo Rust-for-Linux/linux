@@ -29,7 +29,7 @@ unsafe impl Sync for Context {}
 
 impl Context {
     pub(crate) fn new() -> Result<Arc<Self>> {
-        Arc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+        Arc::pin_init(pin_init!(Self {
             manager: new_mutex!(
                 Manager {
                     node: None,

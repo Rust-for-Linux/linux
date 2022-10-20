@@ -112,7 +112,7 @@ impl kernel::Module for RustSemaphore {
     fn init(name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust semaphore sample (init)\n");
 
-        let sema = UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Semaphore {
+        let sema = UniqueArc::pin_init(pin_init!(Semaphore {
             changed: new_condvar!("Semaphore::changed"),
             inner: new_mutex!(
                 SemaphoreInner {

@@ -5,10 +5,9 @@
 use crate::{
     init::PinInit,
     macros::pin_project,
-    pin_init,
     str::CStr,
     sync::{Guard, Lock, LockClassKey, LockFactory, LockInfo, ReadLock, WriteLock},
-    True,
+    try_pin_init, True,
 };
 use core::{
     mem::MaybeUninit,
@@ -124,9 +123,9 @@ impl<F: LockFactory, T> Revocable<F, T> {
         name: &'static CStr,
         key: &'static LockClassKey,
     ) -> impl PinInit<Self, F::Error> {
-        pin_init!(Self {
+        try_pin_init!(Self {
             inner: F::new_lock(Inner::new(data), name, key),
-        })
+        }? F::Error)
     }
 }
 

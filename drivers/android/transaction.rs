@@ -59,7 +59,7 @@ impl Transaction {
         let data_address = alloc.ptr;
         let file_list = alloc.take_file_list();
         alloc.keep_alive();
-        let tr = UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+        let tr = UniqueArc::pin_init(pin_init!(Self {
             inner: new_spinlock!(TransactionInner { file_list }, "Transaction::inner"),
             node_ref: Some(node_ref),
             stack_next,
@@ -86,7 +86,7 @@ impl Transaction {
         let data_address = alloc.ptr;
         let file_list = alloc.take_file_list();
         alloc.keep_alive();
-        let tr = UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+        let tr = UniqueArc::pin_init(pin_init!(Self {
             inner: new_spinlock!(TransactionInner { file_list }, "Transaction::inner"),
             node_ref: None,
             stack_next: None,

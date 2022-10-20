@@ -40,7 +40,6 @@
 //!     a: new_mutex!(42, "Foo::a"),
 //!     b: 24,
 //! });
-//! # let foo: Result<Pin<Box<Foo>>> = Box::pin_init::<core::convert::Infallible>(foo);
 //! ```
 //!
 //! `foo` now is of the type `impl`[`PinInit<Foo>`]. We can now use any smart pointer that we like
@@ -60,7 +59,7 @@
 //! #     a: new_mutex!(42, "Foo::a"),
 //! #     b: 24,
 //! # });
-//! let foo: Result<Pin<Box<Foo>>> = Box::pin_init::<core::convert::Infallible>(foo);
+//! let foo: Result<Pin<Box<Foo>>> = Box::pin_init(foo);
 //! ```
 //!
 //! ## Using a function/macro that returns an initializer
@@ -76,7 +75,7 @@
 //! To declare an init macro/function you just return an `impl`[`PinInit<T, E>`]:
 //! ```rust
 //! # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-//! # use kernel::{sync::Mutex, prelude::*, new_mutex, init::PinInit};
+//! # use kernel::{sync::Mutex, prelude::*, new_mutex, init::PinInit, try_pin_init};
 //! #[pin_project]
 //! struct DriverData {
 //!     #[pin]
@@ -86,7 +85,7 @@
 //!
 //! impl DriverData {
 //!     fn new() -> impl PinInit<Self, Error> {
-//!         pin_init!(Self {
+//!         try_pin_init!(Self {
 //!             status: new_mutex!(0, "DriverData::status"),
 //!             buffer: Box::init(kernel::init::zeroed())?,
 //!         })
@@ -143,13 +142,14 @@ mod pinned_drop;
 ///
 /// let a = new_mutex!(42, "Foo::a");
 ///
-/// stack_init!(let foo = pin_init!(Foo {
+/// stack_init!(let foo =? pin_init!(Foo {
 ///     a,
 ///     b: Bar {
 ///         x: 64,
 ///     },
 /// }));
-/// let foo: Result<Pin<&mut Foo>> = foo;
+/// let foo: Pin<&mut Foo> = foo;
+/// # Ok::<(), core::convert::Infallible>(())
 /// ```
 #[macro_export]
 macro_rules! stack_init {
@@ -165,7 +165,10 @@ macro_rules! stack_init {
     };
 }
 
-/// Construct an in-place initializer for structs.
+/// Construct an in-place, pinned initializer for structs.
+///
+/// This macro defaults the error to [`Infallible`]. If you need [`Error`], then use
+/// [`try_pin_init!`].
 ///
 /// The syntax is identical to a normal struct initializer:
 ///
@@ -305,18 +308,205 @@ macro_rules! stack_init {
 ///     }
 /// }
 /// ```
+///
+/// [`try_pin_init!`]: kernel::try_pin_init
 #[macro_export]
 macro_rules! pin_init {
     ($(&$this:ident in)? $t:ident $(<$($generics:ty),* $(,)?>)? {
         $($field:ident $(: $val:expr)?),*
         $(,)?
     }) => {
-        $crate::pin_init!(@this($($this)?), @type_name($t $(<$($generics),*>)?), @typ($t $(<$($generics),*>)?), @fields($($field $(: $val)?),*))
+        $crate::try_pin_init!(
+            @this($($this)?),
+            @type_name($t),
+            @typ($t $(<$($generics),*>)?),
+            @fields($($field $(: $val)?),*),
+            @error(::core::convert::Infallible),
+        )
     };
-    (@this($($this:ident)?), @type_name($t:ident $(<$($generics:ty),*>)?), @typ($ty:ty), @fields($($field:ident $(: $val:expr)?),*)) => {{
+}
+
+/// Construct an in-place, pinned initializer for structs.
+///
+/// This macro defaults the error to [`Error`]. If you need [`Infallible`], then use
+/// [`pin_init!`]. If you want to specify a custom error, append `? <your-error>` after the struct
+/// initializer.
+///
+/// The syntax is identical to a normal struct initializer:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use core::pin::Pin;
+/// #[pin_project]
+/// struct Foo {
+///     a: usize,
+///     b: Bar,
+/// }
+///
+/// #[pin_project]
+/// struct Bar {
+///     x: u32,
+/// }
+///
+/// # fn demo() -> impl PinInit<Foo> {
+/// let a = 42;
+///
+/// let initializer = pin_init!(Foo {
+///     a,
+///     b: Bar {
+///         x: 64,
+///     },
+/// });
+/// # initializer }
+/// # Box::pin_init(demo()).unwrap();
+/// ```
+/// Arbitrary rust expressions can be used to set the value of a variable.
+///
+/// # Init-functions
+///
+/// When working with this library it is often desired to let others construct your types without
+/// giving access to all fields. This is where you would normally write a plain function `new`
+/// that would return a new instance of your type. With this library that is also possible, however
+/// there are a few extra things to keep in mind.
+///
+/// To create an initializer function, simple declare it like this:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, prelude::*, init::*};
+/// # use core::pin::Pin;
+/// # #[pin_project]
+/// # struct Foo {
+/// #     a: usize,
+/// #     b: Bar,
+/// # }
+/// # #[pin_project]
+/// # struct Bar {
+/// #     x: u32,
+/// # }
+///
+/// impl Foo {
+///     fn new() -> impl PinInit<Self> {
+///         pin_init!(Self {
+///             a: 42,
+///             b: Bar {
+///                 x: 64,
+///             },
+///         })
+///     }
+/// }
+/// ```
+///
+/// Users of `Foo` can now create it like this:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use core::pin::Pin;
+/// # #[pin_project]
+/// # struct Foo {
+/// #     a: usize,
+/// #     b: Bar,
+/// # }
+/// # #[pin_project]
+/// # struct Bar {
+/// #     x: u32,
+/// # }
+/// # impl Foo {
+/// #     fn new() -> impl PinInit<Self> {
+/// #         pin_init!(Self {
+/// #             a: 42,
+/// #             b: Bar {
+/// #                 x: 64,
+/// #             },
+/// #         })
+/// #     }
+/// # }
+/// let foo = Box::pin_init(Foo::new());
+/// ```
+///
+/// They can also easily embed it into their own `struct`s:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use core::pin::Pin;
+/// # #[pin_project]
+/// # struct Foo {
+/// #     a: usize,
+/// #     b: Bar,
+/// # }
+/// # #[pin_project]
+/// # struct Bar {
+/// #     x: u32,
+/// # }
+/// # impl Foo {
+/// #     fn new() -> impl PinInit<Self> {
+/// #         pin_init!(Self {
+/// #             a: 42,
+/// #             b: Bar {
+/// #                 x: 64,
+/// #             },
+/// #         })
+/// #     }
+/// # }
+/// #[pin_project]
+/// struct FooContainer {
+///     #[pin]
+///     foo1: Foo,
+///     #[pin]
+///     foo2: Foo,
+///     other: u32,
+/// }
+///
+/// impl FooContainer {
+///     fn new(other: u32) -> impl PinInit<Self> {
+///         pin_init!(Self {
+///             foo1: Foo::new(),
+///             foo2: Foo::new(),
+///             other,
+///         })
+///     }
+/// }
+/// ```
+
+#[macro_export]
+macro_rules! try_pin_init {
+    ($(&$this:ident in)? $t:ident $(<$($generics:ty),* $(,)?>)? {
+        $($field:ident $(: $val:expr)?),*
+        $(,)?
+    }) => {
+        $crate::try_pin_init!(
+            @this($($this)?),
+            @type_name($t),
+            @typ($t $(<$($generics),*>)?),
+            @fields($($field $(: $val)?),*),
+            @error($crate::error::Error),
+        )
+    };
+    ($(&$this:ident in)? $t:ident $(<$($generics:ty),* $(,)?>)? {
+        $($field:ident $(: $val:expr)?),*
+        $(,)?
+    }? $err:ty) => {
+        $crate::try_pin_init!(
+            @this($($this)?),
+            @type_name($t),
+            @typ($t $(<$($generics),*>)?),
+            @fields($($field $(: $val)?),*),
+            @error($err),
+        )
+    };
+    (
+        @this($($this:ident)?),
+        @type_name($t:ident),
+        @typ($ty:ty),
+        @fields($($field:ident $(: $val:expr)?),*),
+        @error($err:ty),
+    ) => {{
         // we do not want to allow arbitrary returns
         struct __InitOk;
-        let init = move |slot: *mut $ty| -> ::core::result::Result<__InitOk, _> {
+        let init = move |slot: *mut $ty| -> ::core::result::Result<__InitOk, $err> {
             {
                 // shadow the structure so it cannot be used to return early
                 struct __InitOk;
@@ -340,7 +530,7 @@ macro_rules! pin_init {
                 )*
                 #[allow(unreachable_code, clippy::diverging_sub_expression)]
                 if false {
-                    let _: $t $(<$($generics),*>)? = $t {
+                    let _: $ty = $t {
                         $($field: ::core::todo!()),*
                     };
                 }
@@ -351,15 +541,170 @@ macro_rules! pin_init {
             }
             Ok(__InitOk)
         };
-        let init = move |slot: *mut $ty| -> ::core::result::Result<(), _> {
+        let init = move |slot: *mut $ty| -> ::core::result::Result<(), $err> {
             init(slot).map(|__InitOk| ())
         };
-        let init = unsafe { $crate::init::pin_init_from_closure::<$t $(<$($generics),*>)?, _>(init) };
+        let init = unsafe { $crate::init::pin_init_from_closure::<$ty, $err>(init) };
         init
     }}
 }
 
 /// Construct an in-place initializer for structs.
+///
+/// This macro defaults the error to [`Infallible`]. If you need [`Error`], then use
+/// [`try_init!`].
+///
+/// The syntax is identical to a normal struct initializer:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, init::*};
+/// # use core::pin::Pin;
+/// struct Foo {
+///     a: usize,
+///     b: Bar,
+/// }
+///
+/// struct Bar {
+///     x: u32,
+/// }
+///
+/// # fn demo() -> impl Init<Foo> {
+/// let a = 42;
+///
+/// let initializer = init!(Foo {
+///     a,
+///     b: Bar {
+///         x: 64,
+///     },
+/// });
+/// # initializer }
+/// # Box::init(demo()).unwrap();
+/// ```
+///
+/// Arbitrary rust expressions can be used to set the value of a variable.
+///
+/// # Init-functions
+///
+/// When working with this library it is often desired to let others construct your types without
+/// giving access to all fields. This is where you would normally write a plain function `new`
+/// that would return a new instance of your type. With this library that is also possible, however
+/// there are a few extra things to keep in mind.
+///
+/// To create an initializer function, simple declare it like this:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, init::*};
+/// # use core::pin::Pin;
+/// # struct Foo {
+/// #     a: usize,
+/// #     b: Bar,
+/// # }
+/// # struct Bar {
+/// #     x: u32,
+/// # }
+///
+/// impl Foo {
+///     fn new() -> impl Init<Self> {
+///         init!(Self {
+///             a: 42,
+///             b: Bar {
+///                 x: 64,
+///             },
+///         })
+///     }
+/// }
+/// ```
+///
+/// Users of `Foo` can now create it like this:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, init::*};
+/// # use core::pin::Pin;
+/// # struct Foo {
+/// #     a: usize,
+/// #     b: Bar,
+/// # }
+/// # struct Bar {
+/// #     x: u32,
+/// # }
+/// # impl Foo {
+/// #     fn new() -> impl Init<Self> {
+/// #         init!(Self {
+/// #             a: 42,
+/// #             b: Bar {
+/// #                 x: 64,
+/// #             },
+/// #         })
+/// #     }
+/// # }
+/// let foo = Box::init(Foo::new());
+/// ```
+///
+/// They can also easily embed it into their own `struct`s:
+///
+/// ```rust
+/// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
+/// # use kernel::{init, pin_init, init::*};
+/// # use core::pin::Pin;
+/// # struct Foo {
+/// #     a: usize,
+/// #     b: Bar,
+/// # }
+/// # struct Bar {
+/// #     x: u32,
+/// # }
+/// # impl Foo {
+/// #     fn new() -> impl Init<Self> {
+/// #         init!(Self {
+/// #             a: 42,
+/// #             b: Bar {
+/// #                 x: 64,
+/// #             },
+/// #         })
+/// #     }
+/// # }
+/// struct FooContainer {
+///     foo1: Foo,
+///     foo2: Foo,
+///     other: u32,
+/// }
+///
+/// impl FooContainer {
+///     fn new(other: u32) -> impl Init<Self> {
+///         init!(Self {
+///             foo1: Foo::new(),
+///             foo2: Foo::new(),
+///             other,
+///         })
+///     }
+/// }
+/// ```
+///
+/// [`try_init!`]: kernel::try_init
+#[macro_export]
+macro_rules! init {
+    ($(&$this:ident in)? $t:ident $(<$($generics:ty),* $(,)?>)? {
+        $($field:ident $(: $val:expr)?),*
+        $(,)?
+    }) => {
+        $crate::try_init!(
+            @this($($this)?),
+            @type_name($t),
+            @typ($t $(<$($generics),*>)?),
+            @fields($($field $(: $val)?),*),
+            @error(::core::convert::Infallible),
+        )
+    }
+}
+
+/// Construct an in-place initializer for structs.
+///
+/// This macro defaults the error to [`Error`]. If you need [`Infallible`], then use
+/// [`init!`]. If you want to specify a custom error, append `? <your-error>` after the struct
+/// initializer.
 ///
 /// The syntax is identical to a normal struct initializer:
 ///
@@ -490,14 +835,41 @@ macro_rules! pin_init {
 /// }
 /// ```
 #[macro_export]
-macro_rules! init {
-    ($t:ident $(<$($generics:ty),* $(,)?>)? {
+macro_rules! try_init {
+    ($(&$this:ident in)? $t:ident $(<$($generics:ty),* $(,)?>)? {
         $($field:ident $(: $val:expr)?),*
         $(,)?
-    }) => {{
+    }) => {
+        $crate::try_init!(
+            @this($($this)?),
+            @type_name($t),
+            @typ($t $(<$($generics),*>)?),
+            @fields($($field $(: $val)?),*),
+            @error($crate::error::Error),
+        )
+    };
+    ($(&$this:ident in)? $t:ident $(<$($generics:ty),* $(,)?>)? {
+        $($field:ident $(: $val:expr)?),*
+        $(,)?
+    }? $err:ty) => {
+        $crate::try_init!(
+            @this($($this)?),
+            @type_name($t),
+            @typ($t $(<$($generics),*>)?),
+            @fields($($field $(: $val)?),*),
+            @error($err),
+        )
+    };
+    (
+        @this($($this:ident)?),
+        @type_name($t:ident),
+        @typ($ty:ty),
+        @fields($($field:ident $(: $val:expr)?),*),
+        @error($err:ty),
+    ) => {{
         // we do not want to allow arbitrary returns
         struct __InitOk;
-        let init = move |slot: *mut $t $(<$($generics),*>)?| -> ::core::result::Result<__InitOk, _> {
+        let init = move |slot: *mut $ty| -> ::core::result::Result<__InitOk, $err> {
             {
                 // shadow the structure so it cannot be used to return early
                 struct __InitOk;
@@ -515,7 +887,7 @@ macro_rules! init {
                 )*
                 #[allow(unreachable_code, clippy::diverging_sub_expression)]
                 if false {
-                    let _: $t $(<$($generics),*>)? = $t {
+                    let _: $ty = $t {
                         $($field: ::core::todo!()),*
                     };
                 }
@@ -526,10 +898,10 @@ macro_rules! init {
             }
             Ok(__InitOk)
         };
-        let init = move |slot: *mut $t $(<$($generics),*>)?| -> ::core::result::Result<(), _> {
+        let init = move |slot: *mut $ty| -> ::core::result::Result<(), $err> {
             init(slot).map(|__InitOk| ())
         };
-        let init = unsafe { $crate::init::init_from_closure::<$t $(<$($generics),*>)?, _>(init) };
+        let init = unsafe { $crate::init::init_from_closure::<$ty, $err>(init) };
         init
     }}
 }

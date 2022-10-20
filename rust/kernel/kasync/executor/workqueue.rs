@@ -223,7 +223,7 @@ impl Executor {
     /// It uses the given work queue to run its tasks.
     fn new_internal(queue: Either<BoxedQueue, &'static Queue>) -> Result<AutoStopHandle<Self>> {
         Ok(AutoStopHandle::new(
-            UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
+            UniqueArc::pin_init(pin_init!(Self {
                 inner: new_mutex!(
                     ExecutorInner {
                         stopped: false,

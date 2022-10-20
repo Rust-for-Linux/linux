@@ -8,7 +8,7 @@ use kernel::{
     io_buffer::{IoBufferReader, IoBufferWriter},
     macros::pin_project,
     miscdev, new_condvar, new_mutex, pin_init,
-    sync::{Arc, ArcBorrow, CondVar, Mutex, UniqueArc},
+    sync::{Arc, ArcBorrow, CondVar, Mutex},
 };
 
 module! {
@@ -35,13 +35,10 @@ struct SharedState {
 
 impl SharedState {
     fn try_new() -> Result<Arc<Self>> {
-        Ok(
-            UniqueArc::pin_init::<core::convert::Infallible>(pin_init!(Self {
-                state_changed: new_condvar!("SharedState::state_changed"),
-                inner: new_mutex!(SharedStateInner { token_count: 0 }, "SharedState::inner"),
-            }))?
-            .into(),
-        )
+        Arc::pin_init(pin_init!(Self {
+            state_changed: new_condvar!("SharedState::state_changed"),
+            inner: new_mutex!(SharedStateInner { token_count: 0 }, "SharedState::inner"),
+        }))
     }
 }
 
