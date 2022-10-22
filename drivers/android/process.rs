@@ -712,7 +712,7 @@ impl Process {
                     self.clone(),
                     cookie,
                 ))
-                .map_err(|(i, _)| i)?,
+                .unwrap_or_else(|(err, _)| match err {}),
         );
 
         info.death = Some(death.clone());

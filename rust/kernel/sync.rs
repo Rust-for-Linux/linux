@@ -158,13 +158,13 @@ impl<T> StaticInit<T> {
     /// # Safety
     ///
     /// The caller calls this function exactly once and before any other function (even implicitly
-    /// derefing) of `self` is called. `self` stays pinned indefinetly.
-    pub unsafe fn init<E>(&self, init: impl PinInit<T, E>)
+    /// derefing) of `self` is called. `self` stays pinned indefinitely.
+    pub unsafe fn init<E>(&'static self, init: impl PinInit<T, E>)
     where
         E: Into<core::convert::Infallible>,
     {
         // SAFETY: This function has unique access to `self` because of the unsafety contract.
-        // `self` is also pinned indefinetly and `inner` is structurally pinned.
+        // `self` is also pinned indefinitely and `inner` is structurally pinned.
         unsafe {
             let ptr = UnsafeCell::raw_get(self.inner.as_ptr());
             match init.__pinned_init(ptr).map_err(|e| e.into()) {
