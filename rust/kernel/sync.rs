@@ -134,7 +134,11 @@ pub struct StaticInit<T> {
     inner: MaybeUninit<UnsafeCell<T>>,
 }
 
+// SAFETY: Need to implement Send/Sync, because of the `UnsafeCell`. One can only get a `&T` from a
+// `StaticInit<T>`. Except when calling `init` which is unsafe and only done before other code can
+// access the `StaticInit<T>`.
 unsafe impl<T: Sync> Sync for StaticInit<T> {}
+// SAFETY: same as above.
 unsafe impl<T: Send> Send for StaticInit<T> {}
 
 impl<T> StaticInit<T> {
@@ -142,7 +146,7 @@ impl<T> StaticInit<T> {
     ///
     /// # Safety
     ///
-    /// The caller calls `Self::init` exactly once before using this value.
+    /// The caller calls `Self::init` exactly once before using this value in any way.
     pub const unsafe fn uninit() -> Self {
         Self {
             inner: MaybeUninit::uninit(),
@@ -154,11 +158,13 @@ impl<T> StaticInit<T> {
     /// # Safety
     ///
     /// The caller calls this function exactly once and before any other function (even implicitly
-    /// derefing) of `self` is called.
+    /// derefing) of `self` is called. `self` stays pinned indefinetly.
     pub unsafe fn init<E>(&self, init: impl PinInit<T, E>)
     where
         E: Into<core::convert::Infallible>,
     {
+        // SAFETY: This function has unique access to `self` because of the unsafety contract.
+        // `self` is also pinned indefinetly and `inner` is structurally pinned.
         unsafe {
             let ptr = UnsafeCell::raw_get(self.inner.as_ptr());
             match init.__pinned_init(ptr).map_err(|e| e.into()) {
@@ -172,6 +178,7 @@ impl<T> StaticInit<T> {
 impl<T> core::ops::Deref for StaticInit<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
+        // SAFETY: self.inner has been initialized because of the contract of `Self::uninit()`
         unsafe { &*self.inner.assume_init_ref().get() }
     }
 }
