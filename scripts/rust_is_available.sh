@@ -106,6 +106,17 @@ bindgen_libclang_version=$( \
 		| grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
 		| head -n 1 \
 )
+
+# Check that libclang is present.
+if [ -z $bindgen_libclang_version ]; then
+	if [ "$1" = -v ]; then
+		echo >&2 "***"
+		echo >&2 "*** libclang (used by the Rust bindings generator '$BINDGEN') does not seem to be present."
+		echo >&2 "***"
+	fi
+	exit 1
+fi
+
 bindgen_libclang_min_version=$($min_tool_version llvm)
 bindgen_libclang_cversion=$(get_canonical_version $bindgen_libclang_version)
 bindgen_libclang_min_cversion=$(get_canonical_version $bindgen_libclang_min_version)
