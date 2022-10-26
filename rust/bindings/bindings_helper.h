@@ -11,6 +11,7 @@
 #include <linux/cdev.h>
 #include <linux/clk.h>
 #include <linux/errname.h>
+#include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/fs_parser.h>

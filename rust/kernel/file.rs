@@ -886,3 +886,78 @@ pub trait Operations {
         Ok(bindings::POLLIN | bindings::POLLOUT | bindings::POLLRDNORM | bindings::POLLWRNORM)
     }
 }
+
+/// Wrap the kernel's `struct fdtable`.
+///
+/// # Invariants
+///
+/// The pointer `Fdtable::ptr` is null or valid.
+#[repr(transparent)]
+pub struct Fdtable {
+    ptr: *mut bindings::fdtable,
+}
+
+impl Fdtable {
+    /// Constructors a new `struct fdtable` wrapper
+    ///
+    /// #Safety
+    ///
+    /// The pointer `ptr` must be either null or valid pointer for the lifetime of the object.
+    unsafe fn from_ptr(ptr: *mut bindings::fdtable) -> Self {
+        Self { ptr }
+    }
+
+    /// Returns the max_fds of the fdtable instance.
+    pub fn get_max_fds(&self) -> u32 {
+        // SAFETY: By the invariant, we know that `self.ptr` is valid.
+        unsafe { core::ptr::addr_of!((*(self.ptr)).max_fds).read() }
+    }
+
+    /// Determines whether the given fd is closed.
+    pub fn close_on_exec(&self, fd: u32) -> bool {
+        // SAFETY: By the type invariant, we know that `self.ptr` is valid.
+        unsafe { bindings::close_on_exec(fd, self.ptr) }
+    }
+
+    /// Determines whether the given fd is opened.
+    pub fn fd_is_open(&self, fd: u32) -> bool {
+        // SAFETY: By the type invariant, we know that `self.ptr` is valid.
+        unsafe { bindings::fd_is_open(fd, self.ptr) }
+    }
+}
+
+
+/// Wrap the kernel's `struct files_struct`.
+///
+/// # Invariants
+///
+/// The pointer `FilesStruct::ptr` is null or valid.
+#[repr(transparent)]
+pub struct FilesStruct {
+    ptr: *mut bindings::files_struct,
+}
+
+impl FilesStruct {
+    /// Constructors a new `struct files_struct` wrapper
+    ///
+    /// #Safety
+    ///
+    /// The pointer `ptr` must be either null or valid pointer for the lifetime of the object.
+    unsafe fn from_ptr(ptr: *mut bindings::files_struct) -> Self {
+        Self { ptr }
+    }
+
+    /// Close open files of current task.
+    pub fn do_close_on_exec(&self) {
+        // SAFETY: By the type invariant, we know that `self.ptr` is valid.
+        unsafe { bindings::do_close_on_exec(self.ptr) };
+    }
+
+}
+
+impl Drop for FilesStruct {
+    fn drop(&mut self) {
+        // SAFETY: By the type invariant, we know that `self.ptr` is valid.
+        unsafe { bindings::put_files_struct(self.ptr) }
+    }
+}

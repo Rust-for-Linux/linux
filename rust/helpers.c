@@ -23,6 +23,7 @@
 #include <linux/build_bug.h>
 #include <linux/clk.h>
 #include <linux/errname.h>
+#include <linux/fdtable.h>
 #include <linux/fs_parser.h>
 #include <linux/gfp.h>
 #include <linux/highmem.h>
@@ -654,6 +655,18 @@ int rust_helper_fs_parse(struct fs_context *fc,
 	return fs_parse(fc, desc, param, result);
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
+
+bool rust_helper_close_on_exec(unsigned int fd, const struct fdtable *fdt)
+{
+	return close_on_exec(fd, fdt);
+}
+EXPORT_SYMBOL_GPL(rust_helper_close_on_exec);
+
+bool rust_helper_fd_is_open(unsigned int fd, const struct fdtable *fdt)
+{
+	return fd_is_open(fd, fdt);
+}
+EXPORT_SYMBOL_GPL(rust_helper_fd_is_open);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
