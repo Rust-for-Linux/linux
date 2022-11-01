@@ -81,19 +81,16 @@ unsafe impl<T> PinInit<Mutex<T>> for MutexInit<T> {
         self,
         slot: *mut Mutex<T>,
     ) -> core::result::Result<(), core::convert::Infallible> {
-        fn init_mutex(
-            name: &'static CStr,
-            key: &'static LockClassKey,
-        ) -> impl PinInit<Opaque<bindings::mutex>> {
-            let init = move |slot: *mut Opaque<bindings::mutex>| unsafe {
-                bindings::__mutex_init(Opaque::raw_get(slot), name.as_char_ptr(), key.get());
-                Ok(())
-            };
-            // SAFETY: mutex has been initialized
-            unsafe { init::pin_init_from_closure(init) }
-        }
         let init = pin_init!(Mutex<T> {
-            mutex: init_mutex(self.name, self.key),
+            // SAFETY: __mutex_init is an initializer function and name and key are valid
+            // parameters.
+            mutex: unsafe {
+                init::common::ffi_init2(
+                    bindings::__mutex_init,
+                    self.name.as_char_ptr(),
+                    self.key.get(),
+                )
+            },
             data: UnsafeCell::new(self.data),
             _pin: PhantomPinned,
         });

@@ -126,18 +126,16 @@ unsafe impl<T> PinInit<SpinLock<T>> for Init<T> {
         self,
         slot: *mut SpinLock<T>,
     ) -> core::result::Result<(), core::convert::Infallible> {
-        fn init_spinlock(
-            name: &'static CStr,
-            key: &'static LockClassKey,
-        ) -> impl PinInit<Opaque<bindings::spinlock>> {
-            let init = move |slot: *mut Opaque<bindings::spinlock>| unsafe {
-                bindings::__spin_lock_init(Opaque::raw_get(slot), name.as_char_ptr(), key.get());
-                Ok(())
-            };
-            unsafe { init::pin_init_from_closure(init) }
-        }
         let init = pin_init!(SpinLock<T> {
-            spin_lock: init_spinlock(self.name, self.key),
+            // SAFETY: __spin_lock_init is an initializer function and name and key are valid
+            // parameters.
+            spin_lock: unsafe {
+                init::common::ffi_init2(
+                    bindings::__spin_lock_init,
+                    self.name.as_char_ptr(),
+                    self.key.get(),
+                )
+            },
             data: UnsafeCell::new(self.data),
             _pin: PhantomPinned,
         });
@@ -317,22 +315,16 @@ unsafe impl<T> PinInit<RawSpinLock<T>> for RInit<T> {
         self,
         slot: *mut RawSpinLock<T>,
     ) -> core::result::Result<(), core::convert::Infallible> {
-        fn init_spinlock(
-            name: &'static CStr,
-            key: &'static LockClassKey,
-        ) -> impl PinInit<Opaque<bindings::raw_spinlock>> {
-            let init = move |place: *mut Opaque<bindings::raw_spinlock>| unsafe {
-                bindings::_raw_spin_lock_init(
-                    Opaque::raw_get(place),
-                    name.as_char_ptr(),
-                    key.get(),
-                );
-                Ok(())
-            };
-            unsafe { init::pin_init_from_closure(init) }
-        }
         let init = pin_init!(RawSpinLock<T> {
-            spin_lock: init_spinlock(self.name, self.key),
+            // SAFETY: _raw_spin_lock_init is an initializer function and name and key are valid
+            // parameters.
+            spin_lock: unsafe {
+                init::common::ffi_init2(
+                    bindings::_raw_spin_lock_init,
+                    self.name.as_char_ptr(),
+                    self.key.get(),
+                )
+            },
             data: UnsafeCell::new(self.data),
             _pin: PhantomPinned,
         });

@@ -94,25 +94,17 @@ impl<L: Lock> SeqLock<L> {
         L::Inner: Sized,
         <L as LockFactory>::Error: From<core::convert::Infallible>,
     {
-        fn init_count(
-            name: &'static CStr,
-            key2: &'static LockClassKey,
-        ) -> impl PinInit<Opaque<bindings::seqcount>> {
-            let init = move |place: *mut Opaque<bindings::seqcount>| {
-                unsafe {
-                    bindings::__seqcount_init(
-                        Opaque::raw_get(place),
-                        name.as_char_ptr(),
-                        key2.get(),
-                    )
-                };
-                Ok(())
-            };
-            unsafe { init::pin_init_from_closure(init) }
-        }
         try_pin_init!(Self {
             _p: PhantomPinned,
-            count: init_count(name, key2),
+            // SAFETY: __seqcount_init is an initializer function and name and key are valid
+            // parameters.
+            count: unsafe {
+                init::common::ffi_init2(
+                    bindings::__seqcount_init,
+                    name.as_char_ptr(),
+                    key2.get()
+                )
+            },
             write_lock: L::new_lock(data, name, key1),
         }? L::Error)
     }

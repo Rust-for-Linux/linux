@@ -60,23 +60,16 @@ impl CondVar {
     /// Constructs a new conditional variable.
     #[allow(clippy::new_ret_no_self)]
     pub const fn new(name: &'static CStr, key: &'static LockClassKey) -> impl PinInit<Self> {
-        fn init_wait_list(
-            name: &'static CStr,
-            key: &'static LockClassKey,
-        ) -> impl PinInit<Opaque<bindings::wait_queue_head>> {
-            let init = move |place: *mut Opaque<bindings::wait_queue_head>| unsafe {
-                bindings::__init_waitqueue_head(
-                    Opaque::raw_get(place),
+        pin_init!(Self {
+            // SAFETY: __init_waitqueue_head is an init function and name and key are valid
+            // parameters
+            wait_list: unsafe {
+                init::common::ffi_init2(
+                    bindings::__init_waitqueue_head,
                     name.as_char_ptr(),
                     key.get(),
-                );
-                Ok(())
-            };
-            // SAFETY: waitqueue has been initialized
-            unsafe { init::pin_init_from_closure(init) }
-        }
-        pin_init!(Self {
-            wait_list: init_wait_list(name, key),
+                )
+            },
             _pin: PhantomPinned,
         })
     }

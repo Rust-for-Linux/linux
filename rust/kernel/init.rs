@@ -117,6 +117,7 @@ use core::{
 
 #[doc(hidden)]
 pub mod __private;
+pub mod common;
 mod pin_project;
 mod pinned_drop;
 

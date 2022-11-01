@@ -84,18 +84,16 @@ unsafe impl<T> PinInit<RwSemaphore<T>> for Init<T> {
         self,
         slot: *mut RwSemaphore<T>,
     ) -> core::result::Result<(), core::convert::Infallible> {
-        fn init_rw_semaphore(
-            name: &'static CStr,
-            key: &'static LockClassKey,
-        ) -> impl PinInit<Opaque<bindings::rw_semaphore>> {
-            let init = move |slot: *mut Opaque<bindings::rw_semaphore>| unsafe {
-                bindings::__init_rwsem(Opaque::raw_get(slot), name.as_char_ptr(), key.get());
-                Ok(())
-            };
-            unsafe { init::pin_init_from_closure(init) }
-        }
         let init = pin_init!(RwSemaphore<T> {
-            rwsem: init_rw_semaphore(self.name, self.key),
+            // SAFETY: __init_rwsem is an initializer function and name and key are valid
+            // parameters.
+            rwsem: unsafe {
+                init::common::ffi_init2(
+                    bindings::__init_rwsem,
+                    self.name.as_char_ptr(),
+                    self.key.get(),
+                )
+            },
             data: UnsafeCell::new(self.data),
             _pin: PhantomPinned,
         });
