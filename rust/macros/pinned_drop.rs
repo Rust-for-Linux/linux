@@ -33,19 +33,7 @@ pub(crate) fn pinned_drop(_args: TokenStream, input: TokenStream) -> TokenStream
     }
     let idx = pinned_drop_idx.unwrap();
     // fully qualify the `PinnedDrop`.
-    toks.splice(
-        idx..idx,
-        vec![
-            TokenTree::Punct(Punct::new(':', Spacing::Joint)),
-            TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-            TokenTree::Ident(Ident::new("kernel", Span::call_site())),
-            TokenTree::Punct(Punct::new(':', Spacing::Joint)),
-            TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-            TokenTree::Ident(Ident::new("init", Span::call_site())),
-            TokenTree::Punct(Punct::new(':', Spacing::Joint)),
-            TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-        ],
-    );
+    toks.splice(idx..idx, "::kernel::init::".parse::<TokenStream>().unwrap());
     // take the {} body.
     if let Some(TokenTree::Group(last)) = toks.pop() {
         TokenStream::from_iter(vec![

@@ -42,7 +42,6 @@ pub(crate) fn pin_project(args: TokenStream, input: TokenStream) -> TokenStream 
                         TokenTree::Punct(p) if p.as_char() == ',' => at_start = true,
                         TokenTree::Punct(p) if p.as_char() == '\'' && at_start => {
                             ty_generics.push(tt.clone());
-                            ty_generics.push(TokenTree::Punct(Punct::new(',', Spacing::Alone)));
                         }
                         _ => {}
                     }
@@ -57,55 +56,49 @@ pub(crate) fn pin_project(args: TokenStream, input: TokenStream) -> TokenStream 
     }
     rest.extend(toks);
     let last = rest.pop();
-    TokenStream::from_iter(vec![
-        TokenTree::Punct(Punct::new(':', Spacing::Joint)),
-        TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-        TokenTree::Ident(Ident::new("kernel", Span::call_site())),
-        TokenTree::Punct(Punct::new(':', Spacing::Joint)),
-        TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-        TokenTree::Ident(Ident::new("pin_project", Span::call_site())),
-        TokenTree::Punct(Punct::new('!', Spacing::Alone)),
-        TokenTree::Group(Group::new(
-            Delimiter::Brace,
-            TokenStream::from_iter(vec![
-                TokenTree::Ident(Ident::new("parse_input", Span::call_site())),
-                TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-                TokenTree::Punct(Punct::new('@', Spacing::Alone)),
-                TokenTree::Ident(Ident::new("args", Span::call_site())),
-                TokenTree::Group(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenStream::from_iter(args),
-                )),
-                TokenTree::Punct(Punct::new(',', Spacing::Alone)),
-                TokenTree::Punct(Punct::new('@', Spacing::Alone)),
-                TokenTree::Ident(Ident::new("sig", Span::call_site())),
-                TokenTree::Group(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenStream::from_iter(rest),
-                )),
-                TokenTree::Punct(Punct::new(',', Spacing::Alone)),
-                TokenTree::Punct(Punct::new('@', Spacing::Alone)),
-                TokenTree::Ident(Ident::new("impl_generics", Span::call_site())),
-                TokenTree::Group(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenStream::from_iter(impl_generics),
-                )),
-                TokenTree::Punct(Punct::new(',', Spacing::Alone)),
-                TokenTree::Punct(Punct::new('@', Spacing::Alone)),
-                TokenTree::Ident(Ident::new("ty_generics", Span::call_site())),
-                TokenTree::Group(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenStream::from_iter(ty_generics),
-                )),
-                TokenTree::Punct(Punct::new(',', Spacing::Alone)),
-                TokenTree::Punct(Punct::new('@', Spacing::Alone)),
-                TokenTree::Ident(Ident::new("body", Span::call_site())),
-                TokenTree::Group(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenStream::from_iter(last),
-                )),
-                TokenTree::Punct(Punct::new(',', Spacing::Alone)),
-            ]),
-        )),
-    ])
+    let mut ret = vec![];
+    ret.extend("::kernel::pin_project!".parse::<TokenStream>().unwrap());
+    ret.push(TokenTree::Group(Group::new(
+        Delimiter::Brace,
+        TokenStream::from_iter(vec![
+            TokenTree::Ident(Ident::new("parse_input", Span::call_site())),
+            TokenTree::Punct(Punct::new(':', Spacing::Alone)),
+            TokenTree::Punct(Punct::new('@', Spacing::Alone)),
+            TokenTree::Ident(Ident::new("args", Span::call_site())),
+            TokenTree::Group(Group::new(
+                Delimiter::Parenthesis,
+                TokenStream::from_iter(args),
+            )),
+            TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+            TokenTree::Punct(Punct::new('@', Spacing::Alone)),
+            TokenTree::Ident(Ident::new("sig", Span::call_site())),
+            TokenTree::Group(Group::new(
+                Delimiter::Parenthesis,
+                TokenStream::from_iter(rest),
+            )),
+            TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+            TokenTree::Punct(Punct::new('@', Spacing::Alone)),
+            TokenTree::Ident(Ident::new("impl_generics", Span::call_site())),
+            TokenTree::Group(Group::new(
+                Delimiter::Parenthesis,
+                TokenStream::from_iter(impl_generics),
+            )),
+            TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+            TokenTree::Punct(Punct::new('@', Spacing::Alone)),
+            TokenTree::Ident(Ident::new("ty_generics", Span::call_site())),
+            TokenTree::Group(Group::new(
+                Delimiter::Parenthesis,
+                TokenStream::from_iter(ty_generics),
+            )),
+            TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+            TokenTree::Punct(Punct::new('@', Spacing::Alone)),
+            TokenTree::Ident(Ident::new("body", Span::call_site())),
+            TokenTree::Group(Group::new(
+                Delimiter::Parenthesis,
+                TokenStream::from_iter(last),
+            )),
+            TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+        ]),
+    )));
+    TokenStream::from_iter(ret)
 }

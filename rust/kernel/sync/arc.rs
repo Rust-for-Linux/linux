@@ -32,7 +32,7 @@ use core::{
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     pin::Pin,
-    ptr::{self, addr_of_mut, NonNull},
+    ptr::{self, NonNull},
 };
 
 /// A reference-counted pointer to an instance of `T`.
@@ -49,9 +49,12 @@ pub struct Arc<T: ?Sized> {
     _p: PhantomData<ArcInner<T>>,
 }
 
+#[pin_project]
 #[repr(C)]
 struct ArcInner<T: ?Sized> {
+    #[pin]
     refcount: Opaque<bindings::refcount_t>,
+    #[pin]
     data: T,
 }
 
@@ -483,21 +486,17 @@ impl<T> UniqueArc<T> {
         let inner = NonNull::new(unsafe { alloc(layout) })
             .ok_or(ENOMEM)?
             .cast::<ArcInner<MaybeUninit<T>>>();
-        // TODO do this using `pinned-init`
-
-        // INVARIANT: The refcount is initialised to a non-zero value.
-        let refcount = Opaque::new(new_refcount());
-        // SAFETY: `inner` is writable and properly aligned.
-        unsafe { addr_of_mut!((*inner.as_ptr()).refcount).write(refcount) };
-        // assert that there are only two fields: refcount and data (done in a closure to avoid
-        // overflowing the stack in debug mode with a big `T`)
-        #[allow(unreachable_code, clippy::diverging_sub_expression)]
-        let _check = || {
-            let _check: ArcInner<MaybeUninit<T>> = ArcInner {
-                refcount: todo!(),
-                data: todo!(),
-            };
-        };
+        let init = pin_init!(ArcInner<MaybeUninit<T>> {
+            // INVARIANT: The refcount is initialised to a non-zero value.
+            refcount: Opaque::new(new_refcount()),
+            data: init::uninit(),
+        });
+        // SAFETY: the pointer is valid, as we just allocated it. It will also stay pinned (type
+        // invariant).
+        match unsafe { init.__pinned_init(inner.as_ptr()) } {
+            Ok(()) => {}
+            Err(e) => match e {},
+        }
 
         // SAFETY: We just created `inner` with a reference count of 1, which is owned by the new
         // `Arc` object.
@@ -517,11 +516,10 @@ impl<T> UniqueArc<MaybeUninit<T>> {
     }
 
     /// Initialize the value after creating the `UniqueArc`.
-    #[allow(clippy::type_complexity)]
     pub fn pin_init_now<E>(
         mut self,
         init: impl PinInit<T, E>,
-    ) -> core::result::Result<Pin<UniqueArc<T>>, (E, UniqueArc<MaybeUninit<T>>)> {
+    ) -> core::result::Result<Pin<UniqueArc<T>>, (E, Self)> {
         unsafe {
             match init.__pinned_init(self.deref_mut().as_mut_ptr()) {
                 Ok(()) => Ok(Pin::from(self.assume_init())),
