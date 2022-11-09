@@ -28,7 +28,7 @@ struct TransactionInner {
     file_list: List<Box<FileInfo>>,
 }
 
-#[pin_project(PinnedDrop)]
+#[pin_data(PinnedDrop)]
 pub(crate) struct Transaction {
     #[pin]
     inner: SpinLock<TransactionInner>,

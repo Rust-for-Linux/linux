@@ -2,7 +2,7 @@
 
 use proc_macro::{Delimiter, Group, Ident, Punct, Spacing, Span, TokenStream, TokenTree};
 
-pub(crate) fn pin_project(args: TokenStream, input: TokenStream) -> TokenStream {
+pub(crate) fn pin_data(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut impl_generics = vec![];
     let mut ty_generics = vec![];
     let mut rest = vec![];
@@ -57,7 +57,7 @@ pub(crate) fn pin_project(args: TokenStream, input: TokenStream) -> TokenStream 
     rest.extend(toks);
     let last = rest.pop();
     let mut ret = vec![];
-    ret.extend("::kernel::pin_project!".parse::<TokenStream>().unwrap());
+    ret.extend("::kernel::_pin_data!".parse::<TokenStream>().unwrap());
     ret.push(TokenTree::Group(Group::new(
         Delimiter::Brace,
         TokenStream::from_iter(vec![

@@ -12,7 +12,7 @@ use super::{
 use crate::{
     bindings,
     init::{self, PinInit},
-    macros::pin_project,
+    macros::pin_data,
     pin_init,
     str::CStr,
     Opaque,
@@ -39,7 +39,7 @@ macro_rules! new_rwsemaphore {
 ///
 /// [`struct rw_semaphore`]: ../../../include/linux/rwsem.h
 /// [init]: ../init/index.html
-#[pin_project]
+#[pin_data]
 pub struct RwSemaphore<T: ?Sized> {
     /// The kernel `struct rw_semaphore` object.
     #[pin]

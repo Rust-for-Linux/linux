@@ -12,7 +12,7 @@ use super::{
 use crate::{
     bindings,
     init::{self, PinInit},
-    macros::pin_project,
+    macros::pin_data,
     pin_init,
     str::CStr,
     Opaque, True,
@@ -82,7 +82,7 @@ macro_rules! new_spinlock {
 ///
 /// [`spinlock_t`]: ../../../include/linux/spinlock.h
 /// [init]: ../init/index.html
-#[pin_project]
+#[pin_data]
 pub struct SpinLock<T: ?Sized> {
     #[pin]
     spin_lock: Opaque<bindings::spinlock>,
@@ -271,7 +271,7 @@ macro_rules! new_rawspinlock {
 /// ```
 ///
 /// [`raw_spinlock_t`]: ../../../include/linux/spinlock.h
-#[pin_project]
+#[pin_data]
 pub struct RawSpinLock<T: ?Sized> {
     #[pin]
     spin_lock: Opaque<bindings::raw_spinlock>,

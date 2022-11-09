@@ -56,7 +56,7 @@ struct NodeDeathInner {
     aborted: bool,
 }
 
-#[pin_project]
+#[pin_data]
 pub(crate) struct NodeDeath {
     node: Arc<Node>,
     process: Arc<Process>,

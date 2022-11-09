@@ -11,7 +11,7 @@ use super::{Guard, Lock, LockClassKey, LockFactory, ReadLock};
 use crate::{
     bindings,
     init::{self, PinInit},
-    macros::pin_project,
+    macros::pin_data,
     str::CStr,
     try_pin_init, Opaque,
 };
@@ -61,7 +61,7 @@ use core::{cell::UnsafeCell, marker::PhantomPinned, ops::Deref};
 /// }
 /// ```
 /// [init]: ../init/index.html
-#[pin_project]
+#[pin_data]
 pub struct SeqLock<L: ?Sized + Lock> {
     #[pin]
     _p: PhantomPinned,

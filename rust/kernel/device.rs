@@ -9,7 +9,7 @@ use crate::{clk::Clk, error::from_kernel_err_ptr};
 
 use crate::{
     bindings,
-    macros::pin_project,
+    macros::pin_data,
     pin_init,
     prelude::*,
     revocable::{Revocable, RevocableGuard},
@@ -249,7 +249,7 @@ impl Drop for Device {
 ///
 /// This struct implements the `DeviceRemoval` trait so that it can clean resources up even if not
 /// explicitly called by the device drivers.
-#[pin_project]
+#[pin_data]
 pub struct Data<T, U, V> {
     #[pin]
     registrations: RevocableMutex<T>,

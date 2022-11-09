@@ -8,7 +8,7 @@ use super::{Guard, Lock, LockClassKey, LockFactory, WriteLock};
 use crate::{
     bindings,
     init::{self, PinInit},
-    macros::pin_project,
+    macros::pin_data,
     pin_init,
     str::CStr,
     Opaque,
@@ -34,7 +34,7 @@ macro_rules! new_mutex {
 ///
 /// [`struct mutex`]: ../../../include/linux/mutex.h
 /// [init]: ../init/index.html
-#[pin_project]
+#[pin_data]
 pub struct Mutex<T: ?Sized> {
     /// The kernel `struct mutex` object.
     #[pin]

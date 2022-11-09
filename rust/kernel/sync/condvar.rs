@@ -9,7 +9,7 @@ use super::{Guard, Lock, LockClassKey, LockInfo};
 use crate::{
     bindings,
     init::{self, PinInit},
-    macros::pin_project,
+    macros::pin_data,
     pin_init,
     str::CStr,
     task::Task,
@@ -38,7 +38,7 @@ const POLLFREE: u32 = 0x4000;
 ///
 /// [`struct wait_queue_head`]: ../../../include/linux/wait.h
 /// [init]: ../init/index.html
-#[pin_project]
+#[pin_data]
 pub struct CondVar {
     #[pin]
     pub(crate) wait_list: Opaque<bindings::wait_queue_head>,

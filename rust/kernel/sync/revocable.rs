@@ -4,7 +4,7 @@
 
 use crate::{
     init::PinInit,
-    macros::pin_project,
+    macros::pin_data,
     str::CStr,
     sync::{Guard, Lock, LockClassKey, LockFactory, LockInfo, ReadLock, WriteLock},
     try_pin_init, True,
@@ -101,7 +101,7 @@ impl<T> Drop for Inner<T> {
 /// ```
 /// [init]: ../init/index.html
 /// [`new_revocable!`]: kernel::new_revocable
-#[pin_project]
+#[pin_data]
 pub struct Revocable<F: LockFactory, T> {
     #[pin]
     inner: <F as LockFactory>::LockedType<Inner<T>>,

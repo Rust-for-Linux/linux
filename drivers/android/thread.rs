@@ -230,7 +230,7 @@ impl InnerThread {
     }
 }
 
-#[pin_project]
+#[pin_data]
 pub(crate) struct Thread {
     pub(crate) id: i32,
     pub(crate) process: Arc<Process>,

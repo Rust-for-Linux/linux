@@ -3,7 +3,7 @@
 // use the proc macro instead
 #[doc(hidden)]
 #[macro_export]
-macro_rules! pin_project {
+macro_rules! _pin_data {
     (parse_input:
         @args($($pinned_drop:ident)?),
         @sig(
@@ -15,7 +15,7 @@ macro_rules! pin_project {
         @ty_generics($($ty_generics:tt)*),
         @body({ $($fields:tt)* }),
     ) => {
-        $crate::pin_project!(find_pinned_fields:
+        $crate::_pin_data!(find_pinned_fields:
             @struct_attrs($(#[$($struct_attr)*])*),
             @vis($vis),
             @name($name),
@@ -46,7 +46,7 @@ macro_rules! pin_project {
         @is_pinned(yes),
         @pinned_drop($($pinned_drop:ident)?),
     ) => {
-        $crate::pin_project!(find_pinned_fields:
+        $crate::_pin_data!(find_pinned_fields:
             @struct_attrs($($struct_attrs)*),
             @vis($vis),
             @name($name),
@@ -77,7 +77,7 @@ macro_rules! pin_project {
         @is_pinned(),
         @pinned_drop($($pinned_drop:ident)?),
     ) => {
-        $crate::pin_project!(find_pinned_fields:
+        $crate::_pin_data!(find_pinned_fields:
             @struct_attrs($($struct_attrs)*),
             @vis($vis),
             @name($name),
@@ -108,7 +108,7 @@ macro_rules! pin_project {
         @is_pinned($($is_pinned:ident)?),
         @pinned_drop($($pinned_drop:ident)?),
     ) => {
-        $crate::pin_project!(find_pinned_fields:
+        $crate::_pin_data!(find_pinned_fields:
             @struct_attrs($($struct_attrs)*),
             @vis($vis),
             @name($name),
@@ -139,7 +139,7 @@ macro_rules! pin_project {
         @is_pinned($($is_pinned:ident)?),
         @pinned_drop($($pinned_drop:ident)?),
     ) => {
-        $crate::pin_project!(find_pinned_fields:
+        $crate::_pin_data!(find_pinned_fields:
             @struct_attrs($($struct_attrs)*),
             @vis($vis),
             @name($name),
@@ -170,7 +170,7 @@ macro_rules! pin_project {
         @is_pinned($($is_pinned:ident)?),
         @pinned_drop($($pinned_drop:ident)?),
     ) => {
-        $crate::pin_project!(find_pinned_fields:
+        $crate::_pin_data!(find_pinned_fields:
             @struct_attrs($($struct_attrs)*),
             @vis($vis),
             @name($name),
@@ -215,7 +215,7 @@ macro_rules! pin_project {
                 __phantom: ::core::marker::PhantomData<fn($name<$($ty_generics)*>) -> $name<$($ty_generics)*>>,
             }
 
-            $crate::pin_project!(make_pin_data:
+            $crate::_pin_data!(make_pin_data:
                 @pin_data(__ThePinData),
                 @impl_generics($($impl_generics)*),
                 @ty_generics($($ty_generics)*),
@@ -246,7 +246,7 @@ macro_rules! pin_project {
                 $($whr)*
             {}
 
-            $crate::pin_project!(drop_prevention:
+            $crate::_pin_data!(drop_prevention:
                 @name($name),
                 @impl_generics($($impl_generics)*),
                 @ty_generics($($ty_generics)*),

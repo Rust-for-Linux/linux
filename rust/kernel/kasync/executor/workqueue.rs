@@ -5,7 +5,7 @@
 use super::{ArcWake, AutoStopHandle};
 use crate::{
     error::code::*,
-    macros::pin_project,
+    macros::pin_data,
     new_mutex, pin_init,
     prelude::*,
     revocable::AsyncRevocable,
@@ -190,7 +190,7 @@ struct ExecutorInner {
 ///
 /// # Ok::<(), Error>(())
 /// ```
-#[pin_project]
+#[pin_data]
 pub struct Executor {
     queue: Either<BoxedQueue, &'static Queue>,
     #[pin]

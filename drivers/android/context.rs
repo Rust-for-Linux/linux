@@ -17,7 +17,7 @@ struct Manager {
     uid: Option<bindings::kuid_t>,
 }
 
-#[pin_project]
+#[pin_data]
 pub(crate) struct Context {
     #[pin]
     manager: Mutex<Manager>,

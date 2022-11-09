@@ -6,7 +6,7 @@ use kernel::prelude::*;
 use kernel::{
     file::{self, File},
     io_buffer::{IoBufferReader, IoBufferWriter},
-    macros::pin_project,
+    macros::pin_data,
     miscdev, new_condvar, new_mutex, pin_init,
     sync::{Arc, ArcBorrow, CondVar, Mutex},
 };
@@ -25,7 +25,7 @@ struct SharedStateInner {
     token_count: usize,
 }
 
-#[pin_project]
+#[pin_data]
 struct SharedState {
     #[pin]
     state_changed: CondVar,

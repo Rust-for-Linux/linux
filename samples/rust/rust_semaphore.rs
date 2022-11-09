@@ -17,7 +17,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use kernel::{
     file::{self, File, IoctlCommand, IoctlHandler},
     io_buffer::{IoBufferReader, IoBufferWriter},
-    macros::pin_project,
+    macros::pin_data,
     miscdev::Registration,
     new_condvar, new_mutex, pin_init,
     prelude::*,
@@ -38,7 +38,7 @@ struct SemaphoreInner {
     max_seen: usize,
 }
 
-#[pin_project]
+#[pin_data]
 struct Semaphore {
     #[pin]
     changed: CondVar,

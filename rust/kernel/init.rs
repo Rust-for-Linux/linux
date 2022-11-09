@@ -22,14 +22,14 @@
 //!
 //! ## Directly creating an in-place constructor
 //!
-//! If you want to use [`PinInit`], then you will have to annotate your struct with [`#[pin_project]`].
+//! If you want to use [`PinInit`], then you will have to annotate your struct with [`#[pin_data]`].
 //! It is a macro that uses `#[pin]` as a marker for [structurally pinned fields].
 //!
 //! ```rust
 //! # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
 //! use kernel::{prelude::*, sync::Mutex, new_mutex};
 //! # use core::pin::Pin;
-//! #[pin_project]
+//! #[pin_data]
 //! struct Foo {
 //!     #[pin]
 //!     a: Mutex<usize>,
@@ -49,7 +49,7 @@
 //! # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
 //! # use kernel::{prelude::*, sync::Mutex, new_mutex};
 //! # use core::pin::Pin;
-//! # #[pin_project]
+//! # #[pin_data]
 //! # struct Foo {
 //! #     #[pin]
 //! #     a: Mutex<usize>,
@@ -76,7 +76,7 @@
 //! ```rust
 //! # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
 //! # use kernel::{sync::Mutex, prelude::*, new_mutex, init::PinInit, try_pin_init};
-//! #[pin_project]
+//! #[pin_data]
 //! struct DriverData {
 //!     #[pin]
 //!     status: Mutex<i32>,
@@ -118,7 +118,7 @@ use core::{
 #[doc(hidden)]
 pub mod __private;
 pub mod common;
-mod pin_project;
+mod pin_data;
 mod pinned_drop;
 
 /// Initialize a type directly on the stack.
@@ -127,16 +127,16 @@ mod pinned_drop;
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, stack_init, init::*, macros::pin_project, sync::Mutex, new_mutex};
+/// # use kernel::{init, pin_init, stack_init, init::*, macros::pin_data, sync::Mutex, new_mutex};
 /// # use core::pin::Pin;
-/// #[pin_project]
+/// #[pin_data]
 /// struct Foo {
 ///     #[pin]
 ///     a: Mutex<usize>,
 ///     b: Bar,
 /// }
 ///
-/// #[pin_project]
+/// #[pin_data]
 /// struct Bar {
 ///     x: u32,
 /// }
@@ -175,15 +175,15 @@ macro_rules! stack_init {
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
-/// #[pin_project]
+/// #[pin_data]
 /// struct Foo {
 ///     a: usize,
 ///     b: Bar,
 /// }
 ///
-/// #[pin_project]
+/// #[pin_data]
 /// struct Bar {
 ///     x: u32,
 /// }
@@ -215,12 +215,12 @@ macro_rules! stack_init {
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
 /// # use kernel::{init, pin_init, prelude::*, init::*};
 /// # use core::pin::Pin;
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Foo {
 /// #     a: usize,
 /// #     b: Bar,
 /// # }
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Bar {
 /// #     x: u32,
 /// # }
@@ -241,14 +241,14 @@ macro_rules! stack_init {
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Foo {
 /// #     a: usize,
 /// #     b: Bar,
 /// # }
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Bar {
 /// #     x: u32,
 /// # }
@@ -269,14 +269,14 @@ macro_rules! stack_init {
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Foo {
 /// #     a: usize,
 /// #     b: Bar,
 /// # }
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Bar {
 /// #     x: u32,
 /// # }
@@ -290,7 +290,7 @@ macro_rules! stack_init {
 /// #         })
 /// #     }
 /// # }
-/// #[pin_project]
+/// #[pin_data]
 /// struct FooContainer {
 ///     #[pin]
 ///     foo1: Foo,
@@ -337,15 +337,15 @@ macro_rules! pin_init {
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
-/// #[pin_project]
+/// #[pin_data]
 /// struct Foo {
 ///     a: usize,
 ///     b: Bar,
 /// }
 ///
-/// #[pin_project]
+/// #[pin_data]
 /// struct Bar {
 ///     x: u32,
 /// }
@@ -377,12 +377,12 @@ macro_rules! pin_init {
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
 /// # use kernel::{init, pin_init, prelude::*, init::*};
 /// # use core::pin::Pin;
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Foo {
 /// #     a: usize,
 /// #     b: Bar,
 /// # }
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Bar {
 /// #     x: u32,
 /// # }
@@ -403,14 +403,14 @@ macro_rules! pin_init {
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Foo {
 /// #     a: usize,
 /// #     b: Bar,
 /// # }
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Bar {
 /// #     x: u32,
 /// # }
@@ -431,14 +431,14 @@ macro_rules! pin_init {
 ///
 /// ```rust
 /// # #![allow(clippy::disallowed_names, clippy::new_ret_no_self)]
-/// # use kernel::{init, pin_init, macros::pin_project, init::*};
+/// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Foo {
 /// #     a: usize,
 /// #     b: Bar,
 /// # }
-/// # #[pin_project]
+/// # #[pin_data]
 /// # struct Bar {
 /// #     x: u32,
 /// # }
@@ -452,7 +452,7 @@ macro_rules! pin_init {
 /// #         })
 /// #     }
 /// # }
-/// #[pin_project]
+/// #[pin_data]
 /// struct FooContainer {
 ///     #[pin]
 ///     foo1: Foo,
@@ -1050,7 +1050,7 @@ pub const unsafe fn pin_init_from_closure<T, E>(
 /// ```rust
 /// # use kernel::sync::Mutex;
 /// use kernel::macros::pinned_drop;
-/// #[pin_project(PinnedDrop)]
+/// #[pin_data(PinnedDrop)]
 /// struct Foo {
 ///     #[pin]
 ///     mtx: Mutex<usize>,

@@ -49,7 +49,7 @@ pub struct Arc<T: ?Sized> {
     _p: PhantomData<ArcInner<T>>,
 }
 
-#[pin_project]
+#[pin_data]
 #[repr(C)]
 struct ArcInner<T: ?Sized> {
     #[pin]

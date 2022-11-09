@@ -242,7 +242,7 @@ impl ProcessNodeRefs {
     }
 }
 
-#[pin_project]
+#[pin_data]
 pub(crate) struct Process {
     ctx: Arc<Context>,
 

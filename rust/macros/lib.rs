@@ -5,7 +5,7 @@
 mod concat_idents;
 mod helpers;
 mod module;
-mod pin_project;
+mod pin_data;
 mod pinned_drop;
 mod vtable;
 
@@ -202,15 +202,15 @@ pub fn concat_idents(ts: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```rust,ignore
-/// #[pin_project]
+/// #[pin_data]
 /// struct A {
 ///     #[pin]
 ///     a: usize,
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn pin_project(inner: TokenStream, item: TokenStream) -> TokenStream {
-    pin_project::pin_project(inner, item)
+pub fn pin_data(inner: TokenStream, item: TokenStream) -> TokenStream {
+    pin_data::pin_data(inner, item)
 }
 
 /// Used to implement `PinnedDrop` safely.
@@ -218,7 +218,7 @@ pub fn pin_project(inner: TokenStream, item: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```rust,ignore
-/// #[pin_project(PinnedDrop)]
+/// #[pin_data(PinnedDrop)]
 /// struct Foo {
 ///     a: usize,
 /// }
