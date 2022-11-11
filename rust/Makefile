@@ -11,9 +11,6 @@ always-$(CONFIG_RUST) += exports_core_generated.h
 obj-$(CONFIG_RUST) += helpers.o
 CFLAGS_REMOVE_helpers.o = -Wmissing-prototypes -Wmissing-declarations
 
-always-$(CONFIG_RUST) += libmacros.so
-no-clean-files += libmacros.so
-
 always-$(CONFIG_RUST) += bindings/bindings_generated.rs bindings/bindings_helpers_generated.rs
 obj-$(CONFIG_RUST) += alloc.o bindings.o kernel.o
 always-$(CONFIG_RUST) += exports_alloc_generated.h exports_bindings_generated.h \
@@ -33,8 +30,14 @@ always-$(CONFIG_RUST_KERNEL_KUNIT_TEST) += doctests_kernel_generated_kunit.c
 obj-$(CONFIG_RUST_KERNEL_KUNIT_TEST) += doctests_kernel_generated.o
 obj-$(CONFIG_RUST_KERNEL_KUNIT_TEST) += doctests_kernel_generated_kunit.o
 
-# Avoids running `$(RUSTC)` for the sysroot when it may not be available.
+# Avoids running `$(RUSTC)` for the sysroot and macros extensions when it may not be available.
 ifdef CONFIG_RUST
+
+libmacros_path := $(shell echo | $(RUSTC) --print file-names --crate-name macros --crate-type proc-macro -)
+libmacros_extension := $(patsubst libmacros.%,%,$(libmacros_path))
+
+always-$(CONFIG_RUST) += $(libmacros_path)
+no-clean-files += $(libmacros_path)
 
 # `$(rust_flags)` is passed in case the user added `--sysroot`.
 rustc_sysroot := $(shell $(RUSTC) $(rust_flags) --print sysroot)
@@ -117,10 +120,10 @@ rustdoc-alloc: $(src)/alloc/lib.rs rustdoc-core rustdoc-compiler_builtins FORCE
 	$(call if_changed,rustdoc)
 
 rustdoc-kernel: private rustc_target_flags = --extern alloc \
-    --extern build_error --extern macros=$(objtree)/$(obj)/libmacros.so \
+    --extern build_error --extern macros=$(objtree)/$(obj)/$(libmacros_path) \
     --extern bindings
 rustdoc-kernel: $(src)/kernel/lib.rs rustdoc-core rustdoc-macros \
-    rustdoc-compiler_builtins rustdoc-alloc $(obj)/libmacros.so \
+    rustdoc-compiler_builtins rustdoc-alloc $(obj)/$(libmacros_path) \
     $(obj)/bindings.o FORCE
 	$(call if_changed,rustdoc)
 
@@ -366,14 +369,14 @@ quiet_cmd_rustc_procmacro = $(RUSTC_OR_CLIPPY_QUIET) P $@
 	$(RUSTC_OR_CLIPPY) $(rust_common_flags) \
 		--emit=dep-info,link --extern proc_macro \
 		--crate-type proc-macro --out-dir $(objtree)/$(obj) \
-		--crate-name $(patsubst lib%.so,%,$(notdir $@)) $<; \
-	mv $(objtree)/$(obj)/$(patsubst lib%.so,%,$(notdir $@)).d $(depfile); \
+		--crate-name $(patsubst lib%.$(libmacros_extension),%,$(notdir $@)) $<; \
+	mv $(objtree)/$(obj)/$(patsubst lib%.$(libmacros_extension),%,$(notdir $@)).d $(depfile); \
 	sed -i '/^\#/d' $(depfile)
 
 # Procedural macros can only be used with the `rustc` that compiled it.
 # Therefore, to get `libmacros.so` automatically recompiled when the compiler
 # version changes, we add `core.o` as a dependency (even if it is not needed).
-$(obj)/libmacros.so: $(src)/macros/lib.rs $(obj)/core.o FORCE
+$(obj)/$(libmacros_path): $(src)/macros/lib.rs $(obj)/core.o FORCE
 	$(call if_changed_dep,rustc_procmacro)
 
 quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L $@
@@ -420,7 +423,7 @@ $(obj)/bindings.o: $(src)/bindings/lib.rs \
 $(obj)/kernel.o: private rustc_target_flags = --extern alloc \
     --extern build_error --extern macros --extern bindings
 $(obj)/kernel.o: $(src)/kernel/lib.rs $(obj)/alloc.o $(obj)/build_error.o \
-    $(obj)/libmacros.so $(obj)/bindings.o FORCE
+    $(obj)/$(libmacros_path) $(obj)/bindings.o FORCE
 	$(call if_changed_dep,rustc_library)
 
 endif # CONFIG_RUST

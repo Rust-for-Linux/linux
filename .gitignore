@@ -21,6 +21,7 @@
 *.dtbo
 *.dtb.S
 *.dwo
+*.dylib
 *.elf
 *.gcno
 *.gz
