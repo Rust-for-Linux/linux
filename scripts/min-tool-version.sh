@@ -34,7 +34,7 @@ rustc)
 	echo 1.62.0
 	;;
 bindgen)
-	echo 0.56.0
+	echo 0.63.0
 	;;
 *)
 	echo "$1: unknown tool" >&2
