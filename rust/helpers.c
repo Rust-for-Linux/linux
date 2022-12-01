@@ -34,6 +34,7 @@
 #include <linux/netdevice.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/reset.h>
 #include <linux/sched/signal.h>
 #include <linux/security.h>
 #include <linux/skbuff.h>
@@ -45,6 +46,12 @@ __noreturn void rust_helper_BUG(void)
 	BUG();
 }
 EXPORT_SYMBOL_GPL(rust_helper_BUG);
+
+struct reset_control *rust_helper_reset_control_get_optional_exclusive(struct device *dev, const char *id)
+{
+	return __reset_control_get(dev, id, 0, false, true, true);
+}
+EXPORT_SYMBOL_GPL(rust_helper_reset_control_get_optional_exclusive);
 
 void rust_helper_clk_disable_unprepare(struct clk *clk)
 {

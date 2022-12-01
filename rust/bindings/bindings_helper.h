@@ -31,6 +31,7 @@
 #include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/random.h>
+#include <linux/reset.h>
 #include <linux/security.h>
 #include <linux/slab.h>
 #include <linux/sysctl.h>
