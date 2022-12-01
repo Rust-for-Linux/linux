@@ -20,6 +20,7 @@
 //! [`compiler-rt`]: https://compiler-rt.llvm.org/
 
 #![feature(compiler_builtins)]
+#![feature(naked_functions)]
 #![compiler_builtins]
 #![no_builtins]
 #![no_std]
@@ -28,7 +29,7 @@ macro_rules! define_panicking_intrinsics(
     ($reason: tt, { $($ident: ident, )* }) => {
         $(
             #[doc(hidden)]
-            #[no_mangle]
+            #[export_name = concat!("__rust", stringify!($ident))]
             pub extern "C" fn $ident() {
                 panic!($reason);
             }
@@ -74,6 +75,24 @@ define_panicking_intrinsics!("`f64` should not be used", {
 });
 
 #[cfg(target_arch = "arm")]
-define_panicking_intrinsics!("`u64` division/modulo should not be used", {
-    __aeabi_uldivmod,
-});
+#[doc(hidden)]
+#[naked]
+#[no_mangle]
+pub unsafe extern "C" fn __rust__aeabi_uldivmod() {
+    // Adapted from compiler-rt:
+    // https://github.com/llvm/llvm-project/blob/a80e65e00ada7a9c16acf17a5fd40b4f12ced3a8/compiler-rt/lib/builtins/arm/aeabi_uldivmod.S
+    unsafe {
+        core::arch::asm!(
+            "push {{r6, lr}}",
+            "sub  sp, sp, #16",
+            "add  r6, sp, #8",
+            "str  r6, [sp]",
+            "bl   div64_u64_rem",
+            "ldr  r2, [sp, #8]",
+            "ldr  r3, [sp, #12]",
+            "add  sp, sp, #16",
+            "pop  {{r6, pc}}",
+            options(noreturn)
+        );
+    }
+}
