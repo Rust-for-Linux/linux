@@ -109,6 +109,84 @@ impl<T: GetLinks + ?Sized> GetLinks for Arc<T> {
 ///
 /// Elements in the list are wrapped and ownership is transferred to the list while the element is
 /// in the list.
+///
+/// # Examples
+///
+/// In the example below we create a list of numbers, implement `GetLinks` for
+/// it and perform several operations on the list:
+///
+/// ```
+/// use kernel::linked_list::{GetLinks, Links, List, Wrapper};
+/// use kernel::sync::Arc;
+///
+/// struct NumList {
+///     num: i32,
+///     links: Links<NumList>,
+/// }
+///
+/// // We need to implement GetLinks for our list indicating:
+/// impl GetLinks for NumList {
+///     // The type of the entries of the list:
+///     type EntryType = Self;
+///     // And how to get the link to the previous and next items:
+///     fn get_links(data: &Self) -> &Links<Self> {
+///         &data.links
+///     }
+/// }
+///
+/// let first_item = Arc::try_new(NumList {
+///     num: 1,
+///     links: Links::new(),
+/// })?;
+///
+/// let second_item = Arc::try_new(NumList {
+///     num: 2,
+///     links: Links::new(),
+/// })?;
+///
+/// let third_item = Arc::try_new(NumList {
+///     num: 3,
+///     links: Links::new(),
+/// })?;
+///
+/// let mut list: List<Arc<NumList>> = List::new();
+/// assert!(list.is_empty());
+///
+/// list.push_back(first_item.clone());
+/// assert!(!list.is_empty());
+///
+/// // Pushing the same item twice has no effect
+/// list.push_back(first_item.clone());
+///
+/// unsafe { list.remove(&first_item) };
+/// assert!(list.is_empty());
+///
+/// list.push_back(second_item.clone());
+/// assert!(!list.is_empty());
+///
+/// unsafe { list.insert_after(second_item.into_pointer(), third_item) };
+///
+/// // At this point `second_item` and `third_item` are in the list with values
+/// // 2 and 3. Decrease their values by 1.
+/// let mut cursor = list.cursor_front_mut();
+/// while let Some(item) = cursor.current() {
+///     item.num -= 1;
+///     cursor.move_next();
+/// }
+///
+/// let item = list.pop_front().unwrap();
+/// assert_eq!(1, item.num);
+///
+/// let item = list.pop_front().unwrap();
+/// assert_eq!(2, item.num);
+///
+/// assert!(list.is_empty());
+///
+/// let item = list.pop_front();
+/// assert!(item.is_none());
+///
+/// # Ok::<(), Error>(())
+/// ```
 pub struct List<G: GetLinksWrapped> {
     list: RawList<G>,
 }
