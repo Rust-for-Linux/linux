@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/sched.h`](srctree/include/linux/sched.h).
 
-use crate::types::Opaque;
+use crate::types::unsafe_define_aref_type;
 use core::{
     ffi::{c_int, c_long, c_uint},
     marker::PhantomData,
@@ -33,52 +33,50 @@ macro_rules! current {
     };
 }
 
-/// Wraps the kernel's `struct task_struct`.
-///
-/// # Invariants
-///
-/// All instances are valid tasks created by the C portion of the kernel.
-///
-/// Instances of this type are always refcounted, that is, a call to `get_task_struct` ensures
-/// that the allocation remains valid at least until the matching call to `put_task_struct`.
-///
-/// # Examples
-///
-/// The following is an example of getting the PID of the current thread with zero additional cost
-/// when compared to the C version:
-///
-/// ```
-/// let pid = current!().pid();
-/// ```
-///
-/// Getting the PID of the current process, also zero additional cost:
-///
-/// ```
-/// let pid = current!().group_leader().pid();
-/// ```
-///
-/// Getting the current task and storing it in some struct. The reference count is automatically
-/// incremented when creating `State` and decremented when it is dropped:
-///
-/// ```
-/// use kernel::{task::Task, types::ARef};
-///
-/// struct State {
-///     creator: ARef<Task>,
-///     index: u32,
-/// }
-///
-/// impl State {
-///     fn new() -> Self {
-///         Self {
-///             creator: current!().into(),
-///             index: 0,
-///         }
-///     }
-/// }
-/// ```
-#[repr(transparent)]
-pub struct Task(pub(crate) Opaque<bindings::task_struct>);
+unsafe_define_aref_type! {
+    // # Invariants
+    ///
+    /// All instances are valid tasks created by the C portion of the kernel.
+    ///
+    /// # Examples
+    ///
+    /// The following is an example of getting the PID of the current thread with zero additional cost
+    /// when compared to the C version:
+    ///
+    /// ```
+    /// let pid = current!().pid();
+    /// ```
+    ///
+    /// Getting the PID of the current process, also zero additional cost:
+    ///
+    /// ```
+    /// let pid = current!().group_leader().pid();
+    /// ```
+    ///
+    /// Getting the current task and storing it in some struct. The reference count is automatically
+    /// incremented when creating `State` and decremented when it is dropped:
+    ///
+    /// ```
+    /// use kernel::{task::Task, types::ARef};
+    ///
+    /// struct State {
+    ///     creator: ARef<Task>,
+    ///     index: u32,
+    /// }
+    ///
+    /// impl State {
+    ///     fn new() -> Self {
+    ///         Self {
+    ///             creator: current!().into(),
+    ///             index: 0,
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub struct Task(task_struct);
+    get = get_task_struct;
+    put = put_task_struct;
+}
 
 // SAFETY: By design, the only way to access a `Task` is via the `current` function or via an
 // `ARef<Task>` obtained through the `AlwaysRefCounted` impl. This means that the only situation in
@@ -160,18 +158,5 @@ impl Task {
         // And `wake_up_process` is safe to be called for any valid task, even if the task is
         // running.
         unsafe { bindings::wake_up_process(self.0.get()) };
-    }
-}
-
-// SAFETY: The type invariants guarantee that `Task` is always refcounted.
-unsafe impl crate::types::AlwaysRefCounted for Task {
-    fn inc_ref(&self) {
-        // SAFETY: The existence of a shared reference means that the refcount is nonzero.
-        unsafe { bindings::get_task_struct(self.0.get()) };
-    }
-
-    unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
-        // SAFETY: The safety requirements guarantee that the refcount is nonzero.
-        unsafe { bindings::put_task_struct(obj.cast().as_ptr()) }
     }
 }
