@@ -2,8 +2,8 @@
 
 //! Allocator support.
 
-use core::alloc::{GlobalAlloc, Layout};
-use core::ptr;
+use core::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
+use core::{ptr, ptr::NonNull};
 
 use crate::bindings;
 
@@ -25,6 +25,34 @@ unsafe impl GlobalAlloc for KernelAllocator {
 
 #[global_allocator]
 static ALLOCATOR: KernelAllocator = KernelAllocator;
+
+/// Allocator for `kvmalloc()` family of functions.
+///
+/// This allocator is useful when you do not necessarily need contiguous memory (as with `kmalloc()`)
+/// and you would like to automatically retry allocations with `vmalloc()`.
+///
+/// See <https://www.kernel.org/doc/Documentation/core-api/memory-allocation.rst>.
+pub struct KernelVirtualAllocator;
+
+unsafe impl Allocator for KernelVirtualAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        // `kvrealloc()` is used instead of `kvmalloc()` because the latter is
+        // an inline function and cannot be bound to as a result.
+        let size = layout.size();
+        let raw_ptr =
+            unsafe { bindings::kvrealloc(ptr::null(), 0, size, bindings::GFP_KERNEL) as *mut u8 };
+        let ptr = NonNull::new(raw_ptr).ok_or(AllocError)?;
+
+        Ok(NonNull::slice_from_raw_parts(ptr, size))
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, _layout: Layout) {
+        let raw_ptr = ptr.as_ptr() as *const c_types::c_void;
+        unsafe {
+            bindings::kvfree(raw_ptr);
+        }
+    }
+}
 
 // `rustc` only generates these for some crate types. Even then, we would need
 // to extract the object file that has them from the archive. For the moment,
