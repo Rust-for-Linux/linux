@@ -13,6 +13,7 @@
 #include "build_bug.c"
 #include "device.c"
 #include "err.c"
+#include "i2c.c"
 #include "io.c"
 #include "kunit.c"
 #include "mutex.c"
