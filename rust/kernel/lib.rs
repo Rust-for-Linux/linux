@@ -16,6 +16,7 @@
 #![feature(coerce_unsized)]
 #![feature(const_refs_to_cell)]
 #![feature(dispatch_from_dyn)]
+#![feature(doc_cfg)]
 #![feature(new_uninit)]
 #![feature(receiver_trait)]
 #![feature(unsize)]
@@ -39,6 +40,9 @@ pub mod driver;
 pub mod error;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
+#[cfg(any(CONFIG_I2C, doc))]
+#[doc(cfg(CONFIG_I2C))]
+pub mod i2c;
 pub mod init;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
