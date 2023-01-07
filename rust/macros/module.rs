@@ -215,7 +215,7 @@ struct ModuleInfo {
     type_: String,
     license: String,
     name: String,
-    author: Option<String>,
+    authors: Option<Vec<String>>,
     description: Option<String>,
     alias: Option<String>,
     params: Option<Group>,
@@ -228,7 +228,7 @@ impl ModuleInfo {
         const EXPECTED_KEYS: &[&str] = &[
             "type",
             "name",
-            "author",
+            "authors",
             "description",
             "license",
             "alias",
@@ -257,7 +257,7 @@ impl ModuleInfo {
             match key.as_str() {
                 "type" => info.type_ = expect_ident(it),
                 "name" => info.name = expect_string_ascii(it),
-                "author" => info.author = Some(expect_string(it)),
+                "authors" => info.authors = Some(Self::parse_authors(it)),
                 "description" => info.description = Some(expect_string(it)),
                 "license" => info.license = expect_string_ascii(it),
                 "alias" => info.alias = Some(expect_string_ascii(it)),
@@ -300,6 +300,26 @@ impl ModuleInfo {
 
         info
     }
+
+    /// Parse ["First", "Second"] into Some(vec!["First", "Second"])
+    fn parse_authors(it: &mut token_stream::IntoIter) -> Vec<String> {
+        let mut authors: Vec<String> = vec![];
+        let group = expect_group(it);
+        assert_eq!(group.delimiter(), Delimiter::Bracket);
+        let mut stream = group.stream().into_iter();
+        loop {
+            let author = expect_string(&mut stream);
+            authors.push(author);
+            if let Some(punct) = try_punct(&mut stream) {
+                assert_eq!(punct, ',');
+            } else {
+                assert!(stream.next().is_none());
+                break;
+            }
+        }
+
+        authors
+    }
 }
 
 pub(crate) fn module(ts: TokenStream) -> TokenStream {
@@ -308,8 +328,10 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
     let info = ModuleInfo::parse(&mut it);
 
     let mut modinfo = ModInfoBuilder::new(info.name.as_ref());
-    if let Some(author) = info.author {
-        modinfo.emit("author", &author);
+    if let Some(authors) = &info.authors {
+        for author in authors {
+            modinfo.emit("author", author);
+        }
     }
     if let Some(description) = info.description {
         modinfo.emit("description", &description);

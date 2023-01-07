@@ -13,7 +13,7 @@ use kernel::{
 module! {
     type: RustMiscdev,
     name: "rust_miscdev",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust miscellaneous device sample",
     license: "GPL",
 }

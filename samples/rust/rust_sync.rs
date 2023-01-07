@@ -11,7 +11,7 @@ use kernel::{
 module! {
     type: RustSync,
     name: "rust_sync",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust synchronisation primitives sample",
     license: "GPL",
 }

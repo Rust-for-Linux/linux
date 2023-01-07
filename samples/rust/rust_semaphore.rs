@@ -28,7 +28,7 @@ use kernel::{
 module! {
     type: RustSemaphore,
     name: "rust_semaphore",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust semaphore sample",
     license: "GPL",
 }

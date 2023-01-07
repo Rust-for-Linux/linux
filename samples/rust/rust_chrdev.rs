@@ -8,7 +8,7 @@ use kernel::{chrdev, file};
 module! {
     type: RustChrdev,
     name: "rust_chrdev",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust character device sample",
     license: "GPL",
 }

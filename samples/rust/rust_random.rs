@@ -14,7 +14,7 @@ use kernel::{
 module_misc_device! {
     type: RandomFile,
     name: "rust_random",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Just use /dev/urandom: Now with early-boot safety",
     license: "GPL",
 }

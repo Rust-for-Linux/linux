@@ -54,7 +54,7 @@ impl kernel::Module for RustEchoServer {
 module! {
     type: RustEchoServer,
     name: "rust_echo_server",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust tcp echo sample",
     license: "GPL v2",
 }
