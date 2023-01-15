@@ -36,6 +36,10 @@
 #include <linux/sysctl.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <linux/virtio.h>
+#include <linux/vringh.h>
+#include <linux/virtio_config.h>
+#include <linux/virtio_ring.h>
 #include <uapi/linux/android/binder.h>
 
 /* `bindgen` gets confused at certain things. */
