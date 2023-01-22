@@ -4,6 +4,7 @@
 
 mod concat_idents;
 mod helpers;
+mod kunit;
 mod module;
 mod vtable;
 
@@ -188,4 +189,32 @@ pub fn vtable(attr: TokenStream, ts: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn concat_idents(ts: TokenStream) -> TokenStream {
     concat_idents::concat_idents(ts)
+}
+
+/// Registers a KUnit test suite and its test cases using a user-space like syntax.
+///
+/// This macro should be used on modules. If `CONFIG_KUNIT` (in `.config`) is `n`, the target module
+/// is ignored.
+///
+/// # Examples
+///
+/// ```ignore
+/// # use macros::kunit_tests;
+///
+/// #[kunit_tests(kunit_test_suit_name)]
+/// mod tests {
+///     #[test]
+///     fn foo() {
+///         assert_eq!(1, 1);
+///     }
+///
+///     #[test]
+///     fn bar() {
+///         assert_eq!(2, 2);
+///     }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn kunit_tests(attr: TokenStream, ts: TokenStream) -> TokenStream {
+    kunit::kunit_tests(attr, ts)
 }
