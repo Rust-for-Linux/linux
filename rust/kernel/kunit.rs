@@ -6,6 +6,8 @@
 //!
 //! Reference: <https://www.kernel.org/doc/html/latest/dev-tools/kunit/index.html>
 
+use crate::task::Task;
+use core::ops::Deref;
 use macros::kunit_tests;
 
 /// Asserts that a boolean expression is `true` at runtime.
@@ -183,11 +185,87 @@ macro_rules! kunit_unsafe_test_suite {
     };
 }
 
+/// In some cases, you need to call test-only code from outside the test case, for example, to
+/// create a function mock. This function can be invoked to know whether we are currently running a
+/// KUnit test or not.
+///
+/// # Examples
+///
+/// This example shows how a function can be mocked to return a well-known value while testing:
+///
+/// ```
+/// # use kernel::kunit::in_kunit_test;
+/// #
+/// fn fn_mock_example(n: i32) -> i32 {
+///     if in_kunit_test() {
+///         100
+///     } else {
+///         n + 1
+///     }
+/// }
+///
+/// let mock_res = fn_mock_example(5);
+/// assert_eq!(mock_res, 100);
+/// ```
+///
+/// Sometimes, you don't control the code that needs to be mocked. This example shows how the
+/// `bindings` module can be mocked:
+///
+/// ```
+/// // Import our mock naming it as the real module.
+/// #[cfg(CONFIG_KUNIT)]
+/// use bindings_mock_example as bindings;
+///
+/// // This module mocks `bindings`.
+/// mod bindings_mock_example {
+///     use kernel::kunit::in_kunit_test;
+///     use kernel::bindings::u64_;
+///
+///     // Make the other binding functions available.
+///     pub(crate) use kernel::bindings::*;
+///
+///     // Mock `ktime_get_boot_fast_ns` to return a well-known value when running a KUnit test.
+///     pub(crate) unsafe fn ktime_get_boot_fast_ns() -> u64_ {
+///         if in_kunit_test() {
+///             1234
+///         } else {
+///             unsafe { kernel::bindings::ktime_get_boot_fast_ns() }
+///         }
+///     }
+/// }
+///
+/// // This is the function we want to test. Since `bindings` has been mocked, we can use its
+/// // functions seamlessly.
+/// fn get_boot_ns() -> u64 {
+///     unsafe { bindings::ktime_get_boot_fast_ns() }
+/// }
+///
+/// let time = get_boot_ns();
+/// assert_eq!(time, 1234);
+/// ```
+pub fn in_kunit_test() -> bool {
+    if cfg!(CONFIG_KUNIT) {
+        // SAFETY: By the type invariant, we know that `*Task::current().deref().0` is valid.
+        let test = unsafe { (*Task::current().deref().0.get()).kunit_test };
+        !test.is_null()
+    } else {
+        false
+    }
+}
+
 #[kunit_tests(rust_kernel_kunit)]
 mod tests {
+    use super::*;
+
     #[test]
     fn rust_test_kunit_kunit_tests() {
         let running = true;
         assert_eq!(running, true);
+    }
+
+    #[test]
+    fn rust_test_kunit_in_kunit_test() {
+        let in_kunit = in_kunit_test();
+        assert_eq!(in_kunit, true);
     }
 }
