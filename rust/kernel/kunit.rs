@@ -88,3 +88,95 @@ macro_rules! kunit_assert_eq {
         $crate::kunit_assert!($test, $left == $right);
     }};
 }
+
+/// Represents an individual test case.
+///
+/// The test case should have the signature
+/// `unsafe extern "C" fn test_case(test: *mut crate::bindings::kunit)`.
+///
+/// The `kunit_unsafe_test_suite!` macro expects a NULL-terminated list of test cases. This macro
+/// can be invoked without parameters to generate the delimiter.
+#[macro_export]
+macro_rules! kunit_case {
+    () => {
+        $crate::bindings::kunit_case {
+            run_case: None,
+            name: core::ptr::null_mut(),
+            generate_params: None,
+            status: $crate::bindings::kunit_status_KUNIT_SUCCESS,
+            log: core::ptr::null_mut(),
+        }
+    };
+    ($name:ident, $run_case:ident) => {
+        $crate::bindings::kunit_case {
+            run_case: Some($run_case),
+            name: $crate::c_str!(core::stringify!($name)).as_char_ptr(),
+            generate_params: None,
+            status: $crate::bindings::kunit_status_KUNIT_SUCCESS,
+            log: core::ptr::null_mut(),
+        }
+    };
+}
+
+/// Registers a KUnit test suite.
+///
+/// # Safety
+///
+/// `test_cases` must be a NULL terminated array of test cases.
+///
+/// # Examples
+///
+/// ```ignore
+/// unsafe extern "C" fn test_fn(_test: *mut crate::bindings::kunit) {
+///     let actual = 1 + 1;
+///     let expected = 2;
+///     assert_eq!(actual, expected);
+/// }
+///
+/// static mut KUNIT_TEST_CASE: crate::bindings::kunit_case = crate::kunit_case!(name, test_fn);
+/// static mut KUNIT_NULL_CASE: crate::bindings::kunit_case = crate::kunit_case!();
+/// static mut KUNIT_TEST_CASES: &mut[crate::bindings::kunit_case] = unsafe {
+///     &mut[KUNIT_TEST_CASE, KUNIT_NULL_CASE]
+/// };
+/// crate::kunit_unsafe_test_suite!(suite_name, KUNIT_TEST_CASES);
+/// ```
+#[macro_export]
+macro_rules! kunit_unsafe_test_suite {
+    ($name:ident, $test_cases:ident) => {
+        const _: () = {
+            static KUNIT_TEST_SUITE_NAME: [i8; 256] = {
+                let name_u8 = core::stringify!($name).as_bytes();
+                let mut ret = [0; 256];
+
+                let mut i = 0;
+                while i < name_u8.len() {
+                    ret[i] = name_u8[i] as i8;
+                    i += 1;
+                }
+
+                ret
+            };
+
+            // SAFETY: `test_cases` is valid as it should be static.
+            static mut KUNIT_TEST_SUITE: core::cell::UnsafeCell<$crate::bindings::kunit_suite> =
+                core::cell::UnsafeCell::new($crate::bindings::kunit_suite {
+                    name: KUNIT_TEST_SUITE_NAME,
+                    test_cases: unsafe { $test_cases.as_mut_ptr() },
+                    suite_init: None,
+                    suite_exit: None,
+                    init: None,
+                    exit: None,
+                    status_comment: [0; 256usize],
+                    debugfs: core::ptr::null_mut(),
+                    log: core::ptr::null_mut(),
+                    suite_init_err: 0,
+                });
+
+            // SAFETY: `KUNIT_TEST_SUITE` is static.
+            #[used]
+            #[link_section = ".kunit_test_suites"]
+            static mut KUNIT_TEST_SUITE_ENTRY: *const $crate::bindings::kunit_suite =
+                unsafe { KUNIT_TEST_SUITE.get() };
+        };
+    };
+}
