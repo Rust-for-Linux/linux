@@ -49,8 +49,17 @@ mod bindings_helper {
 
 pub use bindings_raw::*;
 
+pub const GFP_ATOMIC: gfp_t = BINDINGS_GFP_ATOMIC;
 pub const GFP_KERNEL: gfp_t = BINDINGS_GFP_KERNEL;
-pub const __GFP_ZERO: gfp_t = BINDINGS___GFP_ZERO;
+pub const GFP_NOWAIT: gfp_t = BINDINGS_GFP_NOWAIT;
+pub const GFP_NOIO: gfp_t = BINDINGS_GFP_NOIO;
+pub const GFP_NOFS: gfp_t = BINDINGS_GFP_NOFS;
+pub const GFP_USER: gfp_t = BINDINGS_GFP_USER;
+pub const __GFP_NOFAIL: gfp_t = ___GFP_NOFAIL;
+pub const __GFP_NORETRY: gfp_t = ___GFP_NORETRY;
+pub const __GFP_NOWARN: gfp_t = ___GFP_NOWARN;
+pub const __GFP_COMP: gfp_t = ___GFP_COMP;
+pub const __GFP_ZERO: gfp_t = ___GFP_ZERO;
 pub const __GFP_HIGHMEM: gfp_t = ___GFP_HIGHMEM;
 
 pub const MAX_LFS_FILESIZE: loff_t = BINDINGS_MAX_LFS_FILESIZE;

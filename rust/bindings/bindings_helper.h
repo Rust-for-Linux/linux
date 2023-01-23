@@ -40,7 +40,11 @@
 
 /* `bindgen` gets confused at certain things. */
 const gfp_t BINDINGS_GFP_KERNEL = GFP_KERNEL;
-const gfp_t BINDINGS___GFP_ZERO = __GFP_ZERO;
+const gfp_t BINDINGS_GFP_ATOMIC = GFP_ATOMIC;
+const gfp_t BINDINGS_GFP_NOWAIT = GFP_NOWAIT;
+const gfp_t BINDINGS_GFP_NOIO = GFP_NOIO;
+const gfp_t BINDINGS_GFP_NOFS = GFP_NOFS;
+const gfp_t BINDINGS_GFP_USER = GFP_USER;
 const __poll_t BINDINGS_EPOLLIN = EPOLLIN;
 const __poll_t BINDINGS_EPOLLOUT = EPOLLOUT;
 const __poll_t BINDINGS_EPOLLERR = EPOLLERR;

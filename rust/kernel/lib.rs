@@ -112,6 +112,46 @@ pub use crate::types::{
 
 use core::marker::PhantomData;
 
+/// Memory allocation flags.
+///
+/// GFP flags are commonly used throughout Linux to indicate how memory should be allocated. The
+/// GFP acronym stands for `get_free_pages()`, the underlying memory allocation function. Not every
+/// GFP flag is supported by every function which may allocate memory. Most users will want to use
+/// a plain [`GFP_KERNEL`].
+///
+/// [`gfp_t`]: ../../../include/linux/gfp_types.h
+pub use bindings::gfp_t;
+
+/// Users can not sleep and need the allocation to succeed.
+pub use bindings::GFP_ATOMIC;
+/// Typical for kernel-internal allocations.
+pub use bindings::GFP_KERNEL;
+/// Will use direct reclaim but will not use any filesystem interfaces.
+pub use bindings::GFP_NOFS;
+/// Will use direct reclaim to discard clean pages or slab pages that do not require the starting
+/// of any physical IO.
+pub use bindings::GFP_NOIO;
+/// Is for kernel allocations that should not stall for direct reclaim, start physical IO or use
+/// any filesystem callback.
+pub use bindings::GFP_NOWAIT;
+/// Is for userspace allocations that also need to be directly accessibly by the kernel or
+/// hardware.
+pub use bindings::GFP_USER;
+/// Address compound page metadata.
+pub use bindings::__GFP_COMP;
+/// A memory area that is only addressable by the kernel through mapping portions into its own
+/// address space.
+pub use bindings::__GFP_HIGHMEM;
+/// The VM implementation _must_ retry infinitely as the caller cannot handle allocation failures.
+pub use bindings::__GFP_NOFAIL;
+/// The VM implementation will try only very lightweight memory direct reclaim to get some memory
+/// under memory pressure (thus it can sleep).
+pub use bindings::__GFP_NORETRY;
+/// Suppresses allocation failure reports.
+pub use bindings::__GFP_NOWARN;
+/// Returns a zeroed page on success.
+pub use bindings::__GFP_ZERO;
+
 /// Page size defined in terms of the `PAGE_SHIFT` macro from C.
 ///
 /// [`PAGE_SHIFT`]: ../../../include/asm-generic/page.h
