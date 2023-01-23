@@ -9,6 +9,9 @@
 use crate::{bindings, error::from_kernel_result, types::ForeignOwnable, Result};
 use core::marker::PhantomData;
 
+/// Message from PM subsystem.
+pub type PmMessage = bindings::pm_message;
+
 /// Corresponds to the kernel's `struct dev_pm_ops`.
 ///
 /// It is meant to be implemented by drivers that support power-management operations.
