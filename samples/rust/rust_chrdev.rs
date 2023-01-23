@@ -17,7 +17,7 @@ struct RustFile;
 
 #[vtable]
 impl file::Operations for RustFile {
-    fn open(_shared: &(), _file: &file::File) -> Result {
+    fn open(_shared: &(), _inode: &file::Inode, _file: &file::File) -> Result {
         Ok(())
     }
 }

@@ -16,7 +16,7 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 use kernel::{
     condvar_init,
-    file::{self, File, IoctlCommand, IoctlHandler},
+    file::{self, File, Inode, IoctlCommand, IoctlHandler},
     io_buffer::{IoBufferReader, IoBufferWriter},
     miscdev::Registration,
     mutex_init,
@@ -66,7 +66,7 @@ impl file::Operations for FileState {
     type Data = Box<Self>;
     type OpenData = Arc<Semaphore>;
 
-    fn open(shared: &Arc<Semaphore>, _file: &File) -> Result<Box<Self>> {
+    fn open(shared: &Arc<Semaphore>, _inode: &Inode, _file: &File) -> Result<Box<Self>> {
         Ok(Box::try_new(Self {
             read_count: AtomicU64::new(0),
             shared: shared.clone(),

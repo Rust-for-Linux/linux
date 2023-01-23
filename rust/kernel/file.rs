@@ -8,6 +8,7 @@
 use crate::{
     bindings,
     cred::Credential,
+    device::Dev,
     error::{code::*, from_kernel_result, Error, Result},
     io_buffer::{IoBufferReader, IoBufferWriter},
     iov_iter::IovIter,
@@ -163,6 +164,19 @@ impl File {
         // SAFETY: The file is valid because the shared reference guarantees a nonzero refcount.
         unsafe { core::ptr::addr_of!((*self.0.get()).f_flags).read() }
     }
+
+    /// Gives a counted reference to the [`Inode`] associated with the file.
+    pub fn inode(&self) -> Option<ARef<Inode>> {
+        // SAFETY: The file is valid because the shared reference guarantees a nonzero refcount.
+        // Also the `f_inode` field is always valid due to it being populated in `alloc_file`.
+        // Plus `igrab` returns the inode or a null pointer when it's getting freed.
+        let ptr = ptr::NonNull::new(unsafe {
+            bindings::igrab(core::ptr::addr_of!((*self.0.get()).f_inode).read())
+        })?;
+
+        // SAFETY: `igrab` increments the refcount before returning.
+        Some(unsafe { ARef::from_raw(ptr.cast()) })
+    }
 }
 
 // SAFETY: The type invariants guarantee that `File` is always ref-counted.
@@ -175,6 +189,61 @@ unsafe impl AlwaysRefCounted for File {
     unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
         // SAFETY: The safety requirements guarantee that the refcount is nonzero.
         unsafe { bindings::fput(obj.cast().as_ptr()) }
+    }
+}
+
+/// Wraps the kernel's `struct inode`.
+///
+/// # Invariants
+///
+/// Instances of this type are always ref-counted, that is, a call to `igrab` ensures that the
+/// allocation remains valid at least until the matching call to `iput`.
+#[repr(transparent)]
+pub struct Inode(pub(crate) UnsafeCell<bindings::inode>);
+
+// TODO: Accessing fields of `struct inode` through the pointer is UB because other threads may be
+// writing to them. However, this is how the C code currently operates: naked reads and writes to
+// fields. Even if we used relaxed atomics on the Rust side, we can't force this on the C side.
+impl Inode {
+    /// Creates a reference to a [`Inode`] from a valid pointer.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `ptr` is valid and remains valid for the lifetime of the
+    /// returned [`Inode`] instance.
+    pub(crate) unsafe fn from_ptr<'a>(ptr: *const bindings::inode) -> &'a Inode {
+        // SAFETY: The safety requirements guarantee the validity of the dereference, while the
+        // `File` type being transparent makes the cast ok.
+        unsafe { &*ptr.cast() }
+    }
+
+    /// Returns the device number (`struct inode::i_rdev`).
+    pub fn dev(&self) -> Dev {
+        // SAFETY: The inode is valid because the shared reference guarantees a nonzero refcount.
+        Dev(unsafe { core::ptr::addr_of!((*self.0.get()).i_rdev).read() })
+    }
+
+    /// Returns the device number major.
+    pub fn major(&self) -> u32 {
+        self.dev().major()
+    }
+
+    /// Returns the device number minor.
+    pub fn minor(&self) -> u32 {
+        self.dev().minor()
+    }
+}
+
+// SAFETY: The type invariants guarantee that `Inode` is always ref-counted.
+unsafe impl AlwaysRefCounted for Inode {
+    fn inc_ref(&self) {
+        // SAFETY: The existence of a shared reference means that the refcount is nonzero.
+        unsafe { bindings::igrab(self.0.get()) };
+    }
+
+    unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
+        // SAFETY: The safety requirements guarantee that the refcount is nonzero.
+        unsafe { bindings::iput(obj.cast().as_ptr()) }
     }
 }
 
@@ -303,13 +372,17 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
             // should point to data in the inode or file that lives longer
             // than the following use of `T::open`.
             let arg = unsafe { A::convert(inode, file) };
+            // SAFETY: The C contract guarantees that `inode` is valid. Additionally,
+            // `inoderef` never outlives this function, so it is guaranteed to be
+            // valid.
+            let inoderef = unsafe { Inode::from_ptr(inode) };
             // SAFETY: The C contract guarantees that `file` is valid. Additionally,
             // `fileref` never outlives this function, so it is guaranteed to be
             // valid.
             let fileref = unsafe { File::from_ptr(file) };
             // SAFETY: `arg` was previously returned by `A::convert` and must
             // be a valid non-null pointer.
-            let ptr = T::open(unsafe { &*arg }, fileref)?.into_foreign();
+            let ptr = T::open(unsafe { &*arg }, inoderef, fileref)?.into_foreign();
             // SAFETY: The C contract guarantees that `private_data` is available
             // for implementers of the file operations (no other C code accesses
             // it), so we know that there are no concurrent threads/CPUs accessing
@@ -426,13 +499,15 @@ impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
     }
 
     unsafe extern "C" fn release_callback(
-        _inode: *mut bindings::inode,
+        inode: *mut bindings::inode,
         file: *mut bindings::file,
     ) -> core::ffi::c_int {
         let ptr = mem::replace(unsafe { &mut (*file).private_data }, ptr::null_mut());
-        T::release(unsafe { T::Data::from_foreign(ptr as _) }, unsafe {
-            File::from_ptr(file)
-        });
+        T::release(
+            unsafe { T::Data::from_foreign(ptr as _) },
+            unsafe { Inode::from_ptr(inode) },
+            unsafe { File::from_ptr(file) },
+        );
         0
     }
 
@@ -702,7 +777,7 @@ pub struct IoctlCommand {
 
 impl IoctlCommand {
     /// Constructs a new [`IoctlCommand`].
-    fn new(cmd: u32, arg: usize) -> Self {
+    pub(crate) fn new(cmd: u32, arg: usize) -> Self {
         let size = (cmd >> bindings::_IOC_SIZESHIFT) & bindings::_IOC_SIZEMASK;
 
         // SAFETY: We only create one instance of the user slice per ioctl call, so TOCTOU issues
@@ -783,7 +858,7 @@ pub trait Operations {
     /// Creates a new instance of this file.
     ///
     /// Corresponds to the `open` function pointer in `struct file_operations`.
-    fn open(context: &Self::OpenData, file: &File) -> Result<Self::Data>;
+    fn open(context: &Self::OpenData, inode: &Inode, file: &File) -> Result<Self::Data>;
 
     /// Cleans up after the last reference to the file goes away.
     ///
@@ -791,7 +866,7 @@ pub trait Operations {
     /// implementation moves it elsewhere.
     ///
     /// Corresponds to the `release` function pointer in `struct file_operations`.
-    fn release(_data: Self::Data, _file: &File) {}
+    fn release(_data: Self::Data, _inode: &Inode, _file: &File) {}
 
     /// Reads data from this file to the caller's buffer.
     ///

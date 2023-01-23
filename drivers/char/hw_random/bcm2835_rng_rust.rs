@@ -3,8 +3,12 @@
 //! Broadcom BCM2835 Random Number Generator support.
 
 use kernel::{
-    device, file, file::File, io_buffer::IoBufferWriter, miscdev, module_platform_driver, of,
-    platform, prelude::*, sync::Arc,
+    device, file,
+    file::{File, Inode},
+    io_buffer::IoBufferWriter,
+    miscdev, module_platform_driver, of, platform,
+    prelude::*,
+    sync::Arc,
 };
 
 module_platform_driver! {
@@ -19,7 +23,7 @@ struct RngDevice;
 
 #[vtable]
 impl file::Operations for RngDevice {
-    fn open(_open_data: &(), _file: &File) -> Result {
+    fn open(_open_data: &(), _inode: &Inode, _file: &File) -> Result {
         Ok(())
     }
 

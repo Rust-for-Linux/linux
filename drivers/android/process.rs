@@ -4,7 +4,7 @@ use core::{convert::TryFrom, mem::take, ops::Range};
 use kernel::{
     bindings,
     cred::Credential,
-    file::{self, File, IoctlCommand, IoctlHandler, PollTable},
+    file::{self, File, Inode, IoctlCommand, IoctlHandler, PollTable},
     io_buffer::{IoBufferReader, IoBufferWriter},
     linked_list::List,
     mm,
@@ -813,11 +813,11 @@ impl file::Operations for Process {
     type Data = Arc<Self>;
     type OpenData = Arc<Context>;
 
-    fn open(ctx: &Arc<Context>, file: &File) -> Result<Self::Data> {
+    fn open(ctx: &Arc<Context>, _inode: &Inode, file: &File) -> Result<Self::Data> {
         Self::new(ctx.clone(), file.cred().into())
     }
 
-    fn release(obj: Self::Data, _file: &File) {
+    fn release(obj: Self::Data, _inode: &Inode, _file: &File) {
         // Mark this process as dead. We'll do the same for the threads later.
         obj.inner.lock().is_dead = true;
 
