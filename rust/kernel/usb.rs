@@ -20,6 +20,10 @@ use crate::{
     ThisModule,
 };
 
+mod urb;
+
+pub use urb::{transfer_flags, Completion, ControlRequest, Transfer, Urb};
+
 /// USB device ID macros reexports and casted to [`u16`] intended for the
 /// [`match_flags`](DeviceId::match_flags) field of [`DeviceId`].
 pub mod id_match {

@@ -421,6 +421,12 @@ refcount_t rust_helper_REFCOUNT_INIT(int n)
 }
 EXPORT_SYMBOL_GPL(rust_helper_REFCOUNT_INIT);
 
+unsigned int rust_helper_refcount_read(refcount_t *r)
+{
+	return refcount_read(r);
+}
+EXPORT_SYMBOL_GPL(rust_helper_refcount_read);
+
 void rust_helper_refcount_inc(refcount_t *r)
 {
 	refcount_inc(r);
@@ -708,6 +714,43 @@ void rust_helper_usb_set_intfdata(struct usb_interface *intf, void *data) {
 	usb_set_intfdata(intf, data);
 }
 EXPORT_SYMBOL_GPL(rust_helper_usb_set_intfdata);
+
+struct usb_device *rust_helper_interface_to_usbdev(struct usb_interface *intf)
+{
+	return interface_to_usbdev(intf);
+}
+EXPORT_SYMBOL_GPL(rust_helper_interface_to_usbdev);
+
+void rust_helper_usb_fill_control_urb(struct urb *urb, struct usb_device *dev,
+		unsigned int pipe,
+		unsigned char *setup_packet,
+		void *transfer_buffer, int buffer_length,
+		usb_complete_t complete_fn, void *context)
+{
+	usb_fill_control_urb(urb, dev, pipe, setup_packet, transfer_buffer,
+		buffer_length, complete_fn, context);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_fill_control_urb);
+
+void rust_helper_usb_fill_bulk_urb(struct urb *urb, struct usb_device *dev,
+		unsigned int pipe, void *transfer_buffer,
+		int buffer_length,
+		usb_complete_t complete_fn, void *context)
+{
+	usb_fill_bulk_urb(urb, dev, pipe, transfer_buffer, buffer_length,
+		complete_fn, context);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_fill_bulk_urb);
+
+void rust_helper_usb_fill_int_urb(struct urb *urb, struct usb_device *dev,
+		unsigned int pipe, void *transfer_buffer,
+		int buffer_length, usb_complete_t complete_fn,
+		void *context, int interval)
+{
+	usb_fill_int_urb(urb, dev, pipe, transfer_buffer, buffer_length,
+		complete_fn, context, interval);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_fill_int_urb);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
