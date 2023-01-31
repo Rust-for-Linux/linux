@@ -70,6 +70,16 @@ config SAMPLE_RUST_MISCDEV
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_USB_SIMPLE
+	tristate "USB simple device driver"
+	help
+	  This option builds the Rust USB simple driver sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_usb_simple.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_STACK_PROBING
 	tristate "Stack probing"
 	help
