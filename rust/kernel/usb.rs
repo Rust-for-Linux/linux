@@ -13,6 +13,7 @@ use crate::{
     error::{code::*, from_kernel_result, Result},
     file::IoctlCommand,
     macros::vtable,
+    offset_of,
     power::PmMessage,
     str::CStr,
     to_result,
@@ -20,8 +21,10 @@ use crate::{
     ThisModule,
 };
 
+mod descriptors;
 mod urb;
 
+pub use descriptors::{DeviceDescriptor, EndpointDescriptor, HostInterface, InterfaceDescriptor};
 pub use urb::{transfer_flags, Completion, ControlRequest, Transfer, Urb};
 
 /// USB device ID macros reexports and casted to [`u16`] intended for the
@@ -604,6 +607,19 @@ impl Device {
         unsafe { device::Device::new(self.raw_device()) }
     }
 
+    /// Gets the device descriptor.
+    #[inline]
+    pub fn descriptor(&self) -> &DeviceDescriptor {
+        // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid. Also
+        // `DeviceDescriptor` is an alias to `usb_device_descriptor`.
+        unsafe {
+            &*(self
+                .ptr
+                .wrapping_offset(offset_of!(bindings::usb_device, descriptor))
+                .cast::<DeviceDescriptor>())
+        }
+    }
+
     /// Increments the reference count of the device.
     ///
     /// # Safety
@@ -740,6 +756,52 @@ impl Interface {
                 container_of!((*self.ptr).dev.parent, bindings::usb_device, dev).cast_mut(),
             )
         }
+    }
+
+    /// Provides an slice view of every available alternate setting.
+    #[inline]
+    pub fn altsettings(&self) -> &[HostInterface] {
+        // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid. Also an
+        // slice is built out of an always valid non-null pointer and `HostInterface` is an alias
+        // to `usb_host_interface`.
+        unsafe {
+            core::slice::from_raw_parts(
+                ((*self.ptr).altsetting as *const HostInterface).cast(),
+                (*self.ptr).num_altsetting as _,
+            )
+        }
+    }
+
+    /// Provides a mutable slice view of every available alternate setting.
+    #[inline]
+    pub fn altsettings_mut(&mut self) -> &mut [HostInterface] {
+        // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid. Also an
+        // slice is built out of an always valid non-null pointer and `HostInterface` is an alias
+        // to `usb_host_interface`.
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                (*self.ptr).altsetting.cast(),
+                (*self.ptr).num_altsetting as _,
+            )
+        }
+    }
+
+    /// Provides immutable access to the current alternate setting.
+    #[inline]
+    pub fn cur_altsetting(&self) -> &HostInterface {
+        // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid. Also a
+        // reference is derived from an always valid non-null pointer and `HostInterface` is an
+        // alias to `usb_host_interface`.
+        unsafe { &*(*self.ptr).cur_altsetting.cast() }
+    }
+
+    /// Provides mutable access to the current alternate setting.
+    #[inline]
+    pub fn cur_altsetting_mut(&mut self) -> &mut HostInterface {
+        // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid. Also a
+        // reference is derived from an always valid non-null pointer and `HostInterface` is an
+        // alias to `usb_host_interface`.
+        unsafe { &mut *(*self.ptr).cur_altsetting.cast() }
     }
 
     /// Increments the reference count of the interface.
