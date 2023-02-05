@@ -83,8 +83,10 @@ impl<T: drm::drv::Driver> Device<T> {
         driver_features: T::FEATURES,
         ioctls: T::IOCTLS.as_ptr(),
         num_ioctls: T::IOCTLS.len() as i32,
-        fops: core::ptr::null_mut() as _,
+        fops: &Self::GEM_FOPS as _,
     };
+
+    const GEM_FOPS: bindings::file_operations = drm::gem::create_fops();
 
     /// Create a new `drm::device::Device` for a `drm::drv::Driver`.
     pub fn new(dev: &device::Device, data: T::Data) -> Result<ARef<Self>> {

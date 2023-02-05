@@ -12,6 +12,7 @@
 #include "build_assert.c"
 #include "build_bug.c"
 #include "device.c"
+#include "drm.c"
 #include "err.c"
 #include "io.c"
 #include "kunit.c"
