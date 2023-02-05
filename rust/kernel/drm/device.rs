@@ -57,8 +57,8 @@ pub struct Device<T: drm::drv::Driver>(Opaque<bindings::drm_device>, PhantomData
 impl<T: drm::drv::Driver> Device<T> {
     const VTABLE: bindings::drm_driver = drm_legacy_fields! {
         load: None,
-        open: None, // TODO: File abstraction
-        postclose: None, // TODO: File abstraction
+        open: Some(drm::file::open_callback::<T::File>),
+        postclose: Some(drm::file::postclose_callback::<T::File>),
         unload: None,
         release: Some(Self::release),
         master_set: None,
