@@ -142,15 +142,14 @@ pub fn call_printk_cont(args: fmt::Arguments<'_>) {
 macro_rules! print_macro (
     // The non-continuation cases (most of them, e.g. `INFO`).
     ($format_string:path, false, $($arg:tt)+) => (
-        // SAFETY: This hidden macro should only be called by the documented
-        // printing macros which ensure the format string is one of the fixed
-        // ones. All `__LOG_PREFIX`s are null-terminated as they are generated
-        // by the `module!` proc macro or fixed values defined in a kernel
-        // crate.
-        {
-            // Do this step outside of the unsafe block
-            let formatted = format_args!($($arg)+);
-            unsafe {
+        // Make sure to do `format_args` outside of the unsafe block
+        match format_args!($($arg)+) {
+            // SAFETY: This hidden macro should only be called by the documented
+            // printing macros which ensure the format string is one of the fixed
+            // ones. All `__LOG_PREFIX`s are null-terminated as they are generated
+            // by the `module!` proc macro or fixed values defined in a kernel
+            // crate.
+            formatted => unsafe {
                 $crate::print::call_printk(
                     &$format_string,
                     crate::__LOG_PREFIX,
