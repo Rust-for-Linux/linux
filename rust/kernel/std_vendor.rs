@@ -137,6 +137,7 @@
 /// [`std::dbg`]: https://doc.rust-lang.org/std/macro.dbg.html
 /// [`eprintln`]: https://doc.rust-lang.org/std/macro.eprintln.html
 /// [`printk`]: https://www.kernel.org/doc/html/latest/core-api/printk-basics.html
+#[allow(rustdoc::broken_intra_doc_links)]
 #[macro_export]
 macro_rules! dbg {
     // NOTE: We cannot use `concat!` to make a static string as a format argument
