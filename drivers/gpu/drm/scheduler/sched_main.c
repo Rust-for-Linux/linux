@@ -984,6 +984,16 @@ static int drm_sched_main(void *param)
 		if (!entity)
 			continue;
 
+		if (sched->ops->can_run_job) {
+			sched_job = to_drm_sched_job(spsc_queue_peek(&entity->job_queue));
+			if (!sched_job) {
+				complete_all(&entity->entity_idle);
+				continue;
+			}
+			if (!sched->ops->can_run_job(sched_job))
+				continue;
+		}
+
 		sched_job = drm_sched_entity_pop_job(entity);
 
 		if (!sched_job) {

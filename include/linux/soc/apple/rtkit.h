@@ -22,6 +22,7 @@
  * @size:      Size of the shared memory buffer.
  * @iova:      Device VA of shared memory buffer.
  * @is_mapped: Shared memory buffer is managed by the co-processor.
+ * @private:   Private data pointer for the parent driver.
  */
 
 struct apple_rtkit_shmem {
@@ -30,6 +31,7 @@ struct apple_rtkit_shmem {
 	size_t size;
 	dma_addr_t iova;
 	bool is_mapped;
+	void *private;
 };
 
 /*
@@ -76,6 +78,25 @@ struct apple_rtkit;
 struct apple_rtkit *devm_apple_rtkit_init(struct device *dev, void *cookie,
 					  const char *mbox_name, int mbox_idx,
 					  const struct apple_rtkit_ops *ops);
+
+/*
+ * Non-devm version of devm_apple_rtkit_init. Must be freed with
+ * apple_rtkit_free.
+ *
+ * @dev:         Pointer to the device node this coprocessor is assocated with
+ * @cookie:      opaque cookie passed to all functions defined in rtkit_ops
+ * @mbox_name:   mailbox name used to communicate with the co-processor
+ * @mbox_idx:    mailbox index to be used if mbox_name is NULL
+ * @ops:         pointer to rtkit_ops to be used for this co-processor
+ */
+struct apple_rtkit *apple_rtkit_init(struct device *dev, void *cookie,
+					  const char *mbox_name, int mbox_idx,
+					  const struct apple_rtkit_ops *ops);
+
+/*
+ * Free an instance of apple_rtkit.
+ */
+void apple_rtkit_free(struct apple_rtkit *rtk);
 
 /*
  * Reinitialize internal structures. Must only be called with the co-processor

@@ -130,6 +130,15 @@
 #define ARM_MALI_LPAE_MEMATTR_IMP_DEF	0x88ULL
 #define ARM_MALI_LPAE_MEMATTR_WRITE_ALLOC 0x8DULL
 
+#define APPLE_UAT_MEMATTR_PRIV		(((arm_lpae_iopte)0x0) << 2)
+#define APPLE_UAT_MEMATTR_DEV		(((arm_lpae_iopte)0x1) << 2)
+#define APPLE_UAT_MEMATTR_SHARED	(((arm_lpae_iopte)0x2) << 2)
+#define APPLE_UAT_GPU_ACCESS			(((arm_lpae_iopte)1) << 55)
+#define APPLE_UAT_UXN				(((arm_lpae_iopte)1) << 54)
+#define APPLE_UAT_PXN				(((arm_lpae_iopte)1) << 53)
+#define APPLE_UAT_AP1				(((arm_lpae_iopte)1) << 7)
+#define APPLE_UAT_AP0				(((arm_lpae_iopte)1) << 6)
+
 /* IOPTE accessors */
 #define iopte_deref(pte,d) __va(iopte_to_paddr(pte, d))
 
@@ -402,7 +411,42 @@ static arm_lpae_iopte arm_lpae_prot_to_pte(struct arm_lpae_io_pgtable *data,
 {
 	arm_lpae_iopte pte;
 
-	if (data->iop.fmt == ARM_64_LPAE_S1 ||
+	if (data->iop.fmt == APPLE_UAT) {
+		/*
+		 * This bit enables GPU access and the particular permission
+		 * rules that follow. Without it, access is firmware-only and
+		 * permissions follow the firmware's Apple SPRR configuration.
+		 */
+		pte = APPLE_UAT_GPU_ACCESS;
+		if (prot & IOMMU_PRIV) {
+			/* Firmware structures */
+			pte |= APPLE_UAT_AP0;
+			if (prot & IOMMU_WRITE) {
+				/* Firmware RW */
+				pte |= APPLE_UAT_UXN;
+			} else if (!(prot & IOMMU_READ)) {
+				/* No access */
+				pte |= APPLE_UAT_PXN;
+			}
+		} else if (prot & IOMMU_NOEXEC) {
+			/* GPU structures (no FW access) */
+			pte |= APPLE_UAT_AP1 | ARM_LPAE_PTE_nG;
+			if (!(prot & IOMMU_READ)) {
+				pte |= APPLE_UAT_PXN;
+				if (!(prot & IOMMU_WRITE))
+					pte |= APPLE_UAT_UXN;
+			} else if (prot & IOMMU_WRITE) {
+				pte |= APPLE_UAT_UXN;
+			}
+		} else {
+			pte |= ARM_LPAE_PTE_nG;
+			/* GPU structures (also FW accessible) */
+			if (prot & IOMMU_WRITE)
+				pte |= APPLE_UAT_UXN;
+			if (prot & IOMMU_READ)
+				pte |= APPLE_UAT_PXN;
+		}
+	} else if (data->iop.fmt == ARM_64_LPAE_S1 ||
 	    data->iop.fmt == ARM_32_LPAE_S1) {
 		pte = ARM_LPAE_PTE_nG;
 		if (!(prot & IOMMU_WRITE) && (prot & IOMMU_READ))
@@ -421,7 +465,14 @@ static arm_lpae_iopte arm_lpae_prot_to_pte(struct arm_lpae_io_pgtable *data,
 	 * Note that this logic is structured to accommodate Mali LPAE
 	 * having stage-1-like attributes but stage-2-like permissions.
 	 */
-	if (data->iop.fmt == ARM_64_LPAE_S2 ||
+	if (data->iop.fmt == APPLE_UAT) {
+		if (prot & IOMMU_MMIO)
+			pte |= APPLE_UAT_MEMATTR_DEV;
+		else if (prot & IOMMU_CACHE)
+			pte |= APPLE_UAT_MEMATTR_SHARED;
+		else
+			pte |= APPLE_UAT_MEMATTR_PRIV;
+	} else if (data->iop.fmt == ARM_64_LPAE_S2 ||
 	    data->iop.fmt == ARM_32_LPAE_S2) {
 		if (prot & IOMMU_MMIO)
 			pte |= ARM_LPAE_PTE_MEMATTR_DEV;
@@ -444,12 +495,14 @@ static arm_lpae_iopte arm_lpae_prot_to_pte(struct arm_lpae_io_pgtable *data,
 	 * "outside the GPU" (i.e. either the Inner or System domain in CPU
 	 * terms, depending on coherency).
 	 */
-	if (prot & IOMMU_CACHE && data->iop.fmt != ARM_MALI_LPAE)
+	if (data->iop.fmt == APPLE_UAT)
+		pte |= ARM_LPAE_PTE_SH_NS;
+	else if (prot & IOMMU_CACHE && data->iop.fmt != ARM_MALI_LPAE)
 		pte |= ARM_LPAE_PTE_SH_IS;
 	else
 		pte |= ARM_LPAE_PTE_SH_OS;
 
-	if (prot & IOMMU_NOEXEC)
+	if (prot & IOMMU_NOEXEC && data->iop.fmt != APPLE_UAT)
 		pte |= ARM_LPAE_PTE_XN;
 
 	if (data->iop.cfg.quirks & IO_PGTABLE_QUIRK_ARM_NS)
@@ -1079,6 +1132,41 @@ out_free_data:
 	return NULL;
 }
 
+static struct io_pgtable *
+apple_uat_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie)
+{
+	struct arm_lpae_io_pgtable *data;
+
+	/* No quirks for UAT (hopefully) */
+	if (cfg->quirks)
+		return NULL;
+
+	if (cfg->ias > 48 || cfg->oas > 42)
+		return NULL;
+
+	cfg->pgsize_bitmap &= SZ_16K;
+
+	data = arm_lpae_alloc_pgtable(cfg);
+	if (!data)
+		return NULL;
+
+	data->pgd = __arm_lpae_alloc_pages(ARM_LPAE_PGD_SIZE(data), GFP_KERNEL,
+					   cfg);
+	if (!data->pgd)
+		goto out_free_data;
+
+	/* Ensure the empty pgd is visible before the TTBAT can be written */
+	wmb();
+
+	cfg->apple_uat_cfg.ttbr = virt_to_phys(data->pgd);
+
+	return &data->iop;
+
+out_free_data:
+	kfree(data);
+	return NULL;
+}
+
 struct io_pgtable_init_fns io_pgtable_arm_64_lpae_s1_init_fns = {
 	.alloc	= arm_64_lpae_alloc_pgtable_s1,
 	.free	= arm_lpae_free_pgtable,
@@ -1101,6 +1189,11 @@ struct io_pgtable_init_fns io_pgtable_arm_32_lpae_s2_init_fns = {
 
 struct io_pgtable_init_fns io_pgtable_arm_mali_lpae_init_fns = {
 	.alloc	= arm_mali_lpae_alloc_pgtable,
+	.free	= arm_lpae_free_pgtable,
+};
+
+struct io_pgtable_init_fns io_pgtable_apple_uat_init_fns = {
+	.alloc	= apple_uat_alloc_pgtable,
 	.free	= arm_lpae_free_pgtable,
 };
 

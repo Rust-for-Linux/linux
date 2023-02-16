@@ -390,6 +390,14 @@ struct drm_sched_backend_ops {
 					 struct drm_sched_entity *s_entity);
 
 	/**
+         * @can_run_job: Called before job execution to check whether the
+         * hardware is free enough to run the job.  This can be used to
+	 * implement more complex hardware resource policies than the
+	 * hw_submission limit.
+	 */
+	bool (*can_run_job)(struct drm_sched_job *sched_job);
+
+	/**
          * @run_job: Called to execute the job once all of the dependencies
          * have been resolved.  This may be called multiple times, if
 	 * timedout_job() has happened and drm_sched_job_recovery()

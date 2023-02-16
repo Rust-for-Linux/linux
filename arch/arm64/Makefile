@@ -41,6 +41,8 @@ KBUILD_CFLAGS	+= -mgeneral-regs-only	\
 KBUILD_CFLAGS	+= $(call cc-disable-warning, psabi)
 KBUILD_AFLAGS	+= $(compat_vdso)
 
+KBUILD_RUSTFLAGS += -C target-feature="-neon,-fp-armv8"
+
 KBUILD_CFLAGS	+= $(call cc-option,-mabi=lp64)
 KBUILD_AFLAGS	+= $(call cc-option,-mabi=lp64)
 
@@ -85,8 +87,10 @@ PACRET-$(CONFIG_UNWIND_PATCH_PAC_INTO_SCS) := pac-ret
 
 ifeq ($(CONFIG_ARM64_BTI_KERNEL),y)
 branch-prot-flags-$(CONFIG_CC_HAS_BRANCH_PROT_PAC_RET_BTI) := -mbranch-protection=$(PACRET-y)+bti
+KBUILD_RUSTFLAGS += -Z branch-protection=bti,pac-ret,leaf
 else
 branch-prot-flags-$(CONFIG_CC_HAS_BRANCH_PROT_PAC_RET) := -mbranch-protection=$(PACRET-y)
+KBUILD_RUSTFLAGS += -Z branch-protection=pac-ret,leaf
 endif
 # -march=armv8.3-a enables the non-nops instructions for PAC, to avoid the
 # compiler to generate them and consequently to break the single image contract

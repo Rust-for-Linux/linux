@@ -22,6 +22,8 @@ use crate::{
 };
 use alloc::boxed::Box;
 use core::{
+    any::Any,
+    fmt,
     marker::{PhantomData, Unsize},
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
@@ -216,6 +218,25 @@ impl<T: 'static> ForeignOwnable for Arc<T> {
         // a previous call to `Arc::into_foreign`, which guarantees that `ptr` is valid and
         // holds a reference count increment that is transferrable to us.
         unsafe { Self::from_inner(NonNull::new(ptr as _).unwrap()) }
+    }
+}
+
+impl Arc<dyn Any + Send + Sync> {
+    /// Attempt to downcast the `Arc<dyn Any + Send + Sync>` to a concrete type.
+    pub fn downcast<T>(self) -> core::result::Result<Arc<T>, Self>
+    where
+        T: Any + Send + Sync,
+    {
+        if (*self).is::<T>() {
+            // SAFETY: We have just checked that the type is correct, so we can cast the pointer.
+            unsafe {
+                let ptr = self.ptr.cast::<ArcInner<T>>();
+                core::mem::forget(self);
+                Ok(Arc::from_inner(ptr))
+            }
+        } else {
+            Err(self)
+        }
     }
 }
 
@@ -489,6 +510,14 @@ impl<T> UniqueArc<MaybeUninit<T>> {
     /// Converts a `UniqueArc<MaybeUninit<T>>` into a `UniqueArc<T>` by writing a value into it.
     pub fn write(mut self, value: T) -> UniqueArc<T> {
         self.deref_mut().write(value);
+        unsafe { self.assume_init() }
+    }
+
+    /// Returns a UniqueArc<T>, assuming the MaybeUninit<T> has already been initialized.
+    ///
+    /// # Safety
+    /// The contents of the UniqueArc must have already been fully initialized.
+    pub unsafe fn assume_init(self) -> UniqueArc<T> {
         let inner = ManuallyDrop::new(self).inner.ptr;
         UniqueArc {
             // SAFETY: The new `Arc` is taking over `ptr` from `self.inner` (which won't be
@@ -520,5 +549,29 @@ impl<T: ?Sized> DerefMut for UniqueArc<T> {
         // it is safe to dereference it. Additionally, we know there is only one reference when
         // it's inside a `UniqueArc`, so it is safe to get a mutable reference.
         unsafe { &mut self.inner.ptr.as_mut().data }
+    }
+}
+
+impl<T: fmt::Display + ?Sized> fmt::Display for UniqueArc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.deref(), f)
+    }
+}
+
+impl<T: fmt::Display + ?Sized> fmt::Display for Arc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.deref(), f)
+    }
+}
+
+impl<T: fmt::Debug + ?Sized> fmt::Debug for UniqueArc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.deref(), f)
+    }
+}
+
+impl<T: fmt::Debug + ?Sized> fmt::Debug for Arc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.deref(), f)
     }
 }
