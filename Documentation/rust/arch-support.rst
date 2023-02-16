@@ -15,5 +15,6 @@ support corresponds to ``S`` values in the ``MAINTAINERS`` file.
 ============  ================  ==============================================
 Architecture  Level of support  Constraints
 ============  ================  ==============================================
+``arm64``     Maintained        None.
 ``x86``       Maintained        ``x86_64`` only.
 ============  ================  ==============================================

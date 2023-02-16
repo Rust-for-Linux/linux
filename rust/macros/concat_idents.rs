@@ -14,10 +14,28 @@ fn expect_ident(it: &mut token_stream::IntoIter) -> Ident {
 
 pub(crate) fn concat_idents(ts: TokenStream) -> TokenStream {
     let mut it = ts.into_iter();
-    let a = expect_ident(&mut it);
-    assert_eq!(expect_punct(&mut it), ',');
+    let mut out = TokenStream::new();
+    let a = loop {
+        let ident = expect_ident(&mut it);
+        let punct = expect_punct(&mut it);
+        match punct.as_char() {
+            ',' => break ident,
+            ':' => {
+                let punct2 = expect_punct(&mut it);
+                assert_eq!(punct2.as_char(), ':');
+                out.extend([
+                    TokenTree::Ident(ident),
+                    TokenTree::Punct(punct),
+                    TokenTree::Punct(punct2),
+                ]);
+            }
+            _ => panic!("Expected , or ::"),
+        }
+    };
+
     let b = expect_ident(&mut it);
     assert!(it.next().is_none(), "only two idents can be concatenated");
     let res = Ident::new(&format!("{a}{b}"), b.span());
-    TokenStream::from_iter([TokenTree::Ident(res)])
+    out.extend([TokenTree::Ident(res)]);
+    out
 }
