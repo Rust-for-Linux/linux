@@ -70,6 +70,19 @@ impl<T: ?Sized> Mutex<T> {
         // SAFETY: The mutex was just acquired.
         unsafe { Guard::new(self, ctx) }
     }
+
+    /// Tries to acquire the mutex and gives the caller access to the data protected by it. Due to
+    /// only one thread at a time is allowed to access the protected data an optional value will be
+    /// returned.
+    pub fn try_lock(&self) -> Option<Guard<'_, Self>> {
+        // SAFETY: `mutex` points to valid memory.
+        if unsafe { bindings::mutex_trylock(self.mutex.get()) == 1 } {
+            // SAFETY: The mutex was just acquired.
+            unsafe { Some(Guard::new(self, EmptyGuardContext)) }
+        } else {
+            None
+        }
+    }
 }
 
 impl<T> LockFactory for Mutex<T> {

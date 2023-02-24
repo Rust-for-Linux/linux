@@ -23,6 +23,74 @@ use core::{
 #[cfg(CONFIG_PRINTK)]
 use crate::c_str;
 
+/// Device number which 12 bits are used to store a major and another 20 a minor.
+#[derive(Clone, Copy, Default, PartialEq)]
+#[repr(transparent)]
+pub struct Dev(pub bindings::dev_t);
+
+impl Dev {
+    /// Creates a new device number from a major and a minor.
+    pub const fn new(major: u32, minor: u32) -> Self {
+        Self((major << bindings::MINORBITS) | minor)
+    }
+
+    /// Creates a new device number from a major.
+    pub const fn from_major(major: u32) -> Self {
+        Self(major << bindings::MINORBITS)
+    }
+
+    /// Creates a new device number from a minor.
+    pub const fn from_minor(minor: u32) -> Self {
+        Self(minor & bindings::MINORMASK)
+    }
+
+    /// Returns the major of the device number.
+    pub const fn major(self) -> u32 {
+        self.0 >> bindings::MINORBITS
+    }
+
+    /// Returns the minor of the device number.
+    pub const fn minor(self) -> u32 {
+        self.0 & bindings::MINORMASK
+    }
+}
+
+impl const From<u32> for Dev {
+    fn from(item: u32) -> Self {
+        Self(item)
+    }
+}
+
+impl const From<Dev> for u32 {
+    fn from(dev: Dev) -> Self {
+        dev.0
+    }
+}
+
+impl const From<u64> for Dev {
+    fn from(item: u64) -> Self {
+        Self(item as u32)
+    }
+}
+
+impl const From<Dev> for u64 {
+    fn from(dev: Dev) -> Self {
+        dev.0 as u64
+    }
+}
+
+impl const From<i64> for Dev {
+    fn from(item: i64) -> Self {
+        Self(item as u32)
+    }
+}
+
+impl const From<Dev> for i64 {
+    fn from(dev: Dev) -> Self {
+        dev.0 as i64
+    }
+}
+
 /// A raw device.
 ///
 /// # Safety

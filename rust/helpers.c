@@ -38,7 +38,9 @@
 #include <linux/security.h>
 #include <linux/skbuff.h>
 #include <linux/uaccess.h>
+#include <linux/usb.h>
 #include <linux/uio.h>
+#include <linux/xarray.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -350,6 +352,42 @@ void rust_helper_mutex_lock(struct mutex *lock)
 }
 EXPORT_SYMBOL_GPL(rust_helper_mutex_lock);
 
+void rust_helper_xa_init_flags(struct xarray *xa, gfp_t flags)
+{
+	xa_init_flags(xa, flags);
+}
+EXPORT_SYMBOL_GPL(rust_helper_xa_init_flags);
+
+bool rust_helper_xa_empty(struct xarray *xa)
+{
+	return xa_empty(xa);
+}
+EXPORT_SYMBOL_GPL(rust_helper_xa_empty);
+
+int rust_helper_xa_alloc(struct xarray *xa, u32 *id, void *entry, struct xa_limit limit, gfp_t gfp)
+{
+	return xa_alloc(xa, id, entry, limit, gfp);
+}
+EXPORT_SYMBOL_GPL(rust_helper_xa_alloc);
+
+void rust_helper_xa_lock(struct xarray *xa)
+{
+	xa_lock(xa);
+}
+EXPORT_SYMBOL_GPL(rust_helper_xa_lock);
+
+void rust_helper_xa_unlock(struct xarray *xa)
+{
+	xa_unlock(xa);
+}
+EXPORT_SYMBOL_GPL(rust_helper_xa_unlock);
+
+int rust_helper_xa_err(void *entry)
+{
+	return xa_err(entry);
+}
+EXPORT_SYMBOL_GPL(rust_helper_xa_err);
+
 void rust_helper_amba_set_drvdata(struct amba_device *dev, void *data)
 {
 	amba_set_drvdata(dev, data);
@@ -382,6 +420,12 @@ refcount_t rust_helper_REFCOUNT_INIT(int n)
 	return (refcount_t)REFCOUNT_INIT(n);
 }
 EXPORT_SYMBOL_GPL(rust_helper_REFCOUNT_INIT);
+
+unsigned int rust_helper_refcount_read(refcount_t *r)
+{
+	return refcount_read(r);
+}
+EXPORT_SYMBOL_GPL(rust_helper_refcount_read);
 
 void rust_helper_refcount_inc(refcount_t *r)
 {
@@ -477,6 +521,12 @@ void *rust_helper_dev_get_drvdata(struct device *dev)
 	return dev_get_drvdata(dev);
 }
 EXPORT_SYMBOL_GPL(rust_helper_dev_get_drvdata);
+
+void rust_helper_dev_set_drvdata(struct device *dev, void *data)
+{
+	dev_set_drvdata(dev, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dev_set_drvdata);
 
 const char *rust_helper_dev_name(const struct device *dev)
 {
@@ -654,6 +704,53 @@ int rust_helper_fs_parse(struct fs_context *fc,
 	return fs_parse(fc, desc, param, result);
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
+
+void *rust_helper_usb_get_intfdata(struct usb_interface *intf) {
+	return usb_get_intfdata(intf);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_get_intfdata);
+
+void rust_helper_usb_set_intfdata(struct usb_interface *intf, void *data) {
+	usb_set_intfdata(intf, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_set_intfdata);
+
+struct usb_device *rust_helper_interface_to_usbdev(struct usb_interface *intf)
+{
+	return interface_to_usbdev(intf);
+}
+EXPORT_SYMBOL_GPL(rust_helper_interface_to_usbdev);
+
+void rust_helper_usb_fill_control_urb(struct urb *urb, struct usb_device *dev,
+		unsigned int pipe,
+		unsigned char *setup_packet,
+		void *transfer_buffer, int buffer_length,
+		usb_complete_t complete_fn, void *context)
+{
+	usb_fill_control_urb(urb, dev, pipe, setup_packet, transfer_buffer,
+		buffer_length, complete_fn, context);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_fill_control_urb);
+
+void rust_helper_usb_fill_bulk_urb(struct urb *urb, struct usb_device *dev,
+		unsigned int pipe, void *transfer_buffer,
+		int buffer_length,
+		usb_complete_t complete_fn, void *context)
+{
+	usb_fill_bulk_urb(urb, dev, pipe, transfer_buffer, buffer_length,
+		complete_fn, context);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_fill_bulk_urb);
+
+void rust_helper_usb_fill_int_urb(struct urb *urb, struct usb_device *dev,
+		unsigned int pipe, void *transfer_buffer,
+		int buffer_length, usb_complete_t complete_fn,
+		void *context, int interval)
+{
+	usb_fill_int_urb(urb, dev, pipe, transfer_buffer, buffer_length,
+		complete_fn, context, interval);
+}
+EXPORT_SYMBOL_GPL(rust_helper_usb_fill_int_urb);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type

@@ -6,7 +6,7 @@
 //! <https://github.com/alex/just-use/blob/master/src/lib.rs>.
 
 use kernel::{
-    file::{self, File},
+    file::{self, File, Inode},
     io_buffer::{IoBufferReader, IoBufferWriter},
     prelude::*,
 };
@@ -23,7 +23,7 @@ struct RandomFile;
 
 #[vtable]
 impl file::Operations for RandomFile {
-    fn open(_data: &(), _file: &File) -> Result {
+    fn open(_data: &(), _inode: &Inode, _file: &File) -> Result {
         Ok(())
     }
 

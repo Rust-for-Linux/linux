@@ -6,7 +6,7 @@
 
 use crate::{
     bindings, error::code::*, io_buffer::IoBufferReader, user_ptr::UserSlicePtrReader, Result,
-    PAGE_SIZE,
+    GFP_KERNEL, PAGE_SIZE, __GFP_HIGHMEM, __GFP_ZERO,
 };
 use core::{marker::PhantomData, ptr};
 
@@ -27,12 +27,8 @@ impl<const ORDER: u32> Pages<ORDER> {
     pub fn new() -> Result<Self> {
         // TODO: Consider whether we want to allow callers to specify flags.
         // SAFETY: This only allocates pages. We check that it succeeds in the next statement.
-        let pages = unsafe {
-            bindings::alloc_pages(
-                bindings::GFP_KERNEL | bindings::__GFP_ZERO | bindings::__GFP_HIGHMEM,
-                ORDER,
-            )
-        };
+        let pages =
+            unsafe { bindings::alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_HIGHMEM, ORDER) };
         if pages.is_null() {
             return Err(ENOMEM);
         }

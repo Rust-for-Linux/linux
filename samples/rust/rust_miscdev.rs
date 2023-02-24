@@ -4,7 +4,7 @@
 
 use kernel::prelude::*;
 use kernel::{
-    file::{self, File},
+    file::{self, File, Inode},
     io_buffer::{IoBufferReader, IoBufferWriter},
     miscdev,
     sync::{Arc, ArcBorrow, CondVar, Mutex, UniqueArc},
@@ -56,7 +56,7 @@ impl file::Operations for Token {
     type Data = Arc<SharedState>;
     type OpenData = Arc<SharedState>;
 
-    fn open(shared: &Arc<SharedState>, _file: &File) -> Result<Self::Data> {
+    fn open(shared: &Arc<SharedState>, _inode: &Inode, _file: &File) -> Result<Self::Data> {
         Ok(shared.clone())
     }
 
