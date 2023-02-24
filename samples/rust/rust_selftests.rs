@@ -9,7 +9,7 @@ use kernel::prelude::*;
 module! {
     type: RustSelftests,
     name: "rust_selftests",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Self test cases for Rust",
     license: "GPL",
 }

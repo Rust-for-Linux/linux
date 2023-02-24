@@ -28,7 +28,7 @@ use {context::Context, thread::Thread};
 module! {
     type: BinderModule,
     name: "rust_binder",
-    author: "Wedson Almeida Filho",
+    authors: ["Wedson Almeida Filho"],
     description: "Android Binder",
     license: "GPL",
 }

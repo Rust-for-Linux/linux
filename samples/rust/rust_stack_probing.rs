@@ -7,7 +7,7 @@ use kernel::prelude::*;
 module! {
     type: RustStackProbing,
     name: "rust_stack_probing",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust stack probing sample",
     license: "GPL",
 }

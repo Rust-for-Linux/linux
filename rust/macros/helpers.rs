@@ -10,6 +10,14 @@ pub(crate) fn try_ident(it: &mut token_stream::IntoIter) -> Option<String> {
     }
 }
 
+pub(crate) fn try_punct(it: &mut token_stream::IntoIter) -> Option<char> {
+    if let Some(TokenTree::Punct(punct)) = it.next() {
+        Some(punct.as_char())
+    } else {
+        None
+    }
+}
+
 pub(crate) fn try_literal(it: &mut token_stream::IntoIter) -> Option<String> {
     if let Some(TokenTree::Literal(literal)) = it.next() {
         Some(literal.to_string())

@@ -10,7 +10,7 @@ use kernel::{
 module_platform_driver! {
     type: RngDriver,
     name: "bcm2835_rng_rust",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "BCM2835 Random Number Generator (RNG) driver",
     license: "GPL v2",
 }

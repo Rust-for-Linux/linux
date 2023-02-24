@@ -7,7 +7,7 @@ use kernel::prelude::*;
 module! {
     type: RustModuleParameters,
     name: "rust_module_parameters",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust module parameters sample",
     license: "GPL",
     params: {

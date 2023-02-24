@@ -8,7 +8,7 @@ use kernel::{pr_cont, str::CStr, ThisModule};
 module! {
     type: RustPrint,
     name: "rust_print",
-    author: "Rust for Linux Contributors",
+    authors: ["Rust for Linux Contributors"],
     description: "Rust printing macros sample",
     license: "GPL",
 }
