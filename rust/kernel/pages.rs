@@ -142,3 +142,50 @@ impl Drop for PageMapping<'_> {
         unsafe { bindings::kunmap(self.page) };
     }
 }
+/// An area of memory in a page.
+///
+/// `PageFrag` contains a `page_frag` which has a pointer to the page of order `ORDER`, a offset of
+/// memory area in the page address and the size of the memory area.
+///
+/// # Invariants
+///
+/// The `page_frag::page` mut be initialized before using and points a valid address.
+pub struct PageFrag<const ORDER: u32> {
+    pub(crate) page_frag: bindings::page_frag,
+}
+
+impl<const ORDER: u32> PageFrag<ORDER> {
+    /// New an uninitialized `PageFrag`.
+    ///
+    /// # Safety
+    ///
+    /// Callers must call [`PageFrag::skb_page_frag_refill`] before using the `PageFrag` item.
+    pub unsafe fn new() -> Result<Self> {
+        let ret = bindings::page_frag::default();
+        Ok(Self { page_frag: ret })
+    }
+
+    /// Refill the `PageFrag` or let `PageFrag.` point to a page having sufficient room.
+    pub fn skb_page_frag_refill(&mut self, len: u32, gfp: bindings::gfp_t) -> Result<usize> {
+        // SAFETY: We check the result in the following statement.
+        let ret = unsafe {
+            bindings::skb_page_frag_refill(
+                len,
+                &mut self.page_frag as *mut bindings::page_frag,
+                gfp,
+            )
+        };
+        if ret {
+            return Err(ENOMEM);
+        }
+
+        Ok(0)
+    }
+}
+
+impl<const ORDER: u32> Drop for PageFrag<ORDER> {
+    fn drop(&mut self) {
+        // SAFETY: By the type invariants, the `page` pointer inside `PageFrag` is valid.
+        unsafe { bindings::put_page(self.page_frag.page) };
+    }
+}

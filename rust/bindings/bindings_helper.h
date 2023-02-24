@@ -11,6 +11,7 @@
 #include <linux/cdev.h>
 #include <linux/clk.h>
 #include <linux/errname.h>
+#include <linux/ethtool.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/fs_parser.h>
@@ -23,6 +24,7 @@
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/netdevice.h>
 #include <linux/netfilter_arp.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
@@ -36,6 +38,10 @@
 #include <linux/sysctl.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <linux/virtio.h>
+#include <linux/vringh.h>
+#include <linux/virtio_config.h>
+#include <linux/virtio_ring.h>
 #include <uapi/linux/android/binder.h>
 
 /* `bindgen` gets confused at certain things. */
