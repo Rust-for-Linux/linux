@@ -62,9 +62,9 @@ impl<'a> Allocation<'a> {
         }
         offset += self.offset;
         let mut page_index = offset >> bindings::PAGE_SHIFT;
-        offset &= (1 << bindings::PAGE_SHIFT) - 1;
+        offset &= kernel::PAGE_SIZE - 1;
         while size > 0 {
-            let available = core::cmp::min(size, (1 << bindings::PAGE_SHIFT) as usize - offset);
+            let available = core::cmp::min(size, kernel::PAGE_SIZE - offset);
             cb(&self.pages[page_index], offset, available)?;
             size -= available;
             page_index += 1;
