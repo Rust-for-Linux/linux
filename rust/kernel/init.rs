@@ -1254,3 +1254,68 @@ pub unsafe trait PinnedDrop: __internal::HasPinData {
     /// automatically.
     fn drop(self: Pin<&mut Self>, only_call_from_drop: __internal::OnlyCallFromDrop);
 }
+
+/// Marker trait for types that can be initialized by writing just zeroes.
+///
+/// # Safety
+///
+/// The bit pattern consisting of only zeroes is a valid bit pattern for this type. In other words,
+/// this is not UB:
+///
+/// ```rust,ignore
+/// let val: Self = unsafe { core::mem::zeroed() };
+/// ```
+pub unsafe trait Zeroable {}
+
+/// Create a new zeroed T.
+///
+/// The returned initializer will write `0x00` to every byte of the given `slot`.
+#[inline]
+pub fn zeroed<T: Zeroable + Unpin>() -> impl Init<T> {
+    // SAFETY: Because `T: Zeroable`, all bytes zero is a valid bit pattern for `T`
+    // and because we write all zeroes, the memory is initialized.
+    unsafe {
+        init_from_closure(|slot: *mut T| {
+            slot.write_bytes(0, 1);
+            Ok(())
+        })
+    }
+}
+
+macro_rules! impl_zeroable {
+    ($($t:ty, )*) => {
+        $(unsafe impl Zeroable for $t {})*
+    };
+}
+
+impl_zeroable! {
+    // SAFETY: All primitives that are allowed to be zero.
+    bool,
+    char,
+    u8, u16, u32, u64, u128, usize,
+    i8, i16, i32, i64, i128, isize,
+    f32, f64,
+    // SAFETY: There is nothing to zero.
+    core::marker::PhantomPinned, Infallible, (),
+}
+
+// SAFETY: We are allowed to zero padding bytes.
+unsafe impl<const N: usize, T: Zeroable> Zeroable for [T; N] {}
+
+// SAFETY: There is nothing to zero.
+unsafe impl<T: ?Sized> Zeroable for PhantomData<T> {}
+
+// SAFETY: `null` pointer is valid.
+unsafe impl<T: ?Sized> Zeroable for *mut T {}
+unsafe impl<T: ?Sized> Zeroable for *const T {}
+
+macro_rules! impl_tuple_zeroable {
+    ($(,)?) => {};
+    ($first:ident, $($t:ident),* $(,)?) => {
+        // SAFETY: All elements are zeroable and padding can be zero.
+        unsafe impl<$first: Zeroable, $($t: Zeroable),*> Zeroable for ($first, $($t),*) {}
+        impl_tuple_zeroable!($($t),* ,);
+    }
+}
+
+impl_tuple_zeroable!(A, B, C, D, E, F, G, H, I, J);
