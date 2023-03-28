@@ -89,6 +89,52 @@ unsafe impl<T: ?Sized> HasInitData for T {
     }
 }
 
+/// Stack initializer helper type. Use [`stack_pin_init`] instead of this primitive.
+///
+/// # Invariants
+///
+/// If `self.1` is true, then `self.0` is initialized.
+///
+/// [`stack_pin_init`]: kernel::stack_pin_init
+pub struct StackInit<T>(MaybeUninit<T>, bool);
+
+impl<T> Drop for StackInit<T> {
+    #[inline]
+    fn drop(&mut self) {
+        if self.1 {
+            // SAFETY: As we are being dropped, we only call this once. And since `self.1 == true`,
+            // `self.0` has to be initialized.
+            unsafe { self.0.assume_init_drop() };
+        }
+    }
+}
+
+impl<T> StackInit<T> {
+    /// Creates a new [`StackInit<T>`] that is uninitialized. Use [`stack_pin_init`] instead of this
+    /// primitive.
+    ///
+    /// [`stack_pin_init`]: kernel::stack_pin_init
+    #[inline]
+    pub fn uninit() -> Self {
+        Self(MaybeUninit::uninit(), false)
+    }
+
+    /// Initializes the contents and returns the result.
+    ///
+    /// # Safety
+    ///
+    /// The caller ensures that `self` is on the stack and not accessible in any other way, if this
+    /// function returns `Ok`.
+    #[inline]
+    pub unsafe fn init<E>(&mut self, init: impl PinInit<T, E>) -> Result<Pin<&mut T>, E> {
+        // SAFETY: The memory slot is valid and this type ensures that it will stay pinned.
+        unsafe { init.__pinned_init(self.0.as_mut_ptr())? };
+        self.1 = true;
+        // SAFETY: The slot is now pinned, since we will never give access to `&mut T`.
+        Ok(unsafe { Pin::new_unchecked(self.0.assume_init_mut()) })
+    }
+}
+
 /// When a value of this type is dropped, it drops a `T`.
 ///
 /// Can be forgotton to prevent the drop.
