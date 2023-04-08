@@ -70,6 +70,8 @@ pub mod mm;
 pub mod net;
 pub mod pages;
 pub mod power;
+#[cfg(CONFIG_RESET_CONTROLLER)]
+pub mod reset;
 pub mod revocable;
 pub mod security;
 pub mod task;

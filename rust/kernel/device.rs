@@ -5,7 +5,13 @@
 //! C header: [`include/linux/device.h`](../../../../include/linux/device.h)
 
 #[cfg(CONFIG_COMMON_CLK)]
-use crate::{clk::Clk, error::from_kernel_err_ptr};
+use crate::clk::Clk;
+
+#[cfg(any(CONFIG_COMMON_CLK, CONFIG_RESET_CONTROLLER))]
+use crate::error::from_kernel_err_ptr;
+
+#[cfg(CONFIG_RESET_CONTROLLER)]
+use crate::reset::Reset;
 
 use crate::{
     bindings,
@@ -68,6 +74,29 @@ pub unsafe trait RawDevice {
 
         // SAFETY: Clock is initialized with valid pointer returned from `bindings::clk_get` call.
         unsafe { Ok(Clk::new(clk_ptr)) }
+    }
+
+    /// Returns the reset controller of the device
+    // id can be NULL, therefore it is added as an Option
+    #[cfg(CONFIG_RESET_CONTROLLER)]
+    fn reset_control_get_optional_exclusive(&self, id: Option<&CStr>) -> Result<Option<Reset>> {
+        let id_ptr = match id {
+            Some(cstr) => cstr.as_char_ptr(),
+            None => core::ptr::null(),
+        };
+
+        // SAFETY: `id_ptr` is valid pointer by the type invariant (or NULL).
+        let res = from_kernel_err_ptr(unsafe {
+            bindings::reset_control_get_optional_exclusive(self.raw_device(), id_ptr)
+        })?;
+
+        if res.is_null() {
+            return Ok(None);
+        }
+
+        // SAFETY: `bindings::reset_control_get_optional_exclusive` can return NULL
+        // thus res is checked before being used in Reset::new()
+        unsafe { Ok(Some(Reset::new(res))) }
     }
 
     /// Prints an emergency-level message (level 0) prefixed with device information.
