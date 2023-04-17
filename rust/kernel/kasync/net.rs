@@ -185,6 +185,7 @@ impl<'a, Out, F: FnMut() -> Result<Out> + Send + 'a> SocketFuture<'a, Out, F> {
     ///
     /// If the state matches the one we're waiting on, we wake up the task so that the future can be
     /// polled again.
+    #[klint::preempt_count(expect = 0..)] // This function can be called from `wake_up` which must noy sleep.
     unsafe extern "C" fn wake_callback(
         wq_entry: *mut bindings::wait_queue_entry,
         _mode: core::ffi::c_uint,

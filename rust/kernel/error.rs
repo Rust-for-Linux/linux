@@ -319,7 +319,7 @@ impl From<core::convert::Infallible> for Error {
 /// Note that even if a function does not return anything when it succeeds,
 /// it should still be modeled as returning a `Result` rather than
 /// just an [`Error`].
-pub type Result<T = ()> = core::result::Result<T, Error>;
+pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
 // # Invariant: `-bindings::MAX_ERRNO` fits in an `i16`.
 crate::static_assert!(bindings::MAX_ERRNO <= -(i16::MIN as i32) as u32);

@@ -94,14 +94,14 @@ impl<T> Revocable<T> {
     /// Returns a guard that gives access to the object otherwise; the object is guaranteed to
     /// remain accessible while the guard is alive. In such cases, callers are not allowed to sleep
     /// because another CPU may be waiting to complete the revocation of this object.
-    pub fn try_access(&self) -> Option<RevocableGuard<'_, T>> {
+    pub fn try_access(&self) -> Result<RevocableGuard<'_, T>, rcu::Guard> {
         let guard = rcu::read_lock();
         if self.is_available.load(Ordering::Relaxed) {
             // SAFETY: Since `self.is_available` is true, data is initialised and has to remain
             // valid because the RCU read side lock prevents it from being dropped.
-            Some(unsafe { RevocableGuard::new(self.data.assume_init_ref().get(), guard) })
+            Ok(unsafe { RevocableGuard::new(self.data.assume_init_ref().get(), guard) })
         } else {
-            None
+            Err(guard)
         }
     }
 

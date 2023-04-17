@@ -11,7 +11,7 @@ use crate::{
     bindings,
     revocable::{Revocable, RevocableGuard},
     str::CStr,
-    sync::{LockClassKey, NeedsLockClass, RevocableMutex, RevocableMutexGuard, UniqueArc},
+    sync::{rcu, LockClassKey, NeedsLockClass, RevocableMutex, RevocableMutexGuard, UniqueArc},
     Result,
 };
 use core::{
@@ -294,7 +294,7 @@ impl<T, U, V> Data<T, U, V> {
     }
 
     /// Returns the resources if they're still available.
-    pub fn resources(&self) -> Option<RevocableGuard<'_, U>> {
+    pub fn resources(&self) -> Result<RevocableGuard<'_, U>, rcu::Guard> {
         self.resources.try_access()
     }
 

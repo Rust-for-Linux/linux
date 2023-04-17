@@ -143,7 +143,12 @@ impl<T: 'static + Send + Future> RevocableTask for Task<T> {
 }
 
 impl<T: 'static + Send + Future> ArcWake for Task<T> {
+    #[klint::preempt_count(expect = 0.., unchecked)] // FIXME: This is a bug.
     fn wake(self: Arc<Self>) {
+        Self::wake_by_ref(self.as_arc_borrow());
+    }
+
+    fn wake_by_ref(self: ArcBorrow<'_, Self>) {
         if self.future.is_revoked() {
             return;
         }
@@ -152,11 +157,7 @@ impl<T: 'static + Send + Future> ArcWake for Task<T> {
             Left(q) => &**q,
             Right(q) => *q,
         }
-        .enqueue(self.clone());
-    }
-
-    fn wake_by_ref(self: ArcBorrow<'_, Self>) {
-        Arc::from(self).wake();
+        .enqueue(self);
     }
 }
 

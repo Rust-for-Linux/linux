@@ -7,7 +7,7 @@
 use crate::{
     bindings, c_str,
     error::code::*,
-    sync::{Arc, LockClassKey, UniqueArc},
+    sync::{Arc, ArcBorrow, LockClassKey, UniqueArc},
     Opaque, Result,
 };
 use core::{fmt, ops::Deref, ptr::NonNull};
@@ -233,7 +233,7 @@ impl Queue {
     ///
     /// Returns `true` if the work item was successfully enqueue; returns `false` if it had already
     /// been (and continued to be) enqueued.
-    pub fn enqueue<T: WorkAdapter<Target = T>>(&self, w: Arc<T>) -> bool {
+    pub fn enqueue<T: WorkAdapter<Target = T>>(&self, w: ArcBorrow<'_, T>) -> bool {
         self.enqueue_adapter::<T>(w)
     }
 
@@ -241,24 +241,21 @@ impl Queue {
     ///
     /// Returns `true` if the work item was successfully enqueue; returns `false` if it had already
     /// been (and continued to be) enqueued.
-    pub fn enqueue_adapter<A: WorkAdapter + ?Sized>(&self, w: Arc<A::Target>) -> bool {
-        let ptr = Arc::into_raw(w);
+    pub fn enqueue_adapter<A: WorkAdapter + ?Sized>(&self, w: ArcBorrow<'_, A::Target>) -> bool {
+        let ptr = &*w as *const A::Target;
         let field_ptr =
             (ptr as *const u8).wrapping_offset(A::FIELD_OFFSET) as *mut bindings::work_struct;
 
         // SAFETY: Having a shared reference to work queue guarantees that it remains valid, while
-        // the work item remains valid because we called `into_raw` and only call `from_raw` again
-        // if the object was already queued (so a previous call already guarantees it remains
-        // alive), when the work item runs, or when the work item is canceled.
+        // the work item remains valid because we will increment the reference count later if this function
+        // returns true.
         let ret = unsafe {
             bindings::queue_work_on(bindings::WORK_CPU_UNBOUND as _, self.0.get(), field_ptr)
         };
 
-        if !ret {
-            // SAFETY: `ptr` comes from a previous call to `into_raw`. Additionally, given that
-            // `queue_work_on` returned `false`, we know that no-one is going to use the result of
-            // `into_raw`, so we must drop it here to avoid a reference leak.
-            unsafe { Arc::from_raw(ptr) };
+        if ret {
+            // Increase the reference count because the work item has a copy.
+            core::mem::forget(Arc::from(w));
         }
 
         ret
@@ -279,7 +276,7 @@ impl Queue {
             func,
         })?;
         Work::init(&w, key);
-        self.enqueue(w.into());
+        self.enqueue(Arc::from(w).as_arc_borrow());
         Ok(())
     }
 }

@@ -65,9 +65,11 @@ pub trait Executor: Sync + Send {
 /// Types that implement this trait can get a [`Waker`] by calling [`ref_waker`].
 pub trait ArcWake: Send + Sync {
     /// Wakes a task up.
+    #[klint::preempt_count(expect = 0..)]
     fn wake_by_ref(self: ArcBorrow<'_, Self>);
 
     /// Wakes a task up and consumes a reference.
+    #[klint::preempt_count(expect = 0..)]
     fn wake(self: Arc<Self>) {
         self.as_arc_borrow().wake_by_ref();
     }
@@ -83,18 +85,21 @@ pub fn ref_waker<T: 'static + ArcWake>(w: Arc<T>) -> Waker {
         )
     }
 
+    #[klint::preempt_count(expect = 0..)] // Required as `Waker::clone` must not sleep.
     unsafe fn clone<T: 'static + ArcWake>(ptr: *const ()) -> RawWaker {
         // SAFETY: The data stored in the raw waker is the result of a call to `into_foreign`.
         let w = unsafe { Arc::<T>::borrow(ptr.cast()) };
         raw_waker(w.into())
     }
 
+    #[klint::preempt_count(expect = 0..)] // Required as `Waker::wake` must not sleep.
     unsafe fn wake<T: 'static + ArcWake>(ptr: *const ()) {
         // SAFETY: The data stored in the raw waker is the result of a call to `into_foreign`.
         let w = unsafe { Arc::<T>::from_foreign(ptr.cast()) };
         w.wake();
     }
 
+    #[klint::preempt_count(expect = 0..)] // Required as `Waker::wake_by_ref` must not sleep.
     unsafe fn wake_by_ref<T: 'static + ArcWake>(ptr: *const ()) {
         // SAFETY: The data stored in the raw waker is the result of a call to `into_foreign`.
         let w = unsafe { Arc::<T>::borrow(ptr.cast()) };

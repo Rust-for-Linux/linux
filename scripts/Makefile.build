@@ -281,9 +281,11 @@ rust_allowed_features := allocator_api,const_refs_to_cell
 
 rust_common_cmd = \
 	RUST_MODFILE=$(modfile) $(RUSTC_OR_CLIPPY) $(rust_flags) \
-	-Zallow-features=$(rust_allowed_features) \
+	-Zallow-features=$(rust_allowed_features),register_tool \
 	-Zcrate-attr=no_std \
 	-Zcrate-attr='feature($(rust_allowed_features))' \
+	-Zcrate-attr='feature(register_tool)' \
+	-Zcrate-attr='register_tool(klint)' \
 	--extern alloc --extern kernel \
 	--crate-type rlib --out-dir $(obj) -L $(objtree)/rust/ \
 	--crate-name $(basename $(notdir $@))
