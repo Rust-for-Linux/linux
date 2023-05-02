@@ -36,6 +36,8 @@ extern crate self as kernel;
 mod allocator;
 mod build_assert;
 pub mod cred;
+#[cfg(CONFIG_DEBUG_FS)]
+pub mod debugfs;
 pub mod error;
 pub mod file;
 pub mod init;

@@ -8,6 +8,7 @@
 
 #include <kunit/test.h>
 #include <linux/cred.h>
+#include <linux/debugfs.h>
 #include <linux/errname.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
