@@ -69,7 +69,7 @@ pub(crate) fn expect_group(it: &mut token_stream::IntoIter) -> Group {
 }
 
 pub(crate) fn expect_string(it: &mut token_stream::IntoIter) -> String {
-    try_string(it).expect("Expected string")
+    try_string(it).expect("Expected string, maybe you used a byte string")
 }
 
 pub(crate) fn expect_string_ascii(it: &mut token_stream::IntoIter) -> String {
