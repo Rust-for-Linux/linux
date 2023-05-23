@@ -73,7 +73,7 @@ pub(crate) fn expect_string(it: &mut token_stream::IntoIter) -> String {
 }
 
 pub(crate) fn expect_string_ascii(it: &mut token_stream::IntoIter) -> String {
-    let string = try_string(it).expect("Expected string");
+    let string = try_string(it).expect("Expected string, maybe you used a byte string");
     assert!(string.is_ascii(), "Expected ASCII string");
     string
 }
