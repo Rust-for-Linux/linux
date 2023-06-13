@@ -9,6 +9,7 @@
 use crate::{bindings, str::CStr, to_result, ARef, AlwaysRefCounted, Error, Result};
 use core::{cell::UnsafeCell, ptr::NonNull};
 
+pub mod ethernet;
 #[cfg(CONFIG_NETFILTER)]
 pub mod filter;
 
