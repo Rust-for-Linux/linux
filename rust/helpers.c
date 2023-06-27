@@ -40,12 +40,27 @@
 #include <linux/skbuff.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <net/gro.h>
 
 __noreturn void rust_helper_BUG(void)
 {
 	BUG();
 }
 EXPORT_SYMBOL_GPL(rust_helper_BUG);
+
+#ifdef CONFIG_NET
+void rust_helper_napi_schedule(struct napi_struct* napi)
+{
+	napi_schedule(napi);
+}
+EXPORT_SYMBOL_GPL(rust_helper_napi_schedule);
+
+void rust_helper_netif_napi_add(struct net_device* net, struct napi_struct* napi, int (*poll)(struct napi_struct* napi, int budget))
+{
+	netif_napi_add(net, napi, poll);
+}
+EXPORT_SYMBOL_GPL(rust_helper_netif_napi_add);
+#endif // CONFIG_NET
 
 void rust_helper_clk_disable_unprepare(struct clk *clk)
 {
