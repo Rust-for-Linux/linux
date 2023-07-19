@@ -72,10 +72,10 @@ impl CStr {
     /// Returns the length of this string with `NUL`.
     #[inline]
     pub const fn len_with_nul(&self) -> usize {
-        // SAFETY: This is one of the invariant of `CStr`.
-        // We add a `unreachable_unchecked` here to hint the optimizer that
-        // the value returned from this function is non-zero.
         if self.0.is_empty() {
+            // SAFETY: This is one of the invariant of `CStr`.
+            // We add a `unreachable_unchecked` here to hint the optimizer that
+            // the value returned from this function is non-zero.
             unsafe { core::hint::unreachable_unchecked() };
         }
         self.0.len()
@@ -100,7 +100,7 @@ impl CStr {
         // to a `NUL`-terminated C string.
         let len = unsafe { bindings::strlen(ptr) } + 1;
         // SAFETY: Lifetime guaranteed by the safety precondition.
-        let bytes = unsafe { core::slice::from_raw_parts(ptr as _, len as _) };
+        let bytes = unsafe { core::slice::from_raw_parts(ptr.cast(), len as _) };
         // SAFETY: As `len` is returned by `strlen`, `bytes` does not contain interior `NUL`.
         // As we have added 1 to `len`, the last byte is known to be `NUL`.
         unsafe { Self::from_bytes_with_nul_unchecked(bytes) }
@@ -146,7 +146,7 @@ impl CStr {
     /// Returns a C pointer to the string.
     #[inline]
     pub const fn as_char_ptr(&self) -> *const core::ffi::c_char {
-        self.0.as_ptr() as _
+        self.0.as_ptr().cast()
     }
 
     /// Convert the string to a byte slice without the trailing 0 byte.
@@ -198,6 +198,7 @@ impl CStr {
     /// ```
     #[inline]
     pub unsafe fn as_str_unchecked(&self) -> &str {
+        // SAFETY: invariant is upheld by this function's safety contract
         unsafe { core::str::from_utf8_unchecked(self.as_bytes()) }
     }
 
@@ -470,7 +471,7 @@ impl fmt::Write for RawFormatter {
                     s.as_bytes().as_ptr(),
                     self.pos as *mut u8,
                     len_to_copy,
-                )
+                );
             };
         }
 

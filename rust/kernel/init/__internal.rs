@@ -7,6 +7,8 @@
 //! - `macros/pin_data.rs`
 //! - `macros/pinned_drop.rs`
 
+#![allow(clippy::undocumented_unsafe_blocks)]
+
 use super::*;
 
 /// See the [nomicon] for what subtyping is. See also [this table].

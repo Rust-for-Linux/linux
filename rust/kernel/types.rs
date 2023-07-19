@@ -215,7 +215,7 @@ impl<T, F: FnOnce(T)> Drop for ScopeGuard<T, F> {
     fn drop(&mut self) {
         // Run the cleanup function if one is still present.
         if let Some((data, cleanup)) = self.0.take() {
-            cleanup(data)
+            cleanup(data);
         }
     }
 }

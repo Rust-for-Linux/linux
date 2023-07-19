@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-2.0
+# Parameters passed to rust tools (`rustc`, `clippy`, `rustdoc`) whenever they
+# are run.
+
+# Standard configuration
+--edition=2021
+-Zbinary_dep_depinfo=y
+
+# Standard rust lints
+-Dnon_ascii_idents
+-Drust_2018_idioms
+-Dunreachable_pub
+-Dunsafe_op_in_unsafe_fn
+
+# Documentation lints
+-Wmissing_docs
+-Drustdoc::missing_crate_level_docs
+
+# Clippy groups
+-Dclippy::complexity
+-Dclippy::correctness
+-Dclippy::perf
+-Dclippy::style
+-Dclippy::suspicious
+
+# Clippy lints from pedantic
+-Dclippy::bool_to_int_with_if
+-Dclippy::cast_precision_loss
+-Dclippy::cast_ptr_alignment
+-Dclippy::cast_sign_loss
+-Dclippy::checked_conversions
+-Dclippy::cloned_instead_of_copied
+-Dclippy::copy_iterator
+-Dclippy::doc_link_with_quotes
+-Dclippy::doc_markdown
+-Dclippy::empty_enum
+-Dclippy::expl_impl_clone_on_copy
+-Dclippy::explicit_deref_methods
+-Dclippy::explicit_into_iter_loop
+-Dclippy::explicit_iter_loop
+-Dclippy::filter_map_next
+-Dclippy::flat_map_option
+-Dclippy::float_cmp
+-Dclippy::from_iter_instead_of_collect
+-Dclippy::if_not_else
+-Dclippy::implicit_clone
+-Dclippy::inconsistent_struct_constructor
+-Dclippy::invalid_upcast_comparisons
+-Dclippy::items_after_statements
+-Dclippy::iter_not_returning_iterator
+-Dclippy::large_types_passed_by_value
+-Dclippy::macro_use_imports
+-Dclippy::manual_assert
+-Dclippy::manual_let_else
+-Dclippy::manual_ok_or
+-Dclippy::match_bool
+-Dclippy::match_wildcard_for_single_variants
+-Dclippy::maybe_infinite_iter
+-Dclippy::mismatching_type_param_order
+-Dclippy::mut_mut
+-Dclippy::needless_bitwise_bool
+-Dclippy::needless_continue
+-Dclippy::needless_for_each
+-Dclippy::no_effect_underscore_binding
+-Dclippy::option_option
+-Dclippy::ptr_as_ptr
+# FIXME: enable this at version bump, not supported in 1.68
+# -Dclippy::ptr_cast_constness
+-Dclippy::range_minus_one
+-Dclippy::range_plus_one
+-Dclippy::redundant_closure_for_method_calls
+-Dclippy::redundant_else
+-Dclippy::ref_binding_to_reference
+-Dclippy::ref_option_ref
+-Dclippy::return_self_not_must_use
+-Dclippy::same_functions_in_if_condition
+-Dclippy::semicolon_if_nothing_returned
+-Dclippy::stable_sort_primitive
+-Dclippy::too_many_lines
+-Dclippy::transmute_ptr_to_ptr
+-Dclippy::trivially_copy_pass_by_ref
+-Dclippy::undocumented_unsafe_blocks
+-Dclippy::unicode_not_nfc
+-Dclippy::unnecessary_join
+# FIXME: enable this at the next version bump. Disabled because of false
+# positive in macros: https://github.com/rust-lang/rust-clippy/issues/10084
+# -Dclippy::unnecessary_safety_comment
+-Dclippy::unnested_or_patterns
+
+# Clippy lints from restriction
+-Dclippy::default_union_representation
+-Dclippy::disallowed_script_idents
+-Dclippy::float_cmp_const
+-Dclippy::lossy_float_literal
+-Dclippy::semicolon_outside_block
+-Dclippy::unnecessary_safety_doc
+
+# Clippy lints that we only warn on
+-Wclippy::dbg_macro
+-Wclippy::todo

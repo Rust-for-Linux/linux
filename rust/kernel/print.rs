@@ -9,6 +9,7 @@
 use core::{
     ffi::{c_char, c_void},
     fmt,
+    ptr::addr_of,
 };
 
 use crate::str::RawFormatter;
@@ -16,7 +17,12 @@ use crate::str::RawFormatter;
 #[cfg(CONFIG_PRINTK)]
 use crate::bindings;
 
-// Called from `vsprintf` with format specifier `%pA`.
+/// Called from `vsprintf` with format specifier `%pA`.
+///
+/// # Safety
+///
+/// - Memory within `buf..end` must be valid for write
+/// - `ptr` must point to a valid instance of `core::fmt::Arguments`
 #[no_mangle]
 unsafe extern "C" fn rust_fmt_argument(
     buf: *mut c_char,
@@ -26,7 +32,8 @@ unsafe extern "C" fn rust_fmt_argument(
     use fmt::Write;
     // SAFETY: The C contract guarantees that `buf` is valid if it's less than `end`.
     let mut w = unsafe { RawFormatter::from_ptrs(buf.cast(), end.cast()) };
-    let _ = w.write_fmt(unsafe { *(ptr as *const fmt::Arguments<'_>) });
+    // SAFETY: Upheld by this function's safety contract
+    let _ = w.write_fmt(unsafe { *(ptr.cast::<fmt::Arguments<'_>>()) });
     w.pos().cast()
 }
 
@@ -49,6 +56,7 @@ pub mod format_strings {
     /// given `prefix`, which are the kernel's `KERN_*` constants.
     ///
     /// [`_printk`]: ../../../../include/linux/printk.h
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     const fn generate(is_cont: bool, prefix: &[u8; 3]) -> [u8; LENGTH] {
         // Ensure the `KERN_*` macros are what we expect.
         assert!(prefix[0] == b'\x01');
@@ -105,13 +113,14 @@ pub unsafe fn call_printk(
     module_name: &[u8],
     args: fmt::Arguments<'_>,
 ) {
-    // `_printk` does not seem to fail in any path.
     #[cfg(CONFIG_PRINTK)]
+    // `_printk` does not seem to fail in any path.
+    // SAFETY: This function's invariants make this call safe.
     unsafe {
         bindings::_printk(
-            format_string.as_ptr() as _,
+            format_string.as_ptr().cast(),
             module_name.as_ptr(),
-            &args as *const _ as *const c_void,
+            addr_of!(args).cast::<c_void>(),
         );
     }
 }
@@ -124,14 +133,13 @@ pub unsafe fn call_printk(
 #[doc(hidden)]
 #[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
 pub fn call_printk_cont(args: fmt::Arguments<'_>) {
-    // `_printk` does not seem to fail in any path.
-    //
-    // SAFETY: The format string is fixed.
     #[cfg(CONFIG_PRINTK)]
+    // `_printk` does not seem to fail in any path.
+    // SAFETY: `CONT` and `args` meet `_printk`'s safety contract
     unsafe {
         bindings::_printk(
-            format_strings::CONT.as_ptr() as _,
-            &args as *const _ as *const c_void,
+            format_strings::CONT.as_ptr().cast(),
+            addr_of!(args).cast::<c_void>(),
         );
     }
 }

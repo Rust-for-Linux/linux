@@ -120,9 +120,7 @@ impl<T: ?Sized, U> LockedBy<T, U> {
             size_of::<U>() > 0,
             "`U` cannot be a ZST because `owner` wouldn't be unique"
         );
-        if !ptr::eq(owner, self.owner) {
-            panic!("mismatched owners");
-        }
+        assert!(ptr::eq(owner, self.owner), "mismatched owners");
 
         // SAFETY: `owner` is evidence that the owner is locked.
         unsafe { &*self.data.get() }
@@ -146,9 +144,7 @@ impl<T: ?Sized, U> LockedBy<T, U> {
             size_of::<U>() > 0,
             "`U` cannot be a ZST because `owner` wouldn't be unique"
         );
-        if !ptr::eq(owner, self.owner) {
-            panic!("mismatched owners");
-        }
+        assert!(ptr::eq(owner, self.owner), "mismatched owners");
 
         // SAFETY: `owner` is evidence that there is only one reference to the owner.
         unsafe { &mut *self.data.get() }

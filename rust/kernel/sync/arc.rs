@@ -25,6 +25,7 @@ use crate::{
 use alloc::boxed::Box;
 use core::{
     alloc::AllocError,
+    convert::Into,
     fmt,
     marker::{PhantomData, Unsize},
     mem::{ManuallyDrop, MaybeUninit},
@@ -182,7 +183,7 @@ impl<T> Arc<T> {
     where
         Error: From<E>,
     {
-        UniqueArc::pin_init(init).map(|u| u.into())
+        UniqueArc::pin_init(init).map(Into::into)
     }
 
     /// Use the given initializer to in-place initialize a `T`.
@@ -193,7 +194,7 @@ impl<T> Arc<T> {
     where
         Error: From<E>,
     {
-        UniqueArc::init(init).map(|u| u.into())
+        UniqueArc::init(init).map(Into::into)
     }
 }
 
@@ -268,7 +269,7 @@ impl<T: ?Sized> Deref for Arc<T> {
 
 impl<T: ?Sized> AsRef<T> for Arc<T> {
     fn as_ref(&self) -> &T {
-        self.deref()
+        self
     }
 }
 
@@ -595,7 +596,7 @@ impl<T: ?Sized> Deref for UniqueArc<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.inner.deref()
+        &self.inner
     }
 }
 
@@ -610,24 +611,24 @@ impl<T: ?Sized> DerefMut for UniqueArc<T> {
 
 impl<T: fmt::Display + ?Sized> fmt::Display for UniqueArc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self.deref(), f)
+        fmt::Display::fmt(&self, f)
     }
 }
 
 impl<T: fmt::Display + ?Sized> fmt::Display for Arc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self.deref(), f)
+        fmt::Display::fmt(&self, f)
     }
 }
 
 impl<T: fmt::Debug + ?Sized> fmt::Debug for UniqueArc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self.deref(), f)
+        fmt::Debug::fmt(&self, f)
     }
 }
 
 impl<T: fmt::Debug + ?Sized> fmt::Debug for Arc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self.deref(), f)
+        fmt::Debug::fmt(&self, f)
     }
 }

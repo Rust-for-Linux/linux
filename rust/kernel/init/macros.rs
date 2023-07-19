@@ -808,6 +808,7 @@ macro_rules! __pin_data {
                 >,
             }
 
+            #[allow(clippy::expl_impl_clone_on_copy)]
             impl<$($impl_generics)*> ::core::clone::Clone for __ThePinData<$($ty_generics)*>
             where $($whr)*
             {
@@ -841,6 +842,7 @@ macro_rules! __pin_data {
                 }
             }
 
+            // SAFETY: `__ThePinData` has the correct projections
             unsafe impl<$($impl_generics)*>
                 $crate::init::__internal::PinData for __ThePinData<$($ty_generics)*>
             where $($whr)*
@@ -965,6 +967,7 @@ macro_rules! __pin_data {
                     slot: *mut $p_type,
                     init: impl $crate::init::PinInit<$p_type, E>,
                 ) -> ::core::result::Result<(), E> {
+                    // SAFETY: `slot` is valid per this function's contract
                     unsafe { $crate::init::PinInit::__pinned_init(init, slot) }
                 }
             )*
@@ -974,6 +977,7 @@ macro_rules! __pin_data {
                     slot: *mut $type,
                     init: impl $crate::init::Init<$type, E>,
                 ) -> ::core::result::Result<(), E> {
+                    // SAFETY: `slot` is valid per this function's contract
                     unsafe { $crate::init::Init::__init(init, slot) }
                 }
             )*

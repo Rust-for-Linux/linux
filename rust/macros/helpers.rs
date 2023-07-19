@@ -22,9 +22,10 @@ pub(crate) fn try_string(it: &mut token_stream::IntoIter) -> Option<String> {
     try_literal(it).and_then(|string| {
         if string.starts_with('\"') && string.ends_with('\"') {
             let content = &string[1..string.len() - 1];
-            if content.contains('\\') {
-                panic!("Escape sequences in string literals not yet handled");
-            }
+            assert!(
+                !content.contains('\\'),
+                "Escape sequences in string literals not yet handled"
+            );
             Some(content.to_string())
         } else if string.starts_with("r\"") {
             panic!("Raw string literals are not yet handled");
@@ -65,9 +66,7 @@ pub(crate) fn expect_group(it: &mut token_stream::IntoIter) -> Group {
 }
 
 pub(crate) fn expect_end(it: &mut token_stream::IntoIter) {
-    if it.next().is_some() {
-        panic!("Expected end");
-    }
+    assert!(it.next().is_none(), "Expected end");
 }
 
 pub(crate) struct Generics {
@@ -103,15 +102,15 @@ pub(crate) fn parse_generics(input: TokenStream) -> (Generics, Vec<TokenTree>) {
                 // This is a parsing error, so we just end it here.
                 if nesting == 0 {
                     break;
-                } else {
-                    nesting -= 1;
-                    if nesting >= 1 {
-                        // We are still inside of the generics and part of some bound.
-                        impl_generics.push(tt);
-                    }
-                    if nesting == 0 {
-                        break;
-                    }
+                }
+
+                nesting -= 1;
+                if nesting >= 1 {
+                    // We are still inside of the generics and part of some bound.
+                    impl_generics.push(tt);
+                }
+                if nesting == 0 {
+                    break;
                 }
             }
             tt => {

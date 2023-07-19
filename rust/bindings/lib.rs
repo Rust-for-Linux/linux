@@ -15,6 +15,10 @@
 #![cfg_attr(test, allow(unsafe_op_in_unsafe_fn))]
 #![allow(
     clippy::all,
+    clippy::ptr_as_ptr,
+    clippy::semicolon_if_nothing_returned,
+    clippy::transmute_ptr_to_ptr,
+    clippy::undocumented_unsafe_blocks,
     missing_docs,
     non_camel_case_types,
     non_upper_case_globals,

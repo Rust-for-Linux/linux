@@ -621,6 +621,7 @@ macro_rules! try_pin_init {
         // no possibility of returning without `unsafe`.
         struct __InitOk;
         // Get the pin data from the supplied type.
+        // SAFETY: TODO
         let data = unsafe {
             use $crate::init::__internal::HasPinData;
             $t$(::<$($generics),*>)?::__pin_data()
@@ -664,6 +665,7 @@ macro_rules! try_pin_init {
         let init = move |slot| -> ::core::result::Result<(), $err> {
             init(slot).map(|__InitOk| ())
         };
+        // SAFETY: TODO
         let init = unsafe { $crate::init::pin_init_from_closure::<_, $err>(init) };
         init
     }};
@@ -735,8 +737,9 @@ macro_rules! try_pin_init {
         @acc($($acc:tt)*),
     ) => {
         // Endpoint, nothing more to munch, create the initializer.
-        // Since we are in the `if false` branch, this will never get executed. We abuse `slot` to
-        // get the correct type inference here:
+
+        // SAFETY: Since we are in the `if false` branch, this will never get executed. We abuse
+        // `slot` to get the correct type inference here:
         unsafe {
             ::core::ptr::write($slot, $t {
                 $($acc)*
@@ -777,6 +780,7 @@ macro_rules! try_pin_init {
     (forget_guards:
         @munch_fields($field:ident <- $val:expr, $($rest:tt)*),
     ) => {
+        // SAFETY: forgetting the guard is intentional
         unsafe { $crate::init::__internal::DropGuard::forget($field) };
 
         $crate::try_pin_init!(forget_guards:
@@ -786,6 +790,7 @@ macro_rules! try_pin_init {
     (forget_guards:
         @munch_fields($field:ident $(: $val:expr)?, $($rest:tt)*),
     ) => {
+        // SAFETY: forgetting the guard is intentional
         unsafe { $crate::init::__internal::DropGuard::forget($field) };
 
         $crate::try_pin_init!(forget_guards:
@@ -891,6 +896,7 @@ macro_rules! try_init {
         // no possibility of returning without `unsafe`.
         struct __InitOk;
         // Get the init data from the supplied type.
+        // SAFETY: `HasInitData` is a marker trait which we are allowed to use in this context
         let data = unsafe {
             use $crate::init::__internal::HasInitData;
             $t$(::<$($generics),*>)?::__init_data()
@@ -933,6 +939,7 @@ macro_rules! try_init {
         let init = move |slot| -> ::core::result::Result<(), $err> {
             init(slot).map(|__InitOk| ())
         };
+        // SAFETY: TODO
         let init = unsafe { $crate::init::init_from_closure::<_, $err>(init) };
         init
     }};
@@ -999,8 +1006,8 @@ macro_rules! try_init {
         @acc($($acc:tt)*),
     ) => {
         // Endpoint, nothing more to munch, create the initializer.
-        // Since we are in the `if false` branch, this will never get executed. We abuse `slot` to
-        // get the correct type inference here:
+        // SAFETY: Since we are in the `if false` branch, this will never get
+        // executed. We abuse `slot` to get the correct type inference here:
         unsafe {
             ::core::ptr::write($slot, $t {
                 $($acc)*
@@ -1041,6 +1048,7 @@ macro_rules! try_init {
     (forget_guards:
         @munch_fields($field:ident <- $val:expr, $($rest:tt)*),
     ) => {
+        // SAFETY: forgetting the guard is intentional
         unsafe { $crate::init::__internal::DropGuard::forget($field) };
 
         $crate::try_init!(forget_guards:
@@ -1050,6 +1058,7 @@ macro_rules! try_init {
     (forget_guards:
         @munch_fields($field:ident $(: $val:expr)?, $($rest:tt)*),
     ) => {
+        // SAFETY: forgetting the guard is intentional
         unsafe { $crate::init::__internal::DropGuard::forget($field) };
 
         $crate::try_init!(forget_guards:
@@ -1197,6 +1206,7 @@ pub fn uninit<T, E>() -> impl Init<MaybeUninit<T>, E> {
 // SAFETY: Every type can be initialized by-value.
 unsafe impl<T, E> Init<T, E> for T {
     unsafe fn __init(self, slot: *mut T) -> Result<(), E> {
+        // SAFETY: `slot` is valid per the invariants of `__init`
         unsafe { slot.write(self) };
         Ok(())
     }
@@ -1371,8 +1381,12 @@ pub fn zeroed<T: Zeroable>() -> impl Init<T> {
     }
 }
 
+/// # Safety
+///
+/// This can only be used on types that meet `Zeroable`'s guidelines
 macro_rules! impl_zeroable {
     ($($({$($generics:tt)*})? $t:ty, )*) => {
+        // SAFETY: upheld by documented use
         $(unsafe impl$($($generics)*)? Zeroable for $t {})*
     };
 }

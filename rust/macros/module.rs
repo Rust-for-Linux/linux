@@ -76,11 +76,11 @@ impl<'a> ModInfoBuilder<'a> {
     }
 
     fn emit_only_builtin(&mut self, field: &str, content: &str) {
-        self.emit_base(field, content, true)
+        self.emit_base(field, content, true);
     }
 
     fn emit_only_loadable(&mut self, field: &str, content: &str) {
-        self.emit_base(field, content, false)
+        self.emit_base(field, content, false);
     }
 
     fn emit(&mut self, field: &str, content: &str) {
@@ -101,11 +101,11 @@ struct ModuleInfo {
 
 impl ModuleInfo {
     fn parse(it: &mut token_stream::IntoIter) -> Self {
-        let mut info = ModuleInfo::default();
-
         const EXPECTED_KEYS: &[&str] =
             &["type", "name", "author", "description", "license", "alias"];
         const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
+
+        let mut info = ModuleInfo::default();
         let mut seen_keys = Vec::new();
 
         loop {
@@ -115,12 +115,11 @@ impl ModuleInfo {
                 None => break,
             };
 
-            if seen_keys.contains(&key) {
-                panic!(
-                    "Duplicated key \"{}\". Keys can only be specified once.",
-                    key
-                );
-            }
+            assert!(
+                !seen_keys.contains(&key),
+                "Duplicated key \"{}\". Keys can only be specified once.",
+                key
+            );
 
             assert_eq!(expect_punct(it), ':');
 
@@ -145,9 +144,11 @@ impl ModuleInfo {
         expect_end(it);
 
         for key in REQUIRED_KEYS {
-            if !seen_keys.iter().any(|e| e == key) {
-                panic!("Missing required key \"{}\".", key);
-            }
+            assert!(
+                seen_keys.iter().any(|e| e == key),
+                "Missing required key \"{}\".",
+                key
+            );
         }
 
         let mut ordered_keys: Vec<&str> = Vec::new();
@@ -157,12 +158,11 @@ impl ModuleInfo {
             }
         }
 
-        if seen_keys != ordered_keys {
-            panic!(
-                "Keys are not ordered as expected. Order them like: {:?}.",
-                ordered_keys
-            );
-        }
+        assert_eq!(
+            seen_keys, ordered_keys,
+            "Keys are not ordered as expected. Order them like: {:?}.",
+            ordered_keys
+        );
 
         info
     }

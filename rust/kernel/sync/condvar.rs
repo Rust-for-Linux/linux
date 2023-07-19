@@ -81,8 +81,8 @@ pub struct CondVar {
     _pin: PhantomPinned,
 }
 
-// SAFETY: `CondVar` only uses a `struct wait_queue_head`, which is safe to use on any thread.
 #[allow(clippy::non_send_fields_in_send_ty)]
+// SAFETY: `CondVar` only uses a `struct wait_queue_head`, which is safe to use on any thread.
 unsafe impl Send for CondVar {}
 
 // SAFETY: `CondVar` only uses a `struct wait_queue_head`, which is safe to use on multiple threads
@@ -98,7 +98,7 @@ impl CondVar {
             // SAFETY: `slot` is valid while the closure is called and both `name` and `key` have
             // static lifetimes so they live indefinitely.
             wait_list <- Opaque::ffi_init(|slot| unsafe {
-                bindings::__init_waitqueue_head(slot, name.as_char_ptr(), key.as_ptr())
+                bindings::__init_waitqueue_head(slot, name.as_char_ptr(), key.as_ptr());
             }),
         })
     }
@@ -140,7 +140,7 @@ impl CondVar {
     /// Similar to [`CondVar::wait`], except that the wait is not interruptible. That is, the
     /// thread won't wake up due to signals. It may, however, wake up supirously.
     pub fn wait_uninterruptible<T: ?Sized, B: Backend>(&self, guard: &mut Guard<'_, T, B>) {
-        self.wait_internal(bindings::TASK_UNINTERRUPTIBLE, guard)
+        self.wait_internal(bindings::TASK_UNINTERRUPTIBLE, guard);
     }
 
     /// Calls the kernel function to notify the appropriate number of threads with the given flags.
