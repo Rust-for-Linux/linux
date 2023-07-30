@@ -33,6 +33,7 @@
 #include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/of_device.h>
+#include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/refcount.h>
 #include <linux/sched/signal.h>
@@ -655,6 +656,18 @@ int rust_helper_fs_parse(struct fs_context *fc,
 	return fs_parse(fc, desc, param, result);
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
+
+void rust_helper_pci_set_drvdata(struct pci_dev *pdev, void *data)
+{
+    pci_set_drvdata(pdev, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pci_set_drvdata);
+
+void *rust_helper_pci_get_drvdata(struct pci_dev *pdev)
+{
+    return pci_get_drvdata(pdev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_pci_get_drvdata);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
