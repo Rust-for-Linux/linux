@@ -22,6 +22,7 @@
 #include <linux/irq.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
+#include <linux/netdevice.h>
 #include <linux/netfilter_arp.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
@@ -36,6 +37,7 @@
 #include <linux/sysctl.h>
 #include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <net/gro.h>
 
 /* `bindgen` gets confused at certain things. */
 const gfp_t BINDINGS_GFP_KERNEL = GFP_KERNEL;

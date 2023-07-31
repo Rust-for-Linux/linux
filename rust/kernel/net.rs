@@ -11,6 +11,7 @@ use core::{cell::UnsafeCell, ptr::NonNull};
 
 #[cfg(CONFIG_NETFILTER)]
 pub mod filter;
+pub mod gro;
 
 /// Wraps the kernel's `struct net_device`.
 #[repr(transparent)]
@@ -26,6 +27,32 @@ unsafe impl AlwaysRefCounted for Device {
     unsafe fn dec_ref(obj: core::ptr::NonNull<Self>) {
         // SAFETY: The safety requirements guarantee that the refcount is nonzero.
         unsafe { bindings::dev_put(obj.cast().as_ptr()) };
+    }
+}
+
+impl Device {
+    /// # Safety
+    ///
+    /// The caller must ensure that `ptr` is valid and remains valid for the lifetime of the
+    /// instance of [`Device`] returned
+    pub(crate) unsafe fn from_ptr<'a>(ptr: *mut bindings::net_device) -> &'a Device {
+        // SAFETY: The safety requirements guarantee the validity of the pointer, and since
+        // `Device` is transparent, the cast is OK
+        unsafe { &*ptr.cast() }
+    }
+
+    /// Add a New API (NAPI) poller to the device
+    ///
+    /// This must be done prior to the registration of said device.
+    pub fn napi_add<POLLER: gro::NapiPoller>(&mut self, napi: &mut gro::Napi) {
+        // Get all of the necessary pointers
+        let dev_ptr = self.0.get();
+        // The cast is valid because `Napi` is transparent
+        let napi_ptr: *mut bindings::napi_struct = (napi as *mut gro::Napi).cast();
+        let poll_func = gro::PollerBuilder::<POLLER>::build_function();
+
+        // SAFETY: C call with parameters that are all known to be non-null and valid
+        unsafe { bindings::netif_napi_add(dev_ptr, napi_ptr, poll_func) };
     }
 }
 
