@@ -26,6 +26,7 @@
 #include <linux/fs_parser.h>
 #include <linux/gfp.h>
 #include <linux/highmem.h>
+#include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
@@ -655,6 +656,18 @@ int rust_helper_fs_parse(struct fs_context *fc,
 	return fs_parse(fc, desc, param, result);
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
+
+void *rust_helper_i2c_get_clientdata(const struct i2c_client *client)
+{
+	return i2c_get_clientdata(client);
+}
+EXPORT_SYMBOL_GPL(rust_helper_i2c_get_clientdata);
+
+void rust_helper_i2c_set_clientdata(struct i2c_client *client, void *data)
+{
+	i2c_set_clientdata(client, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_i2c_set_clientdata);
 
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
