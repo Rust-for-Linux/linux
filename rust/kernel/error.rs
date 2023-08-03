@@ -12,7 +12,7 @@ use alloc::{
 };
 use core::convert::From;
 use core::fmt;
-use core::num::TryFromIntError;
+use core::num::{NonZeroI16, TryFromIntError};
 use core::str::{self, Utf8Error};
 
 /// Contains the C-compatible error codes.
@@ -22,7 +22,7 @@ pub mod code {
             $(
             #[doc = $doc]
             )*
-            pub const $err: super::Error = super::Error(-(crate::bindings::$err as i32));
+            pub const $err: super::Error = super::Error(unsafe { super::NonZeroI16::new_unchecked(-(crate::bindings::$err as i16)) });
         };
     }
 
@@ -182,7 +182,7 @@ pub mod code {
 ///
 /// The value is a valid `errno` (i.e. `>= -MAX_ERRNO && < 0`).
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Error(core::ffi::c_int);
+pub struct Error(NonZeroI16);
 
 impl Error {
     /// Creates an [`Error`] from a kernel error code.
@@ -201,7 +201,7 @@ impl Error {
 
         // INVARIANT: The check above ensures the type invariant
         // will hold.
-        Error(errno)
+        Error(unsafe { NonZeroI16::new_unchecked(errno as i16) })
     }
 
     /// Creates an [`Error`] from a kernel error code.
@@ -212,19 +212,19 @@ impl Error {
     pub(crate) unsafe fn from_kernel_errno_unchecked(errno: core::ffi::c_int) -> Error {
         // INVARIANT: The contract ensures the type invariant
         // will hold.
-        Error(errno)
+        Error(unsafe { NonZeroI16::new_unchecked(errno as i16) })
     }
 
     /// Returns the kernel error code.
     pub fn to_kernel_errno(self) -> core::ffi::c_int {
-        self.0
+        self.0.get() as i32
     }
 
     /// Returns a string representing the error, if one exists.
     #[cfg(not(testlib))]
     pub fn name(&self) -> Option<&'static CStr> {
         // SAFETY: Just an FFI call, there are no extra safety requirements.
-        let ptr = unsafe { bindings::errname(-self.0) };
+        let ptr = unsafe { bindings::errname(-(self.0.get() as i32)) };
         if ptr.is_null() {
             None
         } else {
@@ -248,7 +248,10 @@ impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.name() {
             // Print out number if no name can be found.
-            None => f.debug_tuple("Error").field(&-self.0).finish(),
+            None => f
+                .debug_tuple("Error")
+                .field(&-(self.0.get() as i32))
+                .finish(),
             // SAFETY: These strings are ASCII-only.
             Some(name) => f
                 .debug_tuple(unsafe { str::from_utf8_unchecked(name) })
