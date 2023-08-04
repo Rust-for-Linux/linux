@@ -100,6 +100,8 @@ pub mod user_ptr;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 
+pub mod cpumask;
+
 #[doc(hidden)]
 pub use build_error::build_error;
 
