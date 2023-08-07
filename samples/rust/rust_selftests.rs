@@ -71,12 +71,44 @@ macro_rules! do_tests {
     }
 }
 
-/// An example of test.
-#[allow(dead_code)]
-fn test_example() -> Result<TestSummary> {
-    // `use` declarations for the test can be put here, e.g. `use foo::bar;`.
+fn test_rust_smp_cpu() -> Result<TestSummary> {
+    use kernel::cpu::Cpu;
 
-    // Always pass.
+    if Cpu::num_possible() == 1 {
+        // Nothing more to do on a single-CPU system.
+        pr_info!("Skipping SMP CPU test on single-CPU system\n");
+        return Ok(Pass);
+    }
+
+    let closure = || {
+        let guard = Cpu::lock_current();
+        let id = guard.id();
+        pr_info!("Running closure on current locked processor #{id}\n");
+        id
+    };
+
+    let local = Cpu::lock_current();
+    pr_info!("Running on CPU #{}\n", local.id());
+    let local_id = local.call(closure)?;
+    if local.id() != local_id {
+        pr_err!(
+            "Closure did not run locally; expected={} got={}\n",
+            local.id(),
+            local_id
+        );
+        return Ok(Fail);
+    }
+
+    let remote = Cpu::from_id(if local.id() == 0 { 1 } else { 0 })?;
+    let remote_id = remote.call(closure)?;
+    if remote.id() != remote_id {
+        pr_err!(
+            "Closure did not run on expected remote cpu; expected={} got={}\n",
+            remote.id(),
+            remote_id
+        );
+        return Ok(Fail);
+    }
     Ok(Pass)
 }
 
@@ -85,7 +117,7 @@ impl kernel::Module for RustSelftests {
         pr_info!("Rust self tests (init)\n");
 
         do_tests! {
-            test_example // TODO: Remove when there is at least a real test.
+            test_rust_smp_cpu
         };
 
         Ok(RustSelftests)

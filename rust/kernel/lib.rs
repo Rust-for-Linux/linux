@@ -54,6 +54,7 @@ pub mod amba;
 pub mod chrdev;
 #[cfg(CONFIG_COMMON_CLK)]
 pub mod clk;
+pub mod cpu;
 pub mod cred;
 pub mod delay;
 pub mod device;

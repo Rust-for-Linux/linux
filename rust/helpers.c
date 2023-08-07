@@ -656,6 +656,18 @@ int rust_helper_fs_parse(struct fs_context *fc,
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
 
+int rust_helper_get_cpu(void)
+{
+	return get_cpu();
+}
+EXPORT_SYMBOL_GPL(rust_helper_get_cpu);
+
+void rust_helper_put_cpu(void)
+{
+	put_cpu();
+}
+EXPORT_SYMBOL_GPL(rust_helper_put_cpu);
+
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
  * as the Rust `usize` type, so we can use it in contexts where Rust
