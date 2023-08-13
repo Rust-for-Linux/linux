@@ -191,7 +191,7 @@ Configuration
 
 ``Rust support`` (``CONFIG_RUST``) needs to be enabled in the ``General setup``
 menu. The option is only shown if a suitable Rust toolchain is found (see
-above), as long as the other requirements are met. In turn, this will make
+above), *and* all other requirements are met. In turn, this will make
 visible the rest of options that depend on Rust.
 
 Afterwards, go to::
