@@ -10,7 +10,7 @@ use crate::{
     bindings,
     device::{self, RawDevice},
     driver,
-    error::{from_kernel_result, Result},
+    error::{from_kernel_err_ptr, from_kernel_result, Result},
     of,
     str::CStr,
     to_result,
@@ -164,7 +164,15 @@ pub trait Driver {
 /// The field `ptr` is non-null and valid for the lifetime of the object.
 pub struct Device {
     ptr: *mut bindings::platform_device,
+    is_registered: bool,
 }
+
+// SAFETY: `Device` only holds a pointer to a C device, which is safe to be used from any thread.
+unsafe impl Send for Device {}
+
+// SAFETY: `Device` only holds a pointer to a C device, references to which are safe to be used
+// from any thread.
+unsafe impl Sync for Device {}
 
 impl Device {
     /// Creates a new device from the given pointer.
@@ -175,7 +183,23 @@ impl Device {
     /// instance.
     unsafe fn from_ptr(ptr: *mut bindings::platform_device) -> Self {
         // INVARIANT: The safety requirements of the function ensure the lifetime invariant.
-        Self { ptr }
+        Self {
+            ptr,
+            is_registered: false,
+        }
+    }
+
+    /// Add a platform-level device and its resources
+    pub fn register(name: &'static CStr, id: i32) -> Result<Self> {
+        // SAFETY: It returns a non-null and valid pointer to a struct platform_device
+        let pdev = from_kernel_err_ptr(unsafe {
+            bindings::platform_device_register_simple(name.as_char_ptr(), id, core::ptr::null(), 0)
+        })?;
+
+        Ok(Self {
+            ptr: pdev,
+            is_registered: true,
+        })
     }
 
     /// Returns id of the platform device.
@@ -183,8 +207,23 @@ impl Device {
         // SAFETY: By the type invariants, we know that `self.ptr` is non-null and valid.
         unsafe { (*self.ptr).id }
     }
+
+    /// Similar to the above, except it deals with the case where the device
+    /// does not have dev->dma_mask appropriately setup.
+    pub fn coerse_dma_masks(&mut self, mask: u64) -> Result {
+        to_result(unsafe { bindings::dma_coerce_mask_and_coherent(&mut (*self.ptr).dev, mask) })
+    }
 }
 
+impl Drop for Device {
+    fn drop(&mut self) {
+        if self.is_registered {
+            // SAFETY: This path only runs if a previous call to `register` completed
+            // successfully.
+            unsafe { bindings::platform_device_unregister(self.ptr) };
+        }
+    }
+}
 // SAFETY: The device returned by `raw_device` is the raw platform device.
 unsafe impl device::RawDevice for Device {
     fn raw_device(&self) -> *mut bindings::device {
