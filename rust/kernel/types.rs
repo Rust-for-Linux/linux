@@ -450,7 +450,7 @@ define_unsigned_number_traits!(usize);
 ///
 /// fn print_bits(x: usize) {
 ///     for bit in bits_iter(x) {
-///         pr_info!("{}\n", bit);
+///         pr_info!("{bit}\n");
 ///     }
 /// }
 ///

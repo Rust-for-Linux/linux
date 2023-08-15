@@ -139,7 +139,7 @@ fn param_ops_path(param_type: &str) -> &'static str {
         "isize" => "kernel::module_param::PARAM_OPS_ISIZE",
         "usize" => "kernel::module_param::PARAM_OPS_USIZE",
         "str" => "kernel::module_param::PARAM_OPS_STR",
-        t => panic!("Unrecognized type {}", t),
+        t => panic!("Unrecognized type {t}"),
     }
 }
 
@@ -151,7 +151,7 @@ fn try_simple_param_val(
         "bool" => Box::new(try_ident),
         "str" => Box::new(|param_it| {
             try_byte_string(param_it)
-                .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{}\")", s))
+                .map(|s| format!("kernel::module_param::StringParam::Ref(b\"{s}\")"))
         }),
         _ => Box::new(try_literal),
     }
@@ -247,10 +247,7 @@ impl ModuleInfo {
             };
 
             if seen_keys.contains(&key) {
-                panic!(
-                    "Duplicated key \"{}\". Keys can only be specified once.",
-                    key
-                );
+                panic!("Duplicated key \"{key}\". Keys can only be specified once.");
             }
 
             assert_eq!(expect_punct(it), ':');
@@ -266,10 +263,7 @@ impl ModuleInfo {
                     info.alias = Some(format!("rtnl-link-{}", expect_string_ascii(it)))
                 }
                 "params" => info.params = Some(expect_group(it)),
-                _ => panic!(
-                    "Unknown key \"{}\". Valid keys are: {:?}.",
-                    key, EXPECTED_KEYS
-                ),
+                _ => panic!("Unknown key \"{key}\". Valid keys are: {EXPECTED_KEYS:?}."),
             }
 
             assert_eq!(expect_punct(it), ',');
@@ -281,7 +275,7 @@ impl ModuleInfo {
 
         for key in REQUIRED_KEYS {
             if !seen_keys.iter().any(|e| e == key) {
-                panic!("Missing required key \"{}\".", key);
+                panic!("Missing required key \"{key}\".");
             }
         }
 
@@ -293,10 +287,7 @@ impl ModuleInfo {
         }
 
         if seen_keys != ordered_keys {
-            panic!(
-                "Keys are not ordered as expected. Order them like: {:?}.",
-                ordered_keys
-            );
+            panic!("Keys are not ordered as expected. Order them like: {ordered_keys:?}.");
         }
 
         info
@@ -364,7 +355,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 } => {
                     array_types_to_generate.push((vals.clone(), max_length));
                     (
-                        format!("__rust_array_param_{}_{}", vals, max_length),
+                        format!("__rust_array_param_{vals}_{max_length}"),
                         generated_array_ops_name(vals, max_length),
                     )
                 }

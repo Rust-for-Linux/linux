@@ -254,7 +254,7 @@ macro_rules! container_of {
 #[cfg(not(any(testlib, test)))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
-    pr_emerg!("{}\n", info);
+    pr_emerg!("{info}\n");
     // SAFETY: FFI call.
     unsafe { bindings::BUG() };
     // Bindgen currently does not recognize `__noreturn` so `BUG` returns `()`

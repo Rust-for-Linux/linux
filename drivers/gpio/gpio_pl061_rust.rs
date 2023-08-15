@@ -143,8 +143,7 @@ impl irq::Chip for PL061Device {
         {
             dev_err!(
                 data.dev,
-                "trying to configure line {} for both level and edge detection, choose one!\n",
-                offset
+                "trying to configure line {offset} for both level and edge detection, choose one!\n",
             );
             return Err(EINVAL);
         }
@@ -172,8 +171,7 @@ impl irq::Chip for PL061Device {
             irq_data.set_level_handler();
             dev_dbg!(
                 data.dev,
-                "line {}: IRQ on {} level\n",
-                offset,
+                "line {offset}: IRQ on {} level\n",
                 if polarity { "HIGH" } else { "LOW" }
             );
         } else if (trigger & irq::Type::EDGE_BOTH) == irq::Type::EDGE_BOTH {
@@ -182,7 +180,7 @@ impl irq::Chip for PL061Device {
             // Select both edges, settings this makes GPIOEV be ignored.
             gpioibe |= bit;
             irq_data.set_edge_handler();
-            dev_dbg!(data.dev, "line {}: IRQ on both edges\n", offset);
+            dev_dbg!(data.dev, "line {offset}: IRQ on both edges\n");
         } else if trigger & (irq::Type::EDGE_RISING | irq::Type::EDGE_FALLING) != 0 {
             let rising = trigger & irq::Type::EDGE_RISING != 0;
 
@@ -199,8 +197,7 @@ impl irq::Chip for PL061Device {
             irq_data.set_edge_handler();
             dev_dbg!(
                 data.dev,
-                "line {}: IRQ on {} edge\n",
-                offset,
+                "line {offset}: IRQ on {} edge\n",
                 if rising { "RISING" } else { "FALLING}" }
             );
         } else {
@@ -209,7 +206,7 @@ impl irq::Chip for PL061Device {
             gpioibe &= !bit;
             gpioiev &= !bit;
             irq_data.set_bad_handler();
-            dev_warn!(data.dev, "no trigger selected for line {}\n", offset);
+            dev_warn!(data.dev, "no trigger selected for line {offset}\n");
         }
 
         pl061.base.writeb(gpiois, GPIOIS);

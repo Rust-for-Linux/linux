@@ -399,7 +399,7 @@ impl<T: Copy, const N: usize> ArrayParam<T, { N }> {
 impl<T: core::fmt::Display, const N: usize> core::fmt::Display for ArrayParam<T, { N }> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for val in self.values() {
-            write!(f, "{},", val)?;
+            write!(f, "{val},")?;
         }
         Ok(())
     }
@@ -462,8 +462,8 @@ impl core::fmt::Display for StringParam {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let bytes = self.bytes();
         match core::str::from_utf8(bytes) {
-            Ok(utf8) => write!(f, "{}", utf8),
-            Err(_) => write!(f, "{:?}", bytes),
+            Ok(utf8) => write!(f, "{utf8}"),
+            Err(_) => write!(f, "{bytes:?}"),
         }
     }
 }

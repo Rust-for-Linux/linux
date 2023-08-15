@@ -30,14 +30,14 @@ type Object = Vec<(String, Value)>;
 impl Display for Value {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result {
         match self {
-            Value::Boolean(boolean) => write!(formatter, "{}", boolean),
-            Value::Number(number) => write!(formatter, "{}", number),
-            Value::String(string) => write!(formatter, "\"{}\"", string),
+            Value::Boolean(boolean) => write!(formatter, "{boolean}"),
+            Value::Number(number) => write!(formatter, "{number}"),
+            Value::String(string) => write!(formatter, "\"{string}\""),
             Value::Object(object) => {
                 formatter.write_str("{")?;
                 if let [ref rest @ .., ref last] = object[..] {
                     for (key, value) in rest {
-                        write!(formatter, "\"{}\": {},", key, value)?;
+                        write!(formatter, "\"{key}\": {value},")?;
                     }
                     write!(formatter, "\"{}\": {}", last.0, last.1)?;
                 }
@@ -95,7 +95,7 @@ impl Display for TargetSpec {
         formatter.write_str("{\n")?;
         if let [ref rest @ .., ref last] = self.0[..] {
             for (key, value) in rest {
-                write!(formatter, "    \"{}\": {},\n", key, value)?;
+                write!(formatter, "    \"{key}\": {value},\n")?;
             }
             write!(formatter, "    \"{}\": {}\n", last.0, last.1)?;
         }
@@ -228,5 +228,5 @@ fn main() {
         ts.push("target-endian", "big");
     }
 
-    println!("{}", ts);
+    println!("{ts}");
 }

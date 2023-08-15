@@ -192,10 +192,7 @@ impl Error {
     pub(crate) fn from_kernel_errno(errno: core::ffi::c_int) -> Error {
         if errno < -(bindings::MAX_ERRNO as i32) || errno >= 0 {
             // TODO: Make it a `WARN_ONCE` once available.
-            crate::pr_warn!(
-                "attempted to create `Error` with out of range `errno`: {}",
-                errno
-            );
+            crate::pr_warn!("attempted to create `Error` with out of range `errno`: {errno}");
             return code::EINVAL;
         }
 

@@ -27,5 +27,7 @@
 #[export_name = "rust_build_error"]
 #[track_caller]
 pub const fn build_error(msg: &'static str) -> ! {
+    // This uses const context expansion panic! special case:
+    // https://github.com/rust-lang/rust/issues/108595
     panic!("{}", msg);
 }

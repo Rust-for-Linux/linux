@@ -3,5 +3,5 @@
 //! Rust single host program sample: module `a`.
 
 pub(crate) fn f(x: i32) {
-    println!("The number is {}.", x);
+    println!("The number is {x}.");
 }

@@ -140,7 +140,7 @@ macro_rules! init_work_item_adapter {
 ///
 /// kernel::impl_self_work_adapter!(Example, work, |w| {
 ///     let count = w.count.fetch_add(1, Ordering::Relaxed);
-///     pr_info!("Called with count={}\n", count);
+///     pr_info!("Called with count={count}\n");
 ///
 ///     // Queue again if the count is less than 10.
 ///     if count < 10 {
