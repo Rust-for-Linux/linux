@@ -656,6 +656,21 @@ int rust_helper_fs_parse(struct fs_context *fc,
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
 
+void rust_helper_mdelay(unsigned long usecs) {
+	mdelay(usecs);
+}
+EXPORT_SYMBOL_GPL(rust_helper_mdelay);
+
+void rust_helper_udelay(unsigned long usecs) {
+	udelay(usecs);
+}
+EXPORT_SYMBOL_GPL(rust_helper_udelay);
+
+void rust_helper_ndelay(unsigned long nsecs) {
+	ndelay(nsecs);
+}
+EXPORT_SYMBOL_GPL(rust_helper_ndelay);
+
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
  * as the Rust `usize` type, so we can use it in contexts where Rust
