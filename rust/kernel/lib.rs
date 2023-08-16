@@ -31,6 +31,8 @@
 #[cfg(not(CONFIG_RUST))]
 compile_error!("Missing kernel configuration for conditional compilation");
 
+extern crate self as kernel;
+
 #[cfg(not(test))]
 #[cfg(not(testlib))]
 mod allocator;
