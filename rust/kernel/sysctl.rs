@@ -16,7 +16,7 @@ use crate::{
     bindings,
     error::code::*,
     io_buffer::IoBufferWriter,
-    str::CStr,
+    str::{trim_whitespace, CStr},
     types,
     user_ptr::{UserSlicePtr, UserSlicePtrWriter},
     Result,
@@ -29,20 +29,6 @@ pub trait SysctlStorage: Sync {
 
     /// Reads via a [`UserSlicePtrWriter`].
     fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, Result);
-}
-
-fn trim_whitespace(mut data: &[u8]) -> &[u8] {
-    while !data.is_empty() && (data[0] == b' ' || data[0] == b'\t' || data[0] == b'\n') {
-        data = &data[1..];
-    }
-    while !data.is_empty()
-        && (data[data.len() - 1] == b' '
-            || data[data.len() - 1] == b'\t'
-            || data[data.len() - 1] == b'\n')
-    {
-        data = &data[..data.len() - 1];
-    }
-    data
 }
 
 impl<T> SysctlStorage for &T
@@ -183,17 +169,5 @@ impl<T: SysctlStorage> Drop for Sysctl<T> {
             bindings::unregister_sysctl_table(self.header);
         }
         self.header = ptr::null_mut();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_trim_whitespace() {
-        assert_eq!(trim_whitespace(b"foo    "), b"foo");
-        assert_eq!(trim_whitespace(b"    foo"), b"foo");
-        assert_eq!(trim_whitespace(b"  foo  "), b"foo");
     }
 }

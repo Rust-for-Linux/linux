@@ -589,3 +589,27 @@ impl Deref for CString {
 macro_rules! fmt {
     ($($f:tt)*) => ( core::format_args!($($f)*) )
 }
+
+/// Trims leading and trailing whitespace (` `, `\t` and `\n`).
+///
+/// # Examples
+///
+/// ```
+/// # use kernel::str::trim_whitespace;
+/// assert_eq!(trim_whitespace(b"foo    "), b"foo");
+/// assert_eq!(trim_whitespace(b"    foo"), b"foo");
+/// assert_eq!(trim_whitespace(b"  foo  "), b"foo");
+/// ```
+pub fn trim_whitespace(mut data: &[u8]) -> &[u8] {
+    while !data.is_empty() && (data[0] == b' ' || data[0] == b'\t' || data[0] == b'\n') {
+        data = &data[1..];
+    }
+    while !data.is_empty()
+        && (data[data.len() - 1] == b' '
+            || data[data.len() - 1] == b'\t'
+            || data[data.len() - 1] == b'\n')
+    {
+        data = &data[..data.len() - 1];
+    }
+    data
+}
