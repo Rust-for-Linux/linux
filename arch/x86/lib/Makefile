@@ -64,6 +64,7 @@ ifeq ($(CONFIG_X86_32),y)
 ifneq ($(CONFIG_X86_CMPXCHG64),y)
         lib-y += cmpxchg8b_emu.o atomic64_386_32.o
 endif
+	lib-y += moddiv_32.o
 else
         obj-y += iomap_copy_64.o
 ifneq ($(CONFIG_GENERIC_CSUM),y)
