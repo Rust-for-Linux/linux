@@ -1609,7 +1609,7 @@ MRPROPER_FILES += include/config include/generated          \
 		  certs/x509.genkey \
 		  vmlinux-gdb.py \
 		  *.spec rpmbuild \
-		  rust/libmacros.so
+		  rust/libmacros.so rust/libserde_derive.so
 
 # clean - Delete most, but leave enough to build external modules
 #
@@ -1851,8 +1851,18 @@ PHONY += rustfmt rustfmtcheck
 rustfmt:
 	$(Q)find $(abs_srctree) -type f -name '*.rs' \
 		-o -path $(abs_srctree)/rust/alloc -prune \
+		-o -path $(abs_srctree)/rust/proc-macro2 -prune \
+		-o -path $(abs_srctree)/rust/quote -prune \
+		-o -path $(abs_srctree)/rust/syn -prune \
+		-o -path $(abs_srctree)/rust/serde -prune \
+		-o -path $(abs_srctree)/rust/serde_derive -prune \
 		-o -path $(abs_objtree)/rust/test -prune \
 		| grep -Fv $(abs_srctree)/rust/alloc \
+		| grep -Fv $(abs_srctree)/rust/proc-macro2 \
+		| grep -Fv $(abs_srctree)/rust/quote \
+		| grep -Fv $(abs_srctree)/rust/syn \
+		| grep -Fv $(abs_srctree)/rust/serde \
+		| grep -Fv $(abs_srctree)/rust/serde_derive \
 		| grep -Fv $(abs_objtree)/rust/test \
 		| grep -Fv generated \
 		| xargs $(RUSTFMT) $(rustfmt_flags)
