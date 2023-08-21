@@ -330,6 +330,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
         assert_eq!(params.delimiter(), Delimiter::Brace);
 
         let mut it = params.stream().into_iter();
+        let mut read_funcs = Vec::new();
 
         loop {
             let param_name = match it.next() {
@@ -389,7 +390,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             let read_func = if permissions_are_readonly(&param_permissions) {
                 format!(
                     "
-                        fn read(&self)
+                        fn {param_name}(&self)
                             -> &<{param_type_internal} as kernel::module_param::ModuleParam>::Value {{
                             // SAFETY: Parameters do not need to be locked because they are
                             // read only or sysfs is not enabled.
@@ -407,7 +408,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             } else {
                 format!(
                     "
-                        fn read<'lck>(&self, lock: &'lck kernel::KParamGuard)
+                        fn {param_name}<'lck>(&self, lock: &'lck kernel::KParamGuard)
                             -> &'lck <{param_type_internal} as kernel::module_param::ModuleParam>::Value {{
                             // SAFETY: Parameters are locked by `KParamGuard`.
                             unsafe {{
@@ -422,6 +423,8 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                     param_type_internal = param_type_internal,
                 )
             };
+            read_funcs.push(read_func);
+
             let kparam = format!(
                 "
                     kernel::bindings::kernel_param__bindgen_ty_1 {{
@@ -436,12 +439,6 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 modinfo.buffer,
                 "
                 static mut __{name}_{param_name}_value: {param_type_internal} = {param_default};
-
-                struct __{name}_{param_name};
-
-                impl __{name}_{param_name} {{ {read_func} }}
-
-                const {param_name}: __{name}_{param_name} = __{name}_{param_name};
 
                 // Note: the C macro that generates the static structs for the `__param` section
                 // asks for them to be `aligned(sizeof(void *))`. However, that was put in place
@@ -484,7 +481,6 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                 ",
                 name = info.name,
                 param_type_internal = param_type_internal,
-                read_func = read_func,
                 param_default = param_default,
                 param_name = param_name,
                 ops = ops,
@@ -493,6 +489,29 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
             )
             .unwrap();
         }
+
+        write!(
+            modinfo.buffer,
+            "
+            struct __MODPARAM;
+
+            impl __MODPARAM {{
+            "
+        )
+        .unwrap();
+
+        read_funcs.iter().for_each(|read_func| {
+            writeln!(modinfo.buffer, "{}", read_func).unwrap();
+        });
+
+        write!(
+            modinfo.buffer,
+            "}}
+
+            const MODPARAM: __MODPARAM = __MODPARAM;
+            "
+        )
+        .unwrap();
     }
 
     let mut generated_array_types = String::new();

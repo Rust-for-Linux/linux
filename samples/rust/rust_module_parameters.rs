@@ -48,14 +48,14 @@ impl kernel::Module for RustModuleParameters {
         {
             let lock = module.kernel_param_lock();
             pr_info!("Parameters:\n");
-            pr_info!("  my_bool:    {}\n", my_bool.read());
-            pr_info!("  my_i32:     {}\n", my_i32.read(&lock));
+            pr_info!("  my_bool:    {}\n", MODPARAM.my_bool());
+            pr_info!("  my_i32:     {}\n", MODPARAM.my_i32(&lock));
             pr_info!(
                 "  my_str:     {}\n",
-                core::str::from_utf8(my_str.read(&lock))?
+                core::str::from_utf8(MODPARAM.my_str(&lock))?
             );
-            pr_info!("  my_usize:   {}\n", my_usize.read(&lock));
-            pr_info!("  my_array:   {:?}\n", my_array.read());
+            pr_info!("  my_usize:   {}\n", MODPARAM.my_usize(&lock));
+            pr_info!("  my_array:   {:?}\n", MODPARAM.my_array());
         }
 
         Ok(RustModuleParameters)
