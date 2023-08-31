@@ -100,6 +100,10 @@ jobs:
       # Setup: Store matrix name
       - run: echo 'MATRIX_NAME=${{ matrix.arch }}-${{ matrix.toolchain }}-${{ matrix.config }}' >> $GITHUB_ENV
 
+      # Setup: Register problem matchers
+      - run: |
+          echo "::add-matcher::.github/problem-matchers/generic.json"
+
       # Setup: Github cache
       - uses: actions/cache@v3
         with:
