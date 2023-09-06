@@ -656,6 +656,42 @@ int rust_helper_fs_parse(struct fs_context *fc,
 }
 EXPORT_SYMBOL_GPL(rust_helper_fs_parse);
 
+dma_addr_t rust_helper_dma_map_single_attrs(struct device *dev, void *ptr,
+					    size_t size, enum dma_data_direction dir,
+					    unsigned long attrs)
+{
+	return dma_map_single_attrs(dev, ptr, size, dir, attrs);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dma_map_single_attrs);
+
+void rust_helper_dma_unmap_single_attrs(struct device *dev, dma_addr_t addr,
+					size_t size, enum dma_data_direction dir,
+					unsigned long attrs)
+{
+	dma_unmap_single_attrs(dev, addr, size, dir, attrs);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dma_unmap_single_attrs);
+
+int rust_helper_dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
+{
+	return dma_mapping_error(dev, dma_addr);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dma_mapping_error);
+
+void *rust_helper_dma_alloc_coherent(struct device *dev, size_t size,
+				     dma_addr_t *dma_handle, gfp_t gfp)
+{
+	return dma_alloc_coherent(dev, size, dma_handle, gfp);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dma_alloc_coherent);
+
+void rust_helper_dma_free_coherent(struct device *dev, size_t size,
+				   void *cpu_addr, dma_addr_t dma_handle)
+{
+	return dma_free_coherent(dev, size, cpu_addr, dma_handle);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dma_free_coherent);
+
 /*
  * We use `bindgen`'s `--size_t-is-usize` option to bind the C `size_t` type
  * as the Rust `usize` type, so we can use it in contexts where Rust
