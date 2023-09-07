@@ -60,6 +60,7 @@ pub mod device;
 pub mod driver;
 pub mod file;
 pub mod fs;
+pub mod fwnode;
 pub mod gpio;
 pub mod hwrng;
 pub mod irq;
