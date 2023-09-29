@@ -239,14 +239,22 @@ impl<T> Opaque<T> {
     /// uninitialized. Additionally, access to the inner `T` requires `unsafe`, so the caller needs
     /// to verify at that point that the inner value is valid.
     pub fn ffi_init(init_func: impl FnOnce(*mut T)) -> impl PinInit<Self> {
+        Self::try_ffi_init(move |slot| {
+            init_func(slot);
+            Ok(())
+        })
+    }
+
+    /// Similar to [`Self::ffi_init`], except that the closure can fail.
+    ///
+    /// To avoid leaks on failure, the closure must drop any fields it has initialised before the
+    /// failure.
+    pub fn try_ffi_init<E>(
+        init_func: impl FnOnce(*mut T) -> Result<(), E>,
+    ) -> impl PinInit<Self, E> {
         // SAFETY: We contain a `MaybeUninit`, so it is OK for the `init_func` to not fully
         // initialize the `T`.
-        unsafe {
-            init::pin_init_from_closure::<_, ::core::convert::Infallible>(move |slot| {
-                init_func(Self::raw_get(slot));
-                Ok(())
-            })
-        }
+        unsafe { init::pin_init_from_closure(|slot| init_func(Self::raw_get(slot))) }
     }
 
     /// Returns a raw pointer to the opaque data.
