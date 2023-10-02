@@ -10,8 +10,8 @@ use super::{
     mutex::EmptyGuardContext, Guard, Lock, LockClassKey, LockFactory, LockIniter, ReadLock,
     WriteLock,
 };
-use crate::{bindings, str::CStr, Opaque};
-use core::{cell::UnsafeCell, marker::PhantomPinned, pin::Pin};
+use crate::{bindings, str::CStr, task::Task, ARef, Opaque};
+use core::{cell::UnsafeCell, marker::PhantomPinned, ops::Deref, pin::Pin};
 
 /// Safely initialises a [`RwSemaphore`] with the given name, generating a new lock class.
 #[macro_export]
@@ -110,12 +110,28 @@ unsafe impl<T: ?Sized> Lock for RwSemaphore<T> {
     type GuardContext = EmptyGuardContext;
 
     fn lock_noguard(&self) -> EmptyGuardContext {
-        // SAFETY: `rwsem` points to valid memory.
+        // SAFETY: `rwsem` points to valid memory. The current task won't be freed as long as the
+        // lock is held (see the code below).
         unsafe { bindings::down_write(self.rwsem.get()) };
+
+        // `down_write` sets the owner task as the `->owner` so that other tasks can inquiry the
+        // running state for optimistic spinning. Therefore the ref-count of the owner needs to be
+        // increased, otherwise if the task exists with the lock held, it may get freed and make
+        // `->owner` a dangling pointer.
+        let task: ARef<Task> = Task::current().into();
+        core::mem::forget(task);
+
         EmptyGuardContext
     }
 
     unsafe fn unlock(&self, _: &mut EmptyGuardContext) {
+        // Decreases the ref-count increased in `lock_noguard`.
+        let task_ptr: core::ptr::NonNull<Task> = Task::current().deref().into();
+
+        // SAFETY: The safety requirements of the function ensure that a `lock_noguard` has been
+        // called, therefore the ref-count of the `task_ptr` has been increased.
+        unsafe { ARef::from_raw(task_ptr) };
+
         // SAFETY: The safety requirements of the function ensure that the rw semaphore is owned by
         // the caller.
         unsafe { bindings::up_write(self.rwsem.get()) };
@@ -135,10 +151,25 @@ unsafe impl<T: ?Sized> Lock<ReadLock> for RwSemaphore<T> {
     fn lock_noguard(&self) -> EmptyGuardContext {
         // SAFETY: `rwsem` points to valid memory.
         unsafe { bindings::down_read(self.rwsem.get()) };
+
+        // `down_read` sets the owner task as the `->owner` so that other tasks can inquiry the
+        // running state for optimistic spinning. Therefore the ref-count of the owner needs to be
+        // increased, otherwise if the task exists with the lock held, it may get freed and make
+        // `->owner` a dangling pointer.
+        let task: ARef<Task> = Task::current().into();
+        core::mem::forget(task);
+
         EmptyGuardContext
     }
 
     unsafe fn unlock(&self, _: &mut EmptyGuardContext) {
+        // Decreases the ref-count increased in `lock_noguard`.
+        let task_ptr: core::ptr::NonNull<Task> = Task::current().deref().into();
+
+        // SAFETY: The safety requirements of the function ensure that a `lock_noguard` has been
+        // called, therefore the ref-count of the `task_ptr` has been increased.
+        unsafe { ARef::from_raw(task_ptr) };
+
         // SAFETY: The safety requirements of the function ensure that the rw semaphore is owned by
         // the caller.
         unsafe { bindings::up_read(self.rwsem.get()) };
