@@ -80,12 +80,72 @@ fn test_example() -> Result<TestSummary> {
     Ok(Pass)
 }
 
+/// Alignment requirement test for allocator.
+fn test_alloc_alignment() -> Result<TestSummary> {
+        use alloc::alloc::{alloc, dealloc};
+        use core::alloc::Layout;
+        use core::ptr;
+
+        const MAX_ALIGN_ORDER: usize = 12;
+
+        let mut unaligned = false;
+        let mut min_unaligned = [(usize::MAX, ptr::null_mut()); 13];
+        let mut max_unaligned = [(0, ptr::null_mut()); 13];
+
+        // Generates alignments [1,2,..,2^MAX_ALIGN_ORDER].
+        for align in 0..=MAX_ALIGN_ORDER {
+            // Generates sizes [1, 4 * alignment).
+            for size in 1..(1 << (align + 2)) {
+                let layout = Layout::from_size_align(size, 1 << align)?;
+
+                // SAFETY: layout.size() is not zero.
+                let ptr = unsafe { alloc(layout) };
+
+                // Allocation failed, report out of memory.
+                if ptr.is_null() {
+                    return Err(ENOMEM);
+                }
+
+                if (ptr as usize) & ((1 << align) - 1) != 0 {
+                    unaligned = true;
+
+                    if min_unaligned[align].0 > size {
+                        min_unaligned[align] = (size, ptr);
+                    }
+
+                    if max_unaligned[align].0 < size {
+                        max_unaligned[align] = (size, ptr);
+                    }
+                }
+
+                // SAFETY: Free the `ptr` allocated from the above `alloc` with the same
+                // layout.
+                unsafe { dealloc(ptr, layout) };
+            }
+        }
+
+        if unaligned {
+            pr_info!("Alignment mismatch found:");
+            for align in 0..=MAX_ALIGN_ORDER {
+                if max_unaligned[align].0 != 0 {
+                    pr_info!(
+                        " alignment = {}, min size = {} with ptr = {:?}, max size = {} with ptr = {:?}",
+                        1 << align, min_unaligned[align].0, min_unaligned[align].1,
+                        max_unaligned[align].0, max_unaligned[align].1);
+                }
+            }
+            Ok(Fail)
+        } else {
+            Ok(Pass)
+        }
+}
+
 impl kernel::Module for RustSelftests {
     fn init(_name: &'static CStr, _module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust self tests (init)\n");
 
         do_tests! {
-            test_example // TODO: Remove when there is at least a real test.
+            test_alloc_alignment
         };
 
         Ok(RustSelftests)
