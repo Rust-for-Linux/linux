@@ -13,6 +13,7 @@ in the kernel, please read the quick-start.rst guide.
     general-information
     coding-guidelines
     arch-support
+    testing
 
 .. only::  subproject and html
 

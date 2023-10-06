@@ -1,0 +1,6 @@
+CONFIG_KUNIT=y
+CONFIG_RUST=y
+CONFIG_RUST_KERNEL_KUNIT_TEST=y
+
+# UML is not supported at the moment
+CONFIG_UML=n
