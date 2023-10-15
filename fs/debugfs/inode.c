@@ -736,12 +736,52 @@ static void __debugfs_file_removed(struct dentry *dentry)
 		wait_for_completion(&fsd->active_users_drained);
 }
 
-static void remove_one(struct dentry *victim)
+void debugfs_remove_one_with_callback(struct dentry *victim,
+				             void (*callback)(struct dentry *))
 {
+	callback(victim);
         if (d_is_reg(victim))
 		__debugfs_file_removed(victim);
 	simple_release_fs(&debugfs_mount, &debugfs_mount_count);
 }
+EXPORT_SYMBOL_GPL(debugfs_remove_one_with_callback);
+
+static void empty_callback(struct dentry *dentry) {}
+
+static void remove_one(struct dentry *victim)
+{
+	debugfs_remove_one_with_callback(victim, empty_callback);
+}
+
+/**
+ * debugfs_remove_with_callback - recursively removes a directory with an
+ * additional callback to be run on each dentry. This is intended to be used
+ * from Rust modules that need to pass in a Rust destructor to drop data in the
+ * dentry's.
+ * @dentry: a pointer to a the dentry of the directory to be removed.  If this
+ *          parameter is NULL or an error value, nothing will be done.
+ * @callback: a pointer to a callback which will be run on each dentry before
+ * it is removed.
+ *
+ * This function recursively removes a directory tree in debugfs that
+ * was previously created with a call to another debugfs function
+ * (like debugfs_create_file() or variants thereof.)
+ *
+ * This function (or debugfs_remove) is required to be called in order for the
+ * file to be removed, no automatic cleanup of files will happen when a module
+ * is removed, you are responsible here.
+ */
+void debugfs_remove_with_callback(struct dentry *dentry,
+				  void (*callback)(struct dentry *))
+{
+	if (IS_ERR_OR_NULL(dentry))
+		return;
+
+	simple_pin_fs(&debug_fs_type, &debugfs_mount, &debugfs_mount_count);
+	simple_recursive_removal(dentry, callback);
+	simple_release_fs(&debugfs_mount, &debugfs_mount_count);
+}
+EXPORT_SYMBOL_GPL(debugfs_remove_with_callback);
 
 /**
  * debugfs_remove - recursively removes a directory
@@ -758,12 +798,7 @@ static void remove_one(struct dentry *victim)
  */
 void debugfs_remove(struct dentry *dentry)
 {
-	if (IS_ERR_OR_NULL(dentry))
-		return;
-
-	simple_pin_fs(&debug_fs_type, &debugfs_mount, &debugfs_mount_count);
-	simple_recursive_removal(dentry, remove_one);
-	simple_release_fs(&debugfs_mount, &debugfs_mount_count);
+	debugfs_remove_with_callback(dentry, remove_one);
 }
 EXPORT_SYMBOL_GPL(debugfs_remove);
 

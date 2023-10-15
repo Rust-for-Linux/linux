@@ -15,6 +15,7 @@ file    /rust_stack_probing.ko      samples/rust/rust_stack_probing.ko      0755
 file    /rust_semaphore.ko          samples/rust/rust_semaphore.ko          0755 0 0
 file    /rust_semaphore_c.ko        samples/rust/rust_semaphore_c.ko        0755 0 0
 file    /rust_selftests.ko          samples/rust/rust_selftests.ko          0755 0 0
+file    /rust_debugfs.ko            samples/rust/rust_debugfs.ko            0755 0 0
 
 file    /rust_module_parameters_loadable_default.ko  samples/rust/rust_module_parameters_loadable_default.ko  0755 0 0
 file    /rust_module_parameters_loadable_custom.ko   samples/rust/rust_module_parameters_loadable_custom.ko   0755 0 0

@@ -163,4 +163,16 @@ config SAMPLE_RUST_SELFTESTS
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_DEBUGFS
+       tristate "Debug fs"
+       depends on DEBUG_FS
+       help
+         This option builds the Rust debugfs sample.
+
+         To compile this as a module, choose M here:
+         the module will be called rust_debugfs.
+
+         If unsure, say N.
+
+
 endif # SAMPLES_RUST

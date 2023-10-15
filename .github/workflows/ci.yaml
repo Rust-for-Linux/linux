@@ -368,6 +368,11 @@ jobs:
           grep '] rust_selftests: All tests passed. Congratulations!$' qemu-stdout.log
           grep '] rust_selftests: Rust self tests (exit)$' qemu-stdout.log
 
+      - run: |
+          grep '] rust_debugfs: Rust debugfs sample (init)$'   qemu-stdout.log
+          grep '] rust_debugfs: Rust debugfs sample (exit)$'   qemu-stdout.log
+          grep '^Debugfs file read count: 2$'                  qemu-stdout.log
+
       # Report
       - run: |
           cat ${{ env.BUILD_DIR }}.config

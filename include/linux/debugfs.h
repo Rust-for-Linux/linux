@@ -96,6 +96,10 @@ struct dentry *debugfs_create_automount(const char *name,
 
 void debugfs_remove(struct dentry *dentry);
 #define debugfs_remove_recursive debugfs_remove
+void debugfs_remove_with_callback(struct dentry *dentry,
+				  void (*callback)(struct dentry *));
+void debugfs_remove_one_with_callback(struct dentry *victim,
+				      void (*callback)(struct dentry *));
 
 void debugfs_lookup_and_remove(const char *name, struct dentry *parent);
 
