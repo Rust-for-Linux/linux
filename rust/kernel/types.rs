@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use core::{
     cell::UnsafeCell,
     marker::{PhantomData, PhantomPinned},
-    mem::MaybeUninit,
+    mem::{align_of, size_of, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
@@ -237,14 +237,22 @@ impl<T> Opaque<T> {
     /// uninitialized. Additionally, access to the inner `T` requires `unsafe`, so the caller needs
     /// to verify at that point that the inner value is valid.
     pub fn ffi_init(init_func: impl FnOnce(*mut T)) -> impl PinInit<Self> {
+        Self::try_ffi_init(move |slot| {
+            init_func(slot);
+            Ok(())
+        })
+    }
+
+    /// Similar to [`Self::ffi_init`], except that the closure can fail.
+    ///
+    /// To avoid leaks on failure, the closure must drop any fields it has initialised before the
+    /// failure.
+    pub fn try_ffi_init<E>(
+        init_func: impl FnOnce(*mut T) -> Result<(), E>,
+    ) -> impl PinInit<Self, E> {
         // SAFETY: We contain a `MaybeUninit`, so it is OK for the `init_func` to not fully
         // initialize the `T`.
-        unsafe {
-            init::pin_init_from_closure::<_, ::core::convert::Infallible>(move |slot| {
-                init_func(Self::raw_get(slot));
-                Ok(())
-            })
-        }
+        unsafe { init::pin_init_from_closure(|slot| init_func(Self::raw_get(slot))) }
     }
 
     /// Returns a raw pointer to the opaque data.
@@ -386,4 +394,171 @@ pub enum Either<L, R> {
 
     /// Constructs an instance of [`Either`] containing a value of type `R`.
     Right(R),
+}
+
+/// A type that can be represented in little-endian bytes.
+pub trait LittleEndian {
+    /// Converts from native to little-endian encoding.
+    fn to_le(self) -> Self;
+
+    /// Converts from little-endian to the CPU's encoding.
+    fn to_cpu(self) -> Self;
+}
+
+macro_rules! define_le {
+    ($($t:ty),+) => {
+        $(
+        impl LittleEndian for $t {
+            fn to_le(self) -> Self {
+                Self::to_le(self)
+            }
+
+            fn to_cpu(self) -> Self {
+                Self::from_le(self)
+            }
+        }
+        )*
+    };
+}
+
+define_le!(u8, u16, u32, u64, i8, i16, i32, i64);
+
+/// A little-endian representation of `T`.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::types::LE;
+///
+/// struct Example {
+///     a: LE<u32>,
+///     b: LE<u32>,
+/// }
+///
+/// fn new(x: u32, y: u32) -> Example {
+///     Example {
+///         a: x.into(), // Converts to LE.
+///         b: y.into(), // Converts to LE.
+///     }
+/// }
+///
+/// fn sum(e: &Example) -> u32 {
+///     // `value` extracts the value in cpu representation.
+///     e.a.value() + e.b.value()
+/// }
+/// ```
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct LE<T: LittleEndian + Copy>(T);
+
+impl<T: LittleEndian + Copy> LE<T> {
+    /// Returns the native-endian value.
+    pub fn value(&self) -> T {
+        self.0.to_cpu()
+    }
+}
+
+impl<T: LittleEndian + Copy> core::convert::From<T> for LE<T> {
+    fn from(value: T) -> LE<T> {
+        LE(value.to_le())
+    }
+}
+
+/// Specifies that a type is safely readable from byte slices.
+///
+/// Not all types can be safely read from byte slices; examples from
+/// <https://doc.rust-lang.org/reference/behavior-considered-undefined.html> include [`bool`] that
+/// must be either `0` or `1`, and [`char`] that cannot be a surrogate or above [`char::MAX`].
+///
+/// # Safety
+///
+/// Implementers must ensure that any bit pattern is valid for this type.
+pub unsafe trait FromBytes: Sized {
+    /// Converts the given byte slice into a shared reference to [`Self`].
+    ///
+    /// It fails if the size or alignment requirements are not satisfied.
+    fn from_bytes(data: &[u8], offset: usize) -> Option<&Self> {
+        if offset > data.len() {
+            return None;
+        }
+        let data = &data[offset..];
+        let ptr = data.as_ptr();
+        if ptr as usize % align_of::<Self>() != 0 || data.len() < size_of::<Self>() {
+            return None;
+        }
+        // SAFETY: The memory is valid for read because we have a reference to it. We have just
+        // checked the minimum size and alignment as well.
+        Some(unsafe { &*ptr.cast() })
+    }
+
+    /// Converts the given byte slice into a shared slice of [`Self`].
+    ///
+    /// It fails if the size or alignment requirements are not satisfied.
+    fn from_bytes_to_slice(data: &[u8]) -> Option<&[Self]> {
+        let ptr = data.as_ptr();
+        if ptr as usize % align_of::<Self>() != 0 {
+            return None;
+        }
+        // SAFETY: The memory is valid for read because we have a reference to it. We have just
+        // checked the minimum alignment as well, and the length of the slice is calculated from
+        // the length of `Self`.
+        Some(unsafe { core::slice::from_raw_parts(ptr.cast(), data.len() / size_of::<Self>()) })
+    }
+}
+
+// SAFETY: All bit patterns are acceptable values of the types below.
+unsafe impl FromBytes for u8 {}
+unsafe impl FromBytes for u16 {}
+unsafe impl FromBytes for u32 {}
+unsafe impl FromBytes for u64 {}
+unsafe impl FromBytes for usize {}
+unsafe impl FromBytes for i8 {}
+unsafe impl FromBytes for i16 {}
+unsafe impl FromBytes for i32 {}
+unsafe impl FromBytes for i64 {}
+unsafe impl FromBytes for isize {}
+unsafe impl<const N: usize, T: FromBytes> FromBytes for [T; N] {}
+unsafe impl<T: FromBytes + Copy + LittleEndian> FromBytes for LE<T> {}
+
+/// Derive [`FromBytes`] for the structs defined in the block.
+///
+/// # Examples
+///
+/// ```
+/// kernel::derive_readable_from_bytes! {
+///     #[repr(C)]
+///     struct SuperBlock {
+///         a: u16,
+///         _padding: [u8; 6],
+///         b: u64,
+///     }
+///
+///     #[repr(C)]
+///     struct Inode {
+///         a: u16,
+///         b: u16,
+///         c: u32,
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! derive_readable_from_bytes {
+    ($($(#[$outer:meta])* $outerv:vis struct $name:ident {
+        $($(#[$m:meta])* $v:vis $id:ident : $t:ty),* $(,)?
+    })*)=> {
+        $(
+            $(#[$outer])*
+            $outerv struct $name {
+                $(
+                    $(#[$m])*
+                    $v $id: $t,
+                )*
+            }
+            unsafe impl $crate::types::FromBytes for $name {}
+            const _: () = {
+                const fn is_readable_from_bytes<T: $crate::types::FromBytes>() {}
+                $(is_readable_from_bytes::<$t>();)*
+            };
+        )*
+    };
 }

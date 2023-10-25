@@ -16,7 +16,9 @@
 #![feature(coerce_unsized)]
 #![feature(dispatch_from_dyn)]
 #![feature(new_uninit)]
+#![feature(offset_of)]
 #![feature(receiver_trait)]
+#![feature(return_position_impl_trait_in_trait)]
 #![feature(unsize)]
 
 // Ensure conditional compilation based on the kernel configuration works;
@@ -32,10 +34,13 @@ extern crate self as kernel;
 mod allocator;
 mod build_assert;
 pub mod error;
+pub mod folio;
+pub mod fs;
 pub mod init;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
+pub mod mem_cache;
 pub mod prelude;
 pub mod print;
 mod static_assert;
@@ -44,6 +49,7 @@ pub mod std_vendor;
 pub mod str;
 pub mod sync;
 pub mod task;
+pub mod time;
 pub mod types;
 
 #[doc(hidden)]
@@ -60,7 +66,7 @@ const __LOG_PREFIX: &[u8] = b"rust_kernel\0";
 /// The top level entrypoint to implementing a kernel module.
 ///
 /// For any teardown or cleanup operations, your type may implement [`Drop`].
-pub trait Module: Sized + Sync {
+pub trait Module: Sized + Sync + Send {
     /// Called at module initialization time.
     ///
     /// Use this method to perform whatever setup or registration your module
@@ -68,6 +74,29 @@ pub trait Module: Sized + Sync {
     ///
     /// Equivalent to the `module_init` macro in the C API.
     fn init(module: &'static ThisModule) -> error::Result<Self>;
+}
+
+/// A module that is pinned and initialised in-place.
+pub trait InPlaceModule: Sync + Send {
+    /// Creates an initialiser for the module.
+    ///
+    /// It is called when the module is loaded.
+    fn init(module: &'static ThisModule) -> impl init::PinInit<Self, error::Error>;
+}
+
+impl<T: Module> InPlaceModule for T {
+    fn init(module: &'static ThisModule) -> impl init::PinInit<Self, error::Error> {
+        let initer = move |slot: *mut Self| {
+            let m = <Self as Module>::init(module)?;
+
+            // SAFETY: `slot` is valid for write per the contract with `pin_init_from_closure`.
+            unsafe { slot.write(m) };
+            Ok(())
+        };
+
+        // SAFETY: On success, `initer` always fully initialises an instance of `Self`.
+        unsafe { init::pin_init_from_closure(initer) }
+    }
 }
 
 /// Equivalent to `THIS_MODULE` in the C API.
@@ -87,6 +116,38 @@ impl ThisModule {
     pub const unsafe fn from_ptr(ptr: *mut bindings::module) -> ThisModule {
         ThisModule(ptr)
     }
+}
+
+/// Produces a pointer to an object from a pointer to one of its fields.
+///
+/// # Safety
+///
+/// Callers must ensure that the pointer to the field is in fact a pointer to the specified field,
+/// as opposed to a pointer to another object of the same type. If this condition is not met,
+/// any dereference of the resulting pointer is UB.
+///
+/// # Examples
+///
+/// ```
+/// # use kernel::container_of;
+/// struct Test {
+///     a: u64,
+///     b: u32,
+/// }
+///
+/// let test = Test { a: 10, b: 20 };
+/// let b_ptr = &test.b;
+/// let test_alias = container_of!(b_ptr, Test, b);
+/// assert!(core::ptr::eq(&test, test_alias));
+/// ```
+#[macro_export]
+macro_rules! container_of {
+    ($ptr:expr, $type:ty, $($f:tt)*) => {{
+        let ptr = $ptr as *const _ as *const u8;
+        let offset = ::core::mem::offset_of!($type, $($f)*);
+        $crate::build_assert!(offset <= isize::MAX as usize);
+        ptr.wrapping_sub(offset) as *const $type
+    }}
 }
 
 #[cfg(not(any(testlib, test)))]

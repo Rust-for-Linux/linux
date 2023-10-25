@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+
+config TARFS_FS
+	tristate "TAR file system support"
+	depends on RUST && BLOCK
+	select BUFFER_HEAD
+	help
+	  This is a simple read-only file system intended for mounting
+	  tar files that have had an index appened to them.
+
+	  To compile this file system support as a module, choose M here: the
+	  module will be called tarfs.
+
+	  If you don't know whether you need it, then you don't need it:
+	  answer N.

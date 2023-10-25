@@ -81,6 +81,9 @@ pub mod code {
     declare_err!(EIOCBQUEUED, "iocb queued, will get completion event.");
     declare_err!(ERECALLCONFLICT, "Conflict with recalled state.");
     declare_err!(ENOGRACE, "NFS file lock reclaim refused.");
+    declare_err!(ENODATA, "No data available.");
+    declare_err!(EOPNOTSUPP, "Operation not supported on transport endpoint.");
+    declare_err!(ENOSYS, "Invalid system call number.");
 }
 
 /// Generic integer kernel error.
@@ -131,7 +134,6 @@ impl Error {
     }
 
     /// Returns the error encoded as a pointer.
-    #[allow(dead_code)]
     pub(crate) fn to_ptr<T>(self) -> *mut T {
         // SAFETY: self.0 is a valid error due to its invariant.
         unsafe { bindings::ERR_PTR(self.0.into()) as *mut _ }
@@ -320,8 +322,6 @@ pub(crate) fn from_err_ptr<T>(ptr: *mut T) -> Result<*mut T> {
 ///     })
 /// }
 /// ```
-// TODO: Remove `dead_code` marker once an in-kernel client is available.
-#[allow(dead_code)]
 pub(crate) fn from_result<T, F>(f: F) -> T
 where
     T: From<i16>,

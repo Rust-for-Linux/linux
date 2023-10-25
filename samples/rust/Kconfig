@@ -20,6 +20,17 @@ config SAMPLE_RUST_MINIMAL
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_INPLACE
+	tristate "Minimal in-place"
+	help
+	  This option builds the Rust minimal module with in-place
+	  initialisation.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_inplace.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_PRINT
 	tristate "Printing macros"
 	help
@@ -27,6 +38,16 @@ config SAMPLE_RUST_PRINT
 
 	  To compile this as a module, choose M here:
 	  the module will be called rust_print.
+
+	  If unsure, say N.
+
+config SAMPLE_RUST_ROFS
+	tristate "Read-only file system"
+	help
+	  This option builds the Rust read-only file system sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_rofs.
 
 	  If unsure, say N.
 
