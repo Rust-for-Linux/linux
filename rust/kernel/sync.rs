@@ -12,7 +12,7 @@ mod condvar;
 pub mod lock;
 mod locked_by;
 
-pub use arc::{Arc, ArcBorrow, UniqueArc};
+pub use arc::{Arc, UniqueArc, WithRef};
 pub use condvar::CondVar;
 pub use lock::{mutex::Mutex, spinlock::SpinLock};
 pub use locked_by::LockedBy;
