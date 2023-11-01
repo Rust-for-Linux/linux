@@ -2,6 +2,8 @@
 
 use proc_macro::{token_stream, Group, TokenTree};
 
+pub(crate) type FnTrySimpleParam = Box<dyn Fn(&mut token_stream::IntoIter)-> Option<String>>;
+
 pub(crate) fn try_ident(it: &mut token_stream::IntoIter) -> Option<String> {
     if let Some(TokenTree::Ident(ident)) = it.next() {
         Some(ident.to_string())
