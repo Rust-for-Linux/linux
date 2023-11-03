@@ -178,13 +178,21 @@ pub struct KParamGuard<'a> {
     phantom: PhantomData<&'a ()>,
 }
 
-#[cfg(CONFIG_SYSFS)]
 impl<'a> Drop for KParamGuard<'a> {
+    #[cfg(CONFIG_SYSFS)]
     fn drop(&mut self) {
         // SAFETY: `kernel_param_lock` will check if the pointer is null and
         // use the built-in mutex in that case. The existence of `self`
         // guarantees that the lock is held.
         unsafe { bindings::kernel_param_unlock(self.this_module.0) }
+    }
+
+    // This "empty" `Drop` implementation is kept so that the behavior remains
+    // the same with and without `CONFIG_SYSFS` with respect to `dropck`.
+    #[cfg(not(CONFIG_SYSFS))]
+    fn drop(&mut self) {
+        // Touches the `this_module` field, to prevent dead_code warnings.
+        let _ = self.this_module;
     }
 }
 
