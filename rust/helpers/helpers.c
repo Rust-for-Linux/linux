@@ -18,6 +18,7 @@
 #include "mutex.c"
 #include "of.c"
 #include "page.c"
+#include "platform.c"
 #include "rbtree.c"
 #include "rcu.c"
 #include "refcount.c"

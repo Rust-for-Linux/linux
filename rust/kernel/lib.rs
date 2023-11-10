@@ -12,6 +12,7 @@
 //! do so first instead of bypassing this crate.
 
 #![no_std]
+#![feature(associated_type_defaults)]
 #![feature(coerce_unsized)]
 #![feature(const_refs_to_cell)]
 #![feature(dispatch_from_dyn)]
@@ -47,6 +48,7 @@ pub mod list;
 pub mod net;
 pub mod of;
 pub mod page;
+pub mod platform;
 pub mod prelude;
 pub mod print;
 pub mod rbtree;
