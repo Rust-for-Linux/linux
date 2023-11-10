@@ -14,6 +14,7 @@
 #![no_std]
 #![feature(allocator_api)]
 #![feature(coerce_unsized)]
+#![feature(const_refs_to_cell)]
 #![feature(dispatch_from_dyn)]
 #![feature(new_uninit)]
 #![feature(receiver_trait)]
@@ -33,6 +34,7 @@ mod allocator;
 mod build_assert;
 pub mod cred;
 pub mod device;
+pub mod driver;
 pub mod error;
 pub mod file;
 pub mod init;
