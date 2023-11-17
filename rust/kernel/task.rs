@@ -196,6 +196,30 @@ impl Task {
         // running.
         unsafe { bindings::wake_up_process(self.0.get()) };
     }
+
+    /// Tries to give up the CPU and lets another task run.
+    ///
+    /// This maps to kernel's `schedule` function, which is similar to
+    /// [`std::thread::yield_now`].
+    ///
+    /// # Context
+    ///
+    /// Callers must not be in atomic context because this might sleep.
+    ///
+    /// [`std::thread::yield_now`]: https://doc.rust-lang.org/std/thread/fn.yield_now.html
+    #[doc(alias = "yield_now")]
+    pub fn schedule() {
+        // SAFETY: If we can schedule back from other task, then this can be treated as a no-op,
+        // therefore it's safe.  A special case occurs when a task sets its state to `TASK_DEAD`,
+        // and then `schedule` will never come back and the task may get freed (see C function
+        // `finish_task_switch()`). And there are places in C side where a task pointer is held
+        // without a refcount increment, and this means dangling task pointers after setting
+        // `TASK_DEAD` + `schedule`.  We can make [`Task::schedule`] because of this, but it doesn't
+        // provide extra safety if we make setting `TASK_DEAD` unsafe. And given [`Task::schedule`]
+        // may be widely used, let's make it safe and require all `TASK_DEAD` settings to take great
+        // caution.
+        unsafe { bindings::schedule() };
+    }
 }
 
 // SAFETY: The type invariants guarantee that `Task` is always ref-counted.

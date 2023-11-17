@@ -80,8 +80,7 @@ impl CondVar {
         // SAFETY: The guard is evidence that the caller owns the lock.
         unsafe { lock.unlock(&mut guard.context) };
 
-        // SAFETY: No arguments, switches to another thread.
-        unsafe { bindings::schedule() };
+        Task::schedule();
 
         guard.context = lock.lock_noguard();
 
