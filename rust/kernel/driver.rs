@@ -117,9 +117,6 @@ impl<T: DriverOps> Drop for Registration<T> {
 ///
 /// Implementers must ensure that:
 ///   - [`RawDeviceId::ZERO`] is actually a zeroed-out version of the raw device id.
-///   - [`RawDeviceId::to_rawid`] stores `offset` in the context/data field of the raw device id so
-///     that buses can recover the pointer to the data.
-#[const_trait]
 pub unsafe trait RawDeviceId {
     /// The raw type that holds the device id.
     ///
@@ -131,13 +128,6 @@ pub unsafe trait RawDeviceId {
     /// Id tables created from [`Self`] use [`Self::ZERO`] as the sentinel to indicate the end of
     /// the table.
     const ZERO: Self::RawType;
-
-    /// Converts an id into a raw id.
-    ///
-    /// `offset` is the offset from the memory location where the raw device id is stored to the
-    /// location where its associated context information is stored. Implementations must store
-    /// this in the appropriate context/data field of the raw type.
-    fn to_rawid(&self, offset: isize) -> Self::RawType;
 }
 
 /// A zero-terminated device id array.
@@ -158,35 +148,7 @@ pub struct IdArray<T: RawDeviceId, U, const N: usize> {
 }
 
 impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
-    /// Creates a new instance of the array.
-    ///
-    /// The contents are derived from the given identifiers and context information.
-    pub const fn new(ids: [T; N], infos: [Option<U>; N]) -> Self
-    where
-        T: ~const RawDeviceId + Copy,
-        T::RawType: Copy + Clone,
-    {
-        let mut array = Self {
-            ids: IdArrayIds {
-                ids: [T::ZERO; N],
-                sentinel: T::ZERO,
-            },
-            id_infos: infos,
-        };
-        let mut i = 0usize;
-        while i < N {
-            // SAFETY: Both pointers are within `array` (or one byte beyond), consequently they are
-            // derived from the same allocated object. We are using a `u8` pointer, whose size 1,
-            // so the pointers are necessarily 1-byte aligned.
-            let offset = unsafe {
-                (&array.id_infos[i] as *const _ as *const u8)
-                    .offset_from(&array.ids.ids[i] as *const _ as _)
-            };
-            array.ids.ids[i] = ids[i].to_rawid(offset);
-            i += 1;
-        }
-        array
-    }
+    const U_NONE: Option<U> = None;
 
     /// Returns an `IdTable` backed by `self`.
     ///
@@ -206,10 +168,82 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
     /// Returns the inner IdArrayIds array, without the context data.
     pub const fn as_ids(&self) -> IdArrayIds<T, N>
     where
-        T: ~const RawDeviceId + Copy,
+        T: RawDeviceId + Copy,
     {
         self.ids
     }
+
+    /// Creates a new instance of the array.
+    ///
+    /// The contents are derived from the given identifiers and context information.
+    #[doc(hidden)]
+    pub const unsafe fn new(raw_ids: [T::RawType; N], infos: [Option<U>; N]) -> Self
+    where
+        T: RawDeviceId + Copy,
+        T::RawType: Copy + Clone,
+    {
+        Self {
+            ids: IdArrayIds {
+                ids: raw_ids,
+                sentinel: T::ZERO,
+            },
+            id_infos: infos,
+        }
+    }
+
+    #[doc(hidden)]
+    pub const fn get_offset(idx: usize) -> isize
+    where
+        T: RawDeviceId + Copy,
+        T::RawType: Copy + Clone,
+    {
+        // SAFETY: We are only using this dummy value to get offsets.
+        let array = unsafe { Self::new([T::ZERO; N], [Self::U_NONE; N]) };
+        // SAFETY: Both pointers are within `array` (or one byte beyond), consequently they are
+        // derived from the same allocated object. We are using a `u8` pointer, whose size 1,
+        // so the pointers are necessarily 1-byte aligned.
+        let ret = unsafe {
+            (&array.id_infos[idx] as *const _ as *const u8)
+                .offset_from(&array.ids.ids[idx] as *const _ as _)
+        };
+        core::mem::forget(array);
+        ret
+    }
+}
+
+// Creates a new ID array. This is a macro so it can take as a parameter the concrete ID type in order
+// to call to_rawid() on it, and still remain const. This is necessary until a new const_trait_impl
+// implementation lands, since the existing implementation was removed in Rust 1.73.
+#[macro_export]
+#[doc(hidden)]
+macro_rules! _new_id_array {
+    (($($args:tt)*), $id_type:ty) => {{
+        /// Creates a new instance of the array.
+        ///
+        /// The contents are derived from the given identifiers and context information.
+        const fn new< U, const N: usize>(ids: [$id_type; N], infos: [Option<U>; N])
+            -> $crate::driver::IdArray<$id_type, U, N>
+        where
+            $id_type: $crate::driver::RawDeviceId + Copy,
+            <$id_type as $crate::driver::RawDeviceId>::RawType: Copy + Clone,
+        {
+            let mut raw_ids =
+                [<$id_type as $crate::driver::RawDeviceId>::ZERO; N];
+            let mut i = 0usize;
+            while i < N {
+                let offset: isize = $crate::driver::IdArray::<$id_type, U, N>::get_offset(i);
+                raw_ids[i] = ids[i].to_rawid(offset);
+                i += 1;
+            }
+
+            // SAFETY: We are passing valid arguments computed with the correct offsets.
+            unsafe {
+                $crate::driver::IdArray::<$id_type, U, N>::new(raw_ids, infos)
+            }
+       }
+
+        new($($args)*)
+    }}
 }
 
 /// A device id table.
@@ -367,8 +401,8 @@ macro_rules! define_id_array {
     ($table_name:ident, $id_type:ty, $data_type:ty, [ $($t:tt)* ]) => {
         const $table_name:
             $crate::driver::IdArray<$id_type, $data_type, { $crate::count_paren_items!($($t)*) }> =
-                $crate::driver::IdArray::new(
-                    $crate::first_item!($id_type, $($t)*), $crate::second_item!($($t)*));
+                $crate::_new_id_array!((
+                    $crate::first_item!($id_type, $($t)*), $crate::second_item!($($t)*)), $id_type);
     };
 }
 
