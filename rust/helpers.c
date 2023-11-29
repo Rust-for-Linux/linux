@@ -33,6 +33,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/refcount.h>
+#include <linux/regmap.h>
 #include <linux/sched/signal.h>
 #include <linux/security.h>
 #include <linux/spinlock.h>
@@ -297,6 +298,57 @@ void rust_helper_i2c_set_clientdata(struct i2c_client *client, void *data)
 	i2c_set_clientdata(client, data);
 }
 EXPORT_SYMBOL_GPL(rust_helper_i2c_set_clientdata);
+
+#ifdef CONFIG_REGMAP_I2C
+struct regmap *rust_helper_regmap_init_i2c(struct i2c_client *i2c,
+					   const struct regmap_config *config)
+{
+	return regmap_init_i2c(i2c, config);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_init_i2c);
+#endif
+
+int rust_helper_regmap_field_write(struct regmap_field *field, unsigned int val)
+{
+	return regmap_field_write(field, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_write);
+
+int rust_helper_regmap_field_force_write(struct regmap_field *field,
+					 unsigned int val)
+{
+	return regmap_field_force_write(field, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_force_write);
+
+int rust_helper_regmap_field_update_bits(struct regmap_field *field,
+					 unsigned int mask, unsigned int val)
+{
+	return regmap_field_update_bits(field, mask, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_update_bits);
+
+int rust_helper_regmap_field_set_bits(struct regmap_field *field,
+				      unsigned int bits)
+{
+	return regmap_field_set_bits(field, bits);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_set_bits);
+
+int rust_helper_regmap_field_clear_bits(struct regmap_field *field,
+					unsigned int bits)
+{
+	return regmap_field_clear_bits(field, bits);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_clear_bits);
+
+int rust_helper_regmap_field_force_update_bits(struct regmap_field *field,
+					       unsigned int mask,
+						unsigned int val)
+{
+	return regmap_field_force_update_bits(field, mask, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_force_update_bits);
 
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can
