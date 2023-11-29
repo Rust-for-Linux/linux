@@ -57,6 +57,8 @@ pub mod platform;
 pub mod prelude;
 pub mod print;
 pub mod rbtree;
+#[cfg(CONFIG_REGMAP)]
+pub mod regmap;
 pub mod revocable;
 mod static_assert;
 #[doc(hidden)]
