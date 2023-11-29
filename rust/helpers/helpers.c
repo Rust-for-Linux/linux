@@ -21,6 +21,7 @@
 #include "rbtree.c"
 #include "rcu.c"
 #include "refcount.c"
+#include "regmap.c"
 #include "signal.c"
 #include "slab.c"
 #include "spinlock.c"
