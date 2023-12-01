@@ -642,6 +642,12 @@ void r100_hpd_fini(struct radeon_device *rdev)
  */
 void r100_pci_gart_tlb_flush(struct radeon_device *rdev)
 {
+#if defined(CONFIG_PARISC)
+	/* flush gtt[] gart table entries from r100_pci_gart_set_page() */
+	dma_sync_single_for_device(&rdev->pdev->dev, rdev->gart.table_addr,
+		rdev->gart.table_size, DMA_TO_DEVICE);
+#endif
+
 	/* TODO: can we do somethings here ? */
 	/* It seems hw only cache one entry so we should discard this
 	 * entry otherwise if first GPU GART read hit this entry it

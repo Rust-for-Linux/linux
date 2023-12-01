@@ -1328,7 +1328,8 @@
 			compatible = "qcom,sdm670-pdc", "qcom,pdc";
 			reg = <0 0x0b220000 0 0x30000>;
 			qcom,pdc-ranges = <0 480 40>, <41 521 7>, <49 529 4>,
-					  <54 534 24>, <79 559 30>, <115 630 7>;
+					  <54 534 24>, <79 559 15>, <94 609 15>,
+					  <115 630 7>;
 			#interrupt-cells = <2>;
 			interrupt-parent = <&intc>;
 			interrupt-controller;
@@ -1531,7 +1532,7 @@
 		};
 
 		cpufreq_hw: cpufreq@17d43000 {
-			compatible = "qcom,cpufreq-hw";
+			compatible = "qcom,sdm670-cpufreq-hw", "qcom,cpufreq-hw";
 			reg = <0 0x17d43000 0 0x1400>, <0 0x17d45800 0 0x1400>;
 			reg-names = "freq-domain0", "freq-domain1";
 

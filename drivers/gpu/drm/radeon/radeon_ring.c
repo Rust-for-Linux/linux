@@ -29,6 +29,7 @@
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
+#include <drm/drm_cache.h>
 
 #include "radeon.h"
 
@@ -177,6 +178,10 @@ void radeon_ring_commit(struct radeon_device *rdev, struct radeon_ring *ring,
 		radeon_ring_write(ring, ring->nop);
 	}
 	mb();
+	if (IS_ENABLED(CONFIG_PARISC))
+		drm_clflush_virt_range((void *)&ring->ring[0],
+					ring->wptr * sizeof(uint32_t));
+
 	/* If we are emitting the HDP flush via MMIO, we need to do it after
 	 * all CPU writes to VRAM finished.
 	 */

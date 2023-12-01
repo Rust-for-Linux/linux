@@ -343,20 +343,21 @@ out:
 }
 
 /**
- * export_encode_fh - default export_operations->encode_fh function
+ * generic_encode_ino32_fh - generic export_operations->encode_fh function
  * @inode:   the object to encode
- * @fid:     where to store the file handle fragment
- * @max_len: maximum length to store there
+ * @fh:      where to store the file handle fragment
+ * @max_len: maximum length to store there (in 4 byte units)
  * @parent:  parent directory inode, if wanted
  *
- * This default encode_fh function assumes that the 32 inode number
+ * This generic encode_fh function assumes that the 32 inode number
  * is suitable for locating an inode, and that the generation number
  * can be used to check that it is still valid.  It places them in the
  * filehandle fragment where export_decode_fh expects to find them.
  */
-static int export_encode_fh(struct inode *inode, struct fid *fid,
-		int *max_len, struct inode *parent)
+int generic_encode_ino32_fh(struct inode *inode, __u32 *fh, int *max_len,
+			    struct inode *parent)
 {
+	struct fid *fid = (void *)fh;
 	int len = *max_len;
 	int type = FILEID_INO32_GEN;
 
@@ -380,6 +381,33 @@ static int export_encode_fh(struct inode *inode, struct fid *fid,
 	*max_len = len;
 	return type;
 }
+EXPORT_SYMBOL_GPL(generic_encode_ino32_fh);
+
+#define FILEID_INO64_GEN_LEN 3
+
+/**
+ * exportfs_encode_ino64_fid - encode non-decodeable 64bit ino file id
+ * @inode:   the object to encode
+ * @fid:     where to store the file handle fragment
+ * @max_len: maximum length to store there (in 4 byte units)
+ *
+ * This generic function is used to encode a non-decodeable file id for
+ * fanotify for filesystems that do not support NFS export.
+ */
+static int exportfs_encode_ino64_fid(struct inode *inode, struct fid *fid,
+				     int *max_len)
+{
+	if (*max_len < FILEID_INO64_GEN_LEN) {
+		*max_len = FILEID_INO64_GEN_LEN;
+		return FILEID_INVALID;
+	}
+
+	fid->i64.ino = inode->i_ino;
+	fid->i64.gen = inode->i_generation;
+	*max_len = FILEID_INO64_GEN_LEN;
+
+	return FILEID_INO64_GEN;
+}
 
 /**
  * exportfs_encode_inode_fh - encode a file handle from inode
@@ -396,17 +424,13 @@ int exportfs_encode_inode_fh(struct inode *inode, struct fid *fid,
 {
 	const struct export_operations *nop = inode->i_sb->s_export_op;
 
-	/*
-	 * If a decodeable file handle was requested, we need to make sure that
-	 * filesystem can decode file handles.
-	 */
-	if (nop && !(flags & EXPORT_FH_FID) && !nop->fh_to_dentry)
+	if (!exportfs_can_encode_fh(nop, flags))
 		return -EOPNOTSUPP;
 
-	if (nop && nop->encode_fh)
-		return nop->encode_fh(inode, fid->raw, max_len, parent);
+	if (!nop && (flags & EXPORT_FH_FID))
+		return exportfs_encode_ino64_fid(inode, fid, max_len);
 
-	return export_encode_fh(inode, fid, max_len, parent);
+	return nop->encode_fh(inode, fid->raw, max_len, parent);
 }
 EXPORT_SYMBOL_GPL(exportfs_encode_inode_fh);
 
@@ -456,7 +480,7 @@ exportfs_decode_fh_raw(struct vfsmount *mnt, struct fid *fid, int fh_len,
 	/*
 	 * Try to get any dentry for the given file handle from the filesystem.
 	 */
-	if (!nop || !nop->fh_to_dentry)
+	if (!exportfs_can_decode_fh(nop))
 		return ERR_PTR(-ESTALE);
 	result = nop->fh_to_dentry(mnt->mnt_sb, fid, fh_len, fileid_type);
 	if (IS_ERR_OR_NULL(result))

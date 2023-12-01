@@ -24,8 +24,8 @@
 
 #include <linux/uaccess.h>
 
-static struct vfsmount *anon_inode_mnt __read_mostly;
-static struct inode *anon_inode_inode;
+static struct vfsmount *anon_inode_mnt __ro_after_init;
+static struct inode *anon_inode_inode __ro_after_init;
 
 /*
  * anon_inodefs_dname() is called from d_path().
@@ -176,6 +176,7 @@ struct file *anon_inode_getfile_secure(const char *name,
 	return __anon_inode_getfile(name, fops, priv, flags,
 				    context_inode, true);
 }
+EXPORT_SYMBOL_GPL(anon_inode_getfile_secure);
 
 static int __anon_inode_getfd(const char *name,
 			      const struct file_operations *fops,

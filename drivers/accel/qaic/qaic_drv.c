@@ -22,10 +22,12 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_ioctl.h>
+#include <drm/drm_managed.h>
 #include <uapi/drm/qaic_accel.h>
 
 #include "mhi_controller.h"
 #include "qaic.h"
+#include "qaic_timesync.h"
 
 MODULE_IMPORT_NS(DMA_BUF);
 
@@ -55,7 +57,7 @@ static void free_usr(struct kref *kref)
 
 static int qaic_open(struct drm_device *dev, struct drm_file *file)
 {
-	struct qaic_drm_device *qddev = dev->dev_private;
+	struct qaic_drm_device *qddev = to_qaic_drm_device(dev);
 	struct qaic_device *qdev = qddev->qdev;
 	struct qaic_user *usr;
 	int rcu_id;
@@ -150,6 +152,7 @@ static const struct drm_ioctl_desc qaic_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QAIC_PARTIAL_EXECUTE_BO, qaic_partial_execute_bo_ioctl, 0),
 	DRM_IOCTL_DEF_DRV(QAIC_WAIT_BO, qaic_wait_bo_ioctl, 0),
 	DRM_IOCTL_DEF_DRV(QAIC_PERF_STATS_BO, qaic_perf_stats_bo_ioctl, 0),
+	DRM_IOCTL_DEF_DRV(QAIC_DETACH_SLICE_BO, qaic_detach_slice_bo_ioctl, 0),
 };
 
 static const struct drm_driver qaic_accel_driver = {
@@ -170,64 +173,39 @@ static const struct drm_driver qaic_accel_driver = {
 
 static int qaic_create_drm_device(struct qaic_device *qdev, s32 partition_id)
 {
-	struct qaic_drm_device *qddev;
-	struct drm_device *ddev;
-	struct device *pdev;
+	struct qaic_drm_device *qddev = qdev->qddev;
+	struct drm_device *drm = to_drm(qddev);
 	int ret;
 
 	/* Hold off implementing partitions until the uapi is determined */
 	if (partition_id != QAIC_NO_PARTITION)
 		return -EINVAL;
 
-	pdev = &qdev->pdev->dev;
-
-	qddev = kzalloc(sizeof(*qddev), GFP_KERNEL);
-	if (!qddev)
-		return -ENOMEM;
-
-	ddev = drm_dev_alloc(&qaic_accel_driver, pdev);
-	if (IS_ERR(ddev)) {
-		ret = PTR_ERR(ddev);
-		goto ddev_fail;
-	}
-
-	ddev->dev_private = qddev;
-	qddev->ddev = ddev;
-
-	qddev->qdev = qdev;
 	qddev->partition_id = partition_id;
-	INIT_LIST_HEAD(&qddev->users);
-	mutex_init(&qddev->users_mutex);
 
-	qdev->qddev = qddev;
+	/*
+	 * drm_dev_unregister() sets the driver data to NULL and
+	 * drm_dev_register() does not update the driver data. During a SOC
+	 * reset drm dev is unregistered and registered again leaving the
+	 * driver data to NULL.
+	 */
+	dev_set_drvdata(to_accel_kdev(qddev), drm->accel);
+	ret = drm_dev_register(drm, 0);
+	if (ret)
+		pci_dbg(qdev->pdev, "drm_dev_register failed %d\n", ret);
 
-	ret = drm_dev_register(ddev, 0);
-	if (ret) {
-		pci_dbg(qdev->pdev, "%s: drm_dev_register failed %d\n", __func__, ret);
-		goto drm_reg_fail;
-	}
-
-	return 0;
-
-drm_reg_fail:
-	mutex_destroy(&qddev->users_mutex);
-	qdev->qddev = NULL;
-	drm_dev_put(ddev);
-ddev_fail:
-	kfree(qddev);
 	return ret;
 }
 
 static void qaic_destroy_drm_device(struct qaic_device *qdev, s32 partition_id)
 {
-	struct qaic_drm_device *qddev;
+	struct qaic_drm_device *qddev = qdev->qddev;
+	struct drm_device *drm = to_drm(qddev);
 	struct qaic_user *usr;
 
-	qddev = qdev->qddev;
-	qdev->qddev = NULL;
-	if (!qddev)
-		return;
-
+	drm_dev_get(drm);
+	drm_dev_unregister(drm);
+	qddev->partition_id = 0;
 	/*
 	 * Existing users get unresolvable errors till they close FDs.
 	 * Need to sync carefully with users calling close(). The
@@ -254,13 +232,7 @@ static void qaic_destroy_drm_device(struct qaic_device *qdev, s32 partition_id)
 		mutex_lock(&qddev->users_mutex);
 	}
 	mutex_unlock(&qddev->users_mutex);
-
-	if (qddev->ddev) {
-		drm_dev_unregister(qddev->ddev);
-		drm_dev_put(qddev->ddev);
-	}
-
-	kfree(qddev);
+	drm_dev_put(drm);
 }
 
 static int qaic_mhi_probe(struct mhi_device *mhi_dev, const struct mhi_device_id *id)
@@ -344,8 +316,21 @@ void qaic_dev_reset_clean_local_state(struct qaic_device *qdev, bool exit_reset)
 		qdev->in_reset = false;
 }
 
+static void cleanup_qdev(struct qaic_device *qdev)
+{
+	int i;
+
+	for (i = 0; i < qdev->num_dbc; ++i)
+		cleanup_srcu_struct(&qdev->dbc[i].ch_lock);
+	cleanup_srcu_struct(&qdev->dev_lock);
+	pci_set_drvdata(qdev->pdev, NULL);
+	destroy_workqueue(qdev->cntl_wq);
+	destroy_workqueue(qdev->qts_wq);
+}
+
 static struct qaic_device *create_qdev(struct pci_dev *pdev, const struct pci_device_id *id)
 {
+	struct qaic_drm_device *qddev;
 	struct qaic_device *qdev;
 	int i;
 
@@ -364,6 +349,12 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev, const struct pci_de
 	if (!qdev->cntl_wq)
 		return NULL;
 
+	qdev->qts_wq = alloc_workqueue("qaic_ts", WQ_UNBOUND, 0);
+	if (!qdev->qts_wq) {
+		destroy_workqueue(qdev->cntl_wq);
+		return NULL;
+	}
+
 	pci_set_drvdata(pdev, qdev);
 	qdev->pdev = pdev;
 
@@ -381,18 +372,18 @@ static struct qaic_device *create_qdev(struct pci_dev *pdev, const struct pci_de
 		INIT_LIST_HEAD(&qdev->dbc[i].bo_lists);
 	}
 
+	qddev = devm_drm_dev_alloc(&pdev->dev, &qaic_accel_driver, struct qaic_drm_device, drm);
+	if (IS_ERR(qddev)) {
+		cleanup_qdev(qdev);
+		return NULL;
+	}
+
+	drmm_mutex_init(to_drm(qddev), &qddev->users_mutex);
+	INIT_LIST_HEAD(&qddev->users);
+	qddev->qdev = qdev;
+	qdev->qddev = qddev;
+
 	return qdev;
-}
-
-static void cleanup_qdev(struct qaic_device *qdev)
-{
-	int i;
-
-	for (i = 0; i < qdev->num_dbc; ++i)
-		cleanup_srcu_struct(&qdev->dbc[i].ch_lock);
-	cleanup_srcu_struct(&qdev->dev_lock);
-	pci_set_drvdata(qdev->pdev, NULL);
-	destroy_workqueue(qdev->cntl_wq);
 }
 
 static int init_pci(struct qaic_device *qdev, struct pci_dev *pdev)
@@ -441,14 +432,24 @@ static int init_msi(struct qaic_device *qdev, struct pci_dev *pdev)
 	int i;
 
 	/* Managed release since we use pcim_enable_device */
-	ret = pci_alloc_irq_vectors(pdev, 1, 32, PCI_IRQ_MSI);
-	if (ret < 0)
-		return ret;
+	ret = pci_alloc_irq_vectors(pdev, 32, 32, PCI_IRQ_MSI);
+	if (ret == -ENOSPC) {
+		ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
+		if (ret < 0)
+			return ret;
 
-	if (ret < 32) {
-		pci_err(pdev, "%s: Requested 32 MSIs. Obtained %d MSIs which is less than the 32 required.\n",
-			__func__, ret);
-		return -ENODEV;
+		/*
+		 * Operate in one MSI mode. All interrupts will be directed to
+		 * MSI0; every interrupt will wake up all the interrupt handlers
+		 * (MHI and DBC[0-15]). Since the interrupt is now shared, it is
+		 * not disabled during DBC threaded handler, but only one thread
+		 * will be allowed to run per DBC, so while it can be
+		 * interrupted, it shouldn't race with itself.
+		 */
+		qdev->single_msi = true;
+		pci_info(pdev, "Allocating 32 MSIs failed, operating in 1 MSI mode. Performance may be impacted.\n");
+	} else if (ret < 0) {
+		return ret;
 	}
 
 	mhi_irq = pci_irq_vector(pdev, 0);
@@ -456,15 +457,17 @@ static int init_msi(struct qaic_device *qdev, struct pci_dev *pdev)
 		return mhi_irq;
 
 	for (i = 0; i < qdev->num_dbc; ++i) {
-		ret = devm_request_threaded_irq(&pdev->dev, pci_irq_vector(pdev, i + 1),
+		ret = devm_request_threaded_irq(&pdev->dev,
+						pci_irq_vector(pdev, qdev->single_msi ? 0 : i + 1),
 						dbc_irq_handler, dbc_irq_threaded_fn, IRQF_SHARED,
 						"qaic_dbc", &qdev->dbc[i]);
 		if (ret)
 			return ret;
 
 		if (datapath_polling) {
-			qdev->dbc[i].irq = pci_irq_vector(pdev, i + 1);
-			disable_irq_nosync(qdev->dbc[i].irq);
+			qdev->dbc[i].irq = pci_irq_vector(pdev, qdev->single_msi ? 0 : i + 1);
+			if (!qdev->single_msi)
+				disable_irq_nosync(qdev->dbc[i].irq);
 			INIT_WORK(&qdev->dbc[i].poll_work, irq_polling_work);
 		}
 	}
@@ -496,7 +499,8 @@ static int qaic_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto cleanup_qdev;
 	}
 
-	qdev->mhi_cntrl = qaic_mhi_register_controller(pdev, qdev->bar_0, mhi_irq);
+	qdev->mhi_cntrl = qaic_mhi_register_controller(pdev, qdev->bar_0, mhi_irq,
+						       qdev->single_msi);
 	if (IS_ERR(qdev->mhi_cntrl)) {
 		ret = PTR_ERR(qdev->mhi_cntrl);
 		goto cleanup_qdev;
@@ -591,22 +595,26 @@ static int __init qaic_init(void)
 {
 	int ret;
 
-	ret = mhi_driver_register(&qaic_mhi_driver);
-	if (ret) {
-		pr_debug("qaic: mhi_driver_register failed %d\n", ret);
-		return ret;
-	}
-
 	ret = pci_register_driver(&qaic_pci_driver);
 	if (ret) {
 		pr_debug("qaic: pci_register_driver failed %d\n", ret);
-		goto free_mhi;
+		return ret;
 	}
+
+	ret = mhi_driver_register(&qaic_mhi_driver);
+	if (ret) {
+		pr_debug("qaic: mhi_driver_register failed %d\n", ret);
+		goto free_pci;
+	}
+
+	ret = qaic_timesync_init();
+	if (ret)
+		pr_debug("qaic: qaic_timesync_init failed %d\n", ret);
 
 	return 0;
 
-free_mhi:
-	mhi_driver_unregister(&qaic_mhi_driver);
+free_pci:
+	pci_unregister_driver(&qaic_pci_driver);
 	return ret;
 }
 
@@ -628,8 +636,9 @@ static void __exit qaic_exit(void)
 	 * reinitializing the link_up state after the cleanup is done.
 	 */
 	link_up = true;
-	pci_unregister_driver(&qaic_pci_driver);
+	qaic_timesync_deinit();
 	mhi_driver_unregister(&qaic_mhi_driver);
+	pci_unregister_driver(&qaic_pci_driver);
 }
 
 module_init(qaic_init);

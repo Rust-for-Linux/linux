@@ -22,6 +22,7 @@ place where this information is gathered.
    unshare
    spec_ctrl
    accelerators/ocxl
+   dma-buf-alloc-exchange
    ebpf/index
    ELF
    ioctl/index
@@ -32,6 +33,7 @@ place where this information is gathered.
    sysfs-platform_profile
    vduse
    futex2
+   lsm
 
 .. only::  subproject and html
 

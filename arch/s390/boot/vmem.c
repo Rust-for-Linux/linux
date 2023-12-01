@@ -5,13 +5,14 @@
 #include <asm/pgalloc.h>
 #include <asm/facility.h>
 #include <asm/sections.h>
+#include <asm/ctlreg.h>
 #include <asm/physmem_info.h>
 #include <asm/maccess.h>
 #include <asm/abs_lowcore.h>
 #include "decompressor.h"
 #include "boot.h"
 
-unsigned long __bootdata_preserved(s390_invalid_asce);
+struct ctlreg __bootdata_preserved(s390_invalid_asce);
 
 #ifdef CONFIG_PROC_FS
 atomic_long_t __bootdata_preserved(direct_pages_count[PG_DIRECT_MAP_MAX]);
@@ -57,6 +58,7 @@ static void kasan_populate_shadow(void)
 	pmd_t pmd_z = __pmd(__pa(kasan_early_shadow_pte) | _SEGMENT_ENTRY);
 	pud_t pud_z = __pud(__pa(kasan_early_shadow_pmd) | _REGION3_ENTRY);
 	p4d_t p4d_z = __p4d(__pa(kasan_early_shadow_pud) | _REGION2_ENTRY);
+	unsigned long memgap_start = 0;
 	unsigned long untracked_end;
 	unsigned long start, end;
 	int i;
@@ -101,8 +103,12 @@ static void kasan_populate_shadow(void)
 	 * +- shadow end ----+---------+- shadow end ---+
 	 */
 
-	for_each_physmem_usable_range(i, &start, &end)
+	for_each_physmem_usable_range(i, &start, &end) {
 		kasan_populate(start, end, POPULATE_KASAN_MAP_SHADOW);
+		if (memgap_start && physmem_info.info_source == MEM_DETECT_DIAG260)
+			kasan_populate(memgap_start, start, POPULATE_KASAN_ZERO_SHADOW);
+		memgap_start = end;
+	}
 	if (IS_ENABLED(CONFIG_KASAN_VMALLOC)) {
 		untracked_end = VMALLOC_START;
 		/* shallowly populate kasan shadow for vmalloc and modules */
@@ -161,8 +167,6 @@ static bool kasan_pmd_populate_zero_shadow(pmd_t *pmd, unsigned long addr,
 
 static bool kasan_pte_populate_zero_shadow(pte_t *pte, enum populate_mode mode)
 {
-	pte_t entry;
-
 	if (mode == POPULATE_KASAN_ZERO_SHADOW) {
 		set_pte(pte, pte_z);
 		return true;
@@ -421,7 +425,7 @@ void setup_vmem(unsigned long asce_limit)
 		asce_type = _REGION3_ENTRY_EMPTY;
 		asce_bits = _ASCE_TYPE_REGION3 | _ASCE_TABLE_LENGTH;
 	}
-	s390_invalid_asce = invalid_pg_dir | _ASCE_TYPE_REGION3 | _ASCE_TABLE_LENGTH;
+	s390_invalid_asce.val = invalid_pg_dir | _ASCE_TYPE_REGION3 | _ASCE_TABLE_LENGTH;
 
 	crst_table_init((unsigned long *)swapper_pg_dir, asce_type);
 	crst_table_init((unsigned long *)invalid_pg_dir, _REGION3_ENTRY_EMPTY);
@@ -442,12 +446,12 @@ void setup_vmem(unsigned long asce_limit)
 
 	kasan_populate_shadow();
 
-	S390_lowcore.kernel_asce = swapper_pg_dir | asce_bits;
+	S390_lowcore.kernel_asce.val = swapper_pg_dir | asce_bits;
 	S390_lowcore.user_asce = s390_invalid_asce;
 
-	__ctl_load(S390_lowcore.kernel_asce, 1, 1);
-	__ctl_load(S390_lowcore.user_asce, 7, 7);
-	__ctl_load(S390_lowcore.kernel_asce, 13, 13);
+	local_ctl_load(1, &S390_lowcore.kernel_asce);
+	local_ctl_load(7, &S390_lowcore.user_asce);
+	local_ctl_load(13, &S390_lowcore.kernel_asce);
 
-	init_mm.context.asce = S390_lowcore.kernel_asce;
+	init_mm.context.asce = S390_lowcore.kernel_asce.val;
 }

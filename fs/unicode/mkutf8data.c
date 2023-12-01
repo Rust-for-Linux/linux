@@ -486,6 +486,16 @@ static void tree_walk(struct tree *tree)
 	       nodes, leaves, singletons);
 }
 
+static void *xmalloc(size_t size)
+{
+	void *p = malloc(size);
+
+	if (p)
+		return p;
+	fprintf(stderr, "Out of memory.\n");
+	exit(1);
+}
+
 /*
  * Allocate an initialize a new internal node.
  */
@@ -494,7 +504,7 @@ static struct node *alloc_node(struct node *parent)
 	struct node *node;
 	int bitnum;
 
-	node = malloc(sizeof(*node));
+	node = xmalloc(sizeof(*node));
 	node->left = node->right = NULL;
 	node->parent = parent;
 	node->leftnode = NODE;
@@ -2159,7 +2169,7 @@ static void nfdi_init(void)
 		}
 		mapping[i++] = 0;
 
-		um = malloc(i * sizeof(unsigned int));
+		um = xmalloc(i * sizeof(unsigned int));
 		memcpy(um, mapping, i * sizeof(unsigned int));
 		unicode_data[unichar].utf32nfdi = um;
 
@@ -2215,7 +2225,7 @@ static void nfdicf_init(void)
 		}
 		mapping[i++] = 0;
 
-		um = malloc(i * sizeof(unsigned int));
+		um = xmalloc(i * sizeof(unsigned int));
 		memcpy(um, mapping, i * sizeof(unsigned int));
 		unicode_data[unichar].utf32nfdicf = um;
 
@@ -2256,11 +2266,11 @@ static void ignore_init(void)
 				line_fail(prop_name, line);
 			for (unichar = first; unichar <= last; unichar++) {
 				free(unicode_data[unichar].utf32nfdi);
-				um = malloc(sizeof(unsigned int));
+				um = xmalloc(sizeof(unsigned int));
 				*um = 0;
 				unicode_data[unichar].utf32nfdi = um;
 				free(unicode_data[unichar].utf32nfdicf);
-				um = malloc(sizeof(unsigned int));
+				um = xmalloc(sizeof(unsigned int));
 				*um = 0;
 				unicode_data[unichar].utf32nfdicf = um;
 				count++;
@@ -2277,11 +2287,11 @@ static void ignore_init(void)
 			if (!utf32valid(unichar))
 				line_fail(prop_name, line);
 			free(unicode_data[unichar].utf32nfdi);
-			um = malloc(sizeof(unsigned int));
+			um = xmalloc(sizeof(unsigned int));
 			*um = 0;
 			unicode_data[unichar].utf32nfdi = um;
 			free(unicode_data[unichar].utf32nfdicf);
-			um = malloc(sizeof(unsigned int));
+			um = xmalloc(sizeof(unsigned int));
 			*um = 0;
 			unicode_data[unichar].utf32nfdicf = um;
 			if (verbose > 1)
@@ -2359,7 +2369,7 @@ static void corrections_init(void)
 		}
 		mapping[i++] = 0;
 
-		um = malloc(i * sizeof(unsigned int));
+		um = xmalloc(i * sizeof(unsigned int));
 		memcpy(um, mapping, i * sizeof(unsigned int));
 		corrections[count].utf32nfdi = um;
 
@@ -2459,12 +2469,12 @@ static void hangul_decompose(void)
 		mapping[i++] = 0;
 
 		assert(!unicode_data[unichar].utf32nfdi);
-		um = malloc(i * sizeof(unsigned int));
+		um = xmalloc(i * sizeof(unsigned int));
 		memcpy(um, mapping, i * sizeof(unsigned int));
 		unicode_data[unichar].utf32nfdi = um;
 
 		assert(!unicode_data[unichar].utf32nfdicf);
-		um = malloc(i * sizeof(unsigned int));
+		um = xmalloc(i * sizeof(unsigned int));
 		memcpy(um, mapping, i * sizeof(unsigned int));
 		unicode_data[unichar].utf32nfdicf = um;
 
@@ -2473,7 +2483,7 @@ static void hangul_decompose(void)
 		 * decompositions must not be stored in the generated
 		 * trie.
 		 */
-		unicode_data[unichar].utf8nfdi = malloc(2);
+		unicode_data[unichar].utf8nfdi = xmalloc(2);
 		unicode_data[unichar].utf8nfdi[0] = HANGUL;
 		unicode_data[unichar].utf8nfdi[1] = '\0';
 
@@ -2523,13 +2533,13 @@ static void nfdi_decompose(void)
 			if (ret)
 				break;
 			free(unicode_data[unichar].utf32nfdi);
-			um = malloc(i * sizeof(unsigned int));
+			um = xmalloc(i * sizeof(unsigned int));
 			memcpy(um, mapping, i * sizeof(unsigned int));
 			unicode_data[unichar].utf32nfdi = um;
 		}
 		/* Add this decomposition to nfdicf if there is no entry. */
 		if (!unicode_data[unichar].utf32nfdicf) {
-			um = malloc(i * sizeof(unsigned int));
+			um = xmalloc(i * sizeof(unsigned int));
 			memcpy(um, mapping, i * sizeof(unsigned int));
 			unicode_data[unichar].utf32nfdicf = um;
 		}
@@ -2577,7 +2587,7 @@ static void nfdicf_decompose(void)
 			if (ret)
 				break;
 			free(unicode_data[unichar].utf32nfdicf);
-			um = malloc(i * sizeof(unsigned int));
+			um = xmalloc(i * sizeof(unsigned int));
 			memcpy(um, mapping, i * sizeof(unsigned int));
 			unicode_data[unichar].utf32nfdicf = um;
 		}

@@ -174,6 +174,8 @@ drm_clflush_virt_range(void *addr, unsigned long length)
 
 	if (wbinvd_on_all_cpus())
 		pr_err("Timed out waiting for cache flush\n");
+#elif defined(CONFIG_PARISC)
+	flush_kernel_dcache_range((unsigned long) addr, length);
 #else
 	WARN_ONCE(1, "Architecture has no drm_cache.c support\n");
 #endif

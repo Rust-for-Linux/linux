@@ -31,11 +31,11 @@ static __always_inline void preempt_count_set(int pc)
 {
 	int old, new;
 
+	old = raw_cpu_read_4(pcpu_hot.preempt_count);
 	do {
-		old = raw_cpu_read_4(pcpu_hot.preempt_count);
 		new = (old & PREEMPT_NEED_RESCHED) |
 			(pc & ~PREEMPT_NEED_RESCHED);
-	} while (raw_cpu_cmpxchg_4(pcpu_hot.preempt_count, old, new) != old);
+	} while (!raw_cpu_try_cmpxchg_4(pcpu_hot.preempt_count, &old, new));
 }
 
 /*
@@ -92,7 +92,7 @@ static __always_inline void __preempt_count_sub(int val)
  */
 static __always_inline bool __preempt_count_dec_and_test(void)
 {
-	return GEN_UNARY_RMWcc("decl", pcpu_hot.preempt_count, e,
+	return GEN_UNARY_RMWcc("decl", __my_cpu_var(pcpu_hot.preempt_count), e,
 			       __percpu_arg([var]));
 }
 

@@ -53,7 +53,7 @@ knowledge about the kernel Makefiles, plus detailed knowledge about the
 public interface for kbuild.
 
 *Arch developers* are people who work on an entire architecture, such
-as sparc or ia64.  Arch developers need to know about the arch Makefile
+as sparc or x86.  Arch developers need to know about the arch Makefile
 as well as kbuild Makefiles.
 
 *Kbuild developers* are people who work on the kernel build system itself.
@@ -1622,6 +1622,13 @@ INSTALL_MOD_STRIP
   default option --strip-debug will be used.  Otherwise, the
   INSTALL_MOD_STRIP value will be used as the option(s) to the strip
   command.
+
+INSTALL_DTBS_PATH
+  This variable specifies a prefix for relocations required by build
+  roots. It defines a place for installing the device tree blobs. Like
+  INSTALL_MOD_PATH, it isn't defined in the Makefile, but can be passed
+  by the user if desired. Otherwise it defaults to the kernel install
+  path.
 
 Makefile language
 =================

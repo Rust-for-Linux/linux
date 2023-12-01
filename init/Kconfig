@@ -1723,7 +1723,7 @@ config KALLSYMS_ABSOLUTE_PERCPU
 config KALLSYMS_BASE_RELATIVE
 	bool
 	depends on KALLSYMS
-	default !IA64
+	default y
 	help
 	  Instead of emitting them as absolute values in the native word size,
 	  emit the symbol references in the kallsyms table as 32-bit entries,
@@ -1889,6 +1889,7 @@ config RUST
 	depends on !GCC_PLUGINS
 	depends on !RANDSTRUCT
 	depends on !DEBUG_INFO_BTF || PAHOLE_HAS_LANG_EXCLUDE
+	depends on !CFI_CLANG || $(cc-option,-fsanitize=kcfi,-fsanitize-cfi-icall-experimental-normalize-integers)
 	select CONSTRUCTORS
 	help
 	  Enables Rust support in the kernel.
