@@ -3,6 +3,7 @@
 //! SoC Regulators
 
 pub mod consumer;
+pub mod driver;
 
 use crate::{
     bindings,
