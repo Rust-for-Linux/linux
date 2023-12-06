@@ -20,6 +20,7 @@
 #include <linux/refcount.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/driver.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
