@@ -8,8 +8,11 @@
 use crate::{
     bindings,
     cred::Credential,
-    error::{code::*, Error, Result},
-    types::{ARef, AlwaysRefCounted, NotThreadSafe, Opaque},
+    error::{code::*, from_result, Error, Result},
+    io_buffer::{IoBufferReader, IoBufferWriter},
+    macros::vtable,
+    types::{ARef, AlwaysRefCounted, ForeignOwnable, NotThreadSafe, Opaque},
+    user_ptr::{UserSlicePtr, UserSlicePtrReader, UserSlicePtrWriter},
 };
 use alloc::boxed::Box;
 use core::{alloc::AllocError, marker::PhantomData, mem, ptr};
@@ -427,5 +430,293 @@ impl From<BadFdError> for Error {
 impl core::fmt::Debug for BadFdError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.pad("EBADF")
+    }
+}
+
+/// Equivalent to [`std::io::SeekFrom`].
+///
+/// [`std::io::SeekFrom`]: https://doc.rust-lang.org/std/io/enum.SeekFrom.html
+pub enum SeekFrom {
+    /// Equivalent to C's `SEEK_SET`.
+    Start(u64),
+
+    /// Equivalent to C's `SEEK_END`.
+    End(i64),
+
+    /// Equivalent to C's `SEEK_CUR`.
+    Current(i64),
+}
+
+pub(crate) struct OperationsVtable<A, T>(PhantomData<A>, PhantomData<T>);
+
+impl<A: OpenAdapter<T::OpenData>, T: Operations> OperationsVtable<A, T> {
+    /// Called by the VFS when an inode should be opened.
+    ///
+    /// Calls `T::open` on the returned value of `A::convert`.
+    ///
+    /// # Safety
+    ///
+    /// The returned value of `A::convert` must be a valid non-null pointer and
+    /// `T:open` must return a valid non-null pointer on an `Ok` result.
+    unsafe extern "C" fn open_callback(
+        inode: *mut bindings::inode,
+        file: *mut bindings::file,
+    ) -> core::ffi::c_int {
+        from_result(|| {
+            // SAFETY: `A::convert` must return a valid non-null pointer that
+            // should point to data in the inode or file that lives longer
+            // than the following use of `T::open`.
+            let arg = unsafe { A::convert(inode, file) };
+            // SAFETY: The C contract guarantees that `file` is valid. Additionally,
+            // `fileref` never outlives this function, so it is guaranteed to be
+            // valid.
+            let fileref = unsafe { File::from_ptr(file) };
+            // SAFETY: `arg` was previously returned by `A::convert` and must
+            // be a valid non-null pointer.
+            let ptr = T::open(unsafe { &*arg }, fileref)?.into_foreign();
+            // SAFETY: The C contract guarantees that `private_data` is available
+            // for implementers of the file operations (no other C code accesses
+            // it), so we know that there are no concurrent threads/CPUs accessing
+            // it (it's not visible to any other Rust code).
+            unsafe { (*file).private_data = ptr as *mut core::ffi::c_void };
+            Ok(0)
+        })
+    }
+
+    unsafe extern "C" fn read_callback(
+        file: *mut bindings::file,
+        buf: *mut core::ffi::c_char,
+        len: core::ffi::c_size_t,
+        offset: *mut bindings::loff_t,
+    ) -> core::ffi::c_ssize_t {
+        from_result(|| {
+            let mut data =
+                unsafe { UserSlicePtr::new(buf as *mut core::ffi::c_void, len).writer() };
+            // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
+            // `T::Data::into_foreign`. `T::Data::from_foreign` is only called by the
+            // `release` callback, which the C API guarantees that will be called only when all
+            // references to `file` have been released, so we know it can't be called while this
+            // function is running.
+            let f = unsafe { T::Data::borrow((*file).private_data) };
+            // No `FMODE_UNSIGNED_OFFSET` support, so `offset` must be in [0, 2^63).
+            // See <https://github.com/fishinabarrel/linux-kernel-module-rust/pull/113>.
+            let read = T::read(
+                f,
+                unsafe { File::from_ptr(file) },
+                &mut data,
+                unsafe { *offset }.try_into()?,
+            )?;
+            unsafe { (*offset) += bindings::loff_t::try_from(read).unwrap() };
+            Ok(read as _)
+        })
+    }
+
+    unsafe extern "C" fn write_callback(
+        file: *mut bindings::file,
+        buf: *const core::ffi::c_char,
+        len: core::ffi::c_size_t,
+        offset: *mut bindings::loff_t,
+    ) -> core::ffi::c_ssize_t {
+        from_result(|| {
+            let mut data =
+                unsafe { UserSlicePtr::new(buf as *mut core::ffi::c_void, len).reader() };
+            // SAFETY: `private_data` was initialised by `open_callback` with a value returned by
+            // `T::Data::into_foreign`. `T::Data::from_foreign` is only called by the
+            // `release` callback, which the C API guarantees that will be called only when all
+            // references to `file` have been released, so we know it can't be called while this
+            // function is running.
+            let f = unsafe { T::Data::borrow((*file).private_data) };
+            // No `FMODE_UNSIGNED_OFFSET` support, so `offset` must be in [0, 2^63).
+            // See <https://github.com/fishinabarrel/linux-kernel-module-rust/pull/113>.
+            let written = T::write(
+                f,
+                unsafe { File::from_ptr(file) },
+                &mut data,
+                unsafe { *offset }.try_into()?,
+            )?;
+            unsafe { (*offset) += bindings::loff_t::try_from(written).unwrap() };
+            Ok(written as _)
+        })
+    }
+
+    unsafe extern "C" fn release_callback(
+        _inode: *mut bindings::inode,
+        file: *mut bindings::file,
+    ) -> core::ffi::c_int {
+        let ptr = mem::replace(unsafe { &mut (*file).private_data }, ptr::null_mut());
+        T::release(unsafe { T::Data::from_foreign(ptr as _) }, unsafe {
+            File::from_ptr(file)
+        });
+        0
+    }
+
+    const VTABLE: bindings::file_operations = bindings::file_operations {
+        open: Some(Self::open_callback),
+        release: Some(Self::release_callback),
+        read: if T::HAS_READ {
+            Some(Self::read_callback)
+        } else {
+            None
+        },
+        write: if T::HAS_WRITE {
+            Some(Self::write_callback)
+        } else {
+            None
+        },
+        llseek: None,
+        check_flags: None,
+        compat_ioctl: None,
+        copy_file_range: None,
+        fallocate: None,
+        fadvise: None,
+        fasync: None,
+        flock: None,
+        flush: None,
+        fsync: None,
+        get_unmapped_area: None,
+        iterate_shared: None,
+        iopoll: None,
+        lock: None,
+        mmap: None,
+        mmap_supported_flags: 0,
+        owner: ptr::null_mut(),
+        poll: None,
+        read_iter: None,
+        remap_file_range: None,
+        setlease: None,
+        show_fdinfo: None,
+        splice_eof: None,
+        splice_read: None,
+        splice_write: None,
+        unlocked_ioctl: None,
+        uring_cmd: None,
+        uring_cmd_iopoll: None,
+        write_iter: None,
+    };
+
+    /// Builds an instance of [`struct file_operations`].
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the adapter is compatible with the way the device is registered.
+    pub(crate) const unsafe fn build() -> &'static bindings::file_operations {
+        &Self::VTABLE
+    }
+}
+
+/// Allows the handling of ioctls defined with the `_IO`, `_IOR`, `_IOW`, and `_IOWR` macros.
+///
+/// For each macro, there is a handler function that takes the appropriate types as arguments.
+pub trait IoctlHandler: Sync {
+    /// The type of the first argument to each associated function.
+    type Target<'a>;
+
+    /// Handles ioctls defined with the `_IO` macro, that is, with no buffer as argument.
+    fn pure(_this: Self::Target<'_>, _file: &File, _cmd: u32, _arg: usize) -> Result<i32> {
+        Err(EINVAL)
+    }
+
+    /// Handles ioctls defined with the `_IOR` macro, that is, with an output buffer provided as
+    /// argument.
+    fn read(
+        _this: Self::Target<'_>,
+        _file: &File,
+        _cmd: u32,
+        _writer: &mut UserSlicePtrWriter,
+    ) -> Result<i32> {
+        Err(EINVAL)
+    }
+
+    /// Handles ioctls defined with the `_IOW` macro, that is, with an input buffer provided as
+    /// argument.
+    fn write(
+        _this: Self::Target<'_>,
+        _file: &File,
+        _cmd: u32,
+        _reader: &mut UserSlicePtrReader,
+    ) -> Result<i32> {
+        Err(EINVAL)
+    }
+
+    /// Handles ioctls defined with the `_IOWR` macro, that is, with a buffer for both input and
+    /// output provided as argument.
+    fn read_write(
+        _this: Self::Target<'_>,
+        _file: &File,
+        _cmd: u32,
+        _data: UserSlicePtr,
+    ) -> Result<i32> {
+        Err(EINVAL)
+    }
+}
+
+/// Trait for extracting file open arguments from kernel data structures.
+///
+/// This is meant to be implemented by registration managers.
+pub trait OpenAdapter<T: Sync> {
+    /// Converts untyped data stored in [`struct inode`] and [`struct file`] (when [`struct
+    /// file_operations::open`] is called) into the given type. For example, for `miscdev`
+    /// devices, a pointer to the registered [`struct miscdev`] is stored in [`struct
+    /// file::private_data`].
+    ///
+    /// # Safety
+    ///
+    /// This function must be called only when [`struct file_operations::open`] is being called for
+    /// a file that was registered by the implementer. The returned pointer must be valid and
+    /// not-null.
+    unsafe fn convert(_inode: *mut bindings::inode, _file: *mut bindings::file) -> *const T;
+}
+
+/// Corresponds to the kernel's `struct file_operations`.
+///
+/// You implement this trait whenever you would create a `struct file_operations`.
+///
+/// File descriptors may be used from multiple threads/processes concurrently, so your type must be
+/// [`Sync`]. It must also be [`Send`] because [`Operations::release`] will be called from the
+/// thread that decrements that associated file's refcount to zero.
+#[vtable]
+pub trait Operations {
+    /// The type of the context data returned by [`Operations::open`] and made available to
+    /// other methods.
+    type Data: ForeignOwnable + Send + Sync = ();
+
+    /// The type of the context data passed to [`Operations::open`].
+    type OpenData: Sync = ();
+
+    /// Creates a new instance of this file.
+    ///
+    /// Corresponds to the `open` function pointer in `struct file_operations`.
+    fn open(context: &Self::OpenData, file: &File) -> Result<Self::Data>;
+
+    /// Cleans up after the last reference to the file goes away.
+    ///
+    /// Note that context data is moved, so it will be freed automatically unless the
+    /// implementation moves it elsewhere.
+    ///
+    /// Corresponds to the `release` function pointer in `struct file_operations`.
+    fn release(_data: Self::Data, _file: &File) {}
+
+    /// Reads data from this file to the caller's buffer.
+    ///
+    /// Corresponds to the `read` and `read_iter` function pointers in `struct file_operations`.
+    fn read(
+        _data: <Self::Data as ForeignOwnable>::Borrowed<'_>,
+        _file: &File,
+        _writer: &mut impl IoBufferWriter,
+        _offset: u64,
+    ) -> Result<usize> {
+        Err(EINVAL)
+    }
+
+    /// Writes data from the caller's buffer to this file.
+    ///
+    /// Corresponds to the `write` and `write_iter` function pointers in `struct file_operations`.
+    fn write(
+        _data: <Self::Data as ForeignOwnable>::Borrowed<'_>,
+        _file: &File,
+        _reader: &mut impl IoBufferReader,
+        _offset: u64,
+    ) -> Result<usize> {
+        Err(EINVAL)
     }
 }

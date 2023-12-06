@@ -13,7 +13,9 @@
 
 #![no_std]
 #![feature(allocator_api)]
+#![feature(associated_type_defaults)]
 #![feature(coerce_unsized)]
+#![feature(c_size_t)]
 #![feature(dispatch_from_dyn)]
 #![feature(new_uninit)]
 #![feature(offset_of)]
@@ -38,6 +40,7 @@ pub mod error;
 pub mod file;
 pub mod init;
 pub mod ioctl;
+pub mod io_buffer;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 pub mod prelude;
@@ -50,6 +53,7 @@ pub mod str;
 pub mod sync;
 pub mod task;
 pub mod types;
+pub mod user_ptr;
 pub mod workqueue;
 
 #[doc(hidden)]
