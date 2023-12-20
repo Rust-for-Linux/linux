@@ -5,6 +5,7 @@
 #[macro_use]
 mod quote;
 mod concat_idents;
+mod foreach;
 mod helpers;
 mod module;
 mod paste;
@@ -385,6 +386,30 @@ pub fn paste(input: TokenStream) -> TokenStream {
     let mut tokens = input.into_iter().collect();
     paste::expand(&mut tokens);
     tokens.into_iter().collect()
+}
+
+/// Repeat a fragment of code and provide a numerical index for the current repetition
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// foreach!(i in 0..10) {
+///     paste! {
+///         fn [<func $i>]() {
+///         }
+///     }
+/// }
+///
+/// foreach!(i in 8..=15) {
+///     paste! {
+///         struct [<Bit $i>]() {
+///         }
+///     }
+/// }
+/// ```
+#[proc_macro]
+pub fn foreach(input: TokenStream) -> TokenStream {
+    foreach::expand(input)
 }
 
 /// Derives the [`Zeroable`] trait for the given struct.
