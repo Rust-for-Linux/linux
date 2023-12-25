@@ -7,11 +7,20 @@
  */
 
 #include <kunit/test.h>
+#include <linux/cred.h>
+#include <linux/debugfs.h>
 #include <linux/errname.h>
+#include <linux/fdtable.h>
+#include <linux/file.h>
+#include <linux/fs.h>
+#include <linux/pid_namespace.h>
+#include <linux/poll.h>
+#include <linux/security.h>
 #include <linux/slab.h>
 #include <linux/refcount.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/task_work.h>
 #include <linux/workqueue.h>
 
 /* `bindgen` gets confused at certain things. */

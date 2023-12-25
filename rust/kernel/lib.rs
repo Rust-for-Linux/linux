@@ -13,7 +13,9 @@
 
 #![no_std]
 #![feature(allocator_api)]
+#![feature(associated_type_defaults)]
 #![feature(coerce_unsized)]
+#![feature(c_size_t)]
 #![feature(dispatch_from_dyn)]
 #![feature(new_uninit)]
 #![feature(offset_of)]
@@ -33,13 +35,19 @@ extern crate self as kernel;
 #[cfg(not(testlib))]
 mod allocator;
 mod build_assert;
+pub mod cred;
+#[cfg(CONFIG_DEBUG_FS)]
+pub mod debugfs;
 pub mod error;
+pub mod file;
 pub mod init;
 pub mod ioctl;
+pub mod io_buffer;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 pub mod prelude;
 pub mod print;
+pub mod security;
 mod static_assert;
 #[doc(hidden)]
 pub mod std_vendor;
@@ -47,6 +55,7 @@ pub mod str;
 pub mod sync;
 pub mod task;
 pub mod types;
+pub mod user_ptr;
 pub mod workqueue;
 
 #[doc(hidden)]
