@@ -124,11 +124,16 @@ impl Task {
         }
     }
 
+    /// Returns a raw pointer to the underlying C task struct.
+    pub fn as_raw(&self) -> *mut bindings::task_struct {
+        self.0.get()
+    }
+
     /// Returns the group leader of the given task.
     pub fn group_leader(&self) -> &Task {
-        // SAFETY: By the type invariant, we know that `self.0` is a valid task. Valid tasks always
+        // SAFETY: By the type invariant, we know that `self.as_raw()` is a valid task. Valid tasks always
         // have a valid group_leader.
-        let ptr = unsafe { *ptr::addr_of!((*self.0.get()).group_leader) };
+        let ptr = unsafe { *ptr::addr_of!((*self.as_raw()).group_leader) };
 
         // SAFETY: The lifetime of the returned task reference is tied to the lifetime of `self`,
         // and given that a task has a reference to its group leader, we know it must be valid for
@@ -138,43 +143,43 @@ impl Task {
 
     /// Returns the PID of the given task.
     pub fn pid(&self) -> Pid {
-        // SAFETY: By the type invariant, we know that `self.0` is a valid task. Valid tasks always
+        // SAFETY: By the type invariant, we know that `self.as_raw()` is a valid task. Valid tasks always
         // have a valid pid.
-        unsafe { *ptr::addr_of!((*self.0.get()).pid) }
+        unsafe { *ptr::addr_of!((*self.as_raw()).pid) }
     }
 
     /// Returns the UID of the given task.
     pub fn uid(&self) -> Kuid {
-        // SAFETY: By the type invariant, we know that `self.0` is valid.
-        Kuid::from_raw(unsafe { bindings::task_uid(self.0.get()) })
+        // SAFETY: By the type invariant, we know that `self.as_raw()` is valid.
+        Kuid::from_raw(unsafe { bindings::task_uid(self.as_raw()) })
     }
 
     /// Returns the effective UID of the given task.
     pub fn euid(&self) -> Kuid {
-        // SAFETY: By the type invariant, we know that `self.0` is valid.
-        Kuid::from_raw(unsafe { bindings::task_euid(self.0.get()) })
+        // SAFETY: By the type invariant, we know that `self.as_raw()` is valid.
+        Kuid::from_raw(unsafe { bindings::task_euid(self.as_raw()) })
     }
 
     /// Determines whether the given task has pending signals.
     pub fn signal_pending(&self) -> bool {
-        // SAFETY: By the type invariant, we know that `self.0` is valid.
-        unsafe { bindings::signal_pending(self.0.get()) != 0 }
+        // SAFETY: By the type invariant, we know that `self.as_raw()` is valid.
+        unsafe { bindings::signal_pending(self.as_raw()) != 0 }
     }
 
     /// Returns the given task's pid in the current pid namespace.
     pub fn pid_in_current_ns(&self) -> Pid {
         // SAFETY: Calling `task_active_pid_ns` with the current task is always safe.
         let namespace = unsafe { bindings::task_active_pid_ns(bindings::get_current()) };
-        // SAFETY: We know that `self.0.get()` is valid by the type invariant.
-        unsafe { bindings::task_tgid_nr_ns(self.0.get(), namespace) }
+        // SAFETY: We know that `self.raw()` is valid by the type invariant.
+        unsafe { bindings::task_tgid_nr_ns(self.as_raw(), namespace) }
     }
 
     /// Wakes up the task.
     pub fn wake_up(&self) {
-        // SAFETY: By the type invariant, we know that `self.0.get()` is non-null and valid.
+        // SAFETY: By the type invariant, we know that `self.raw()` is non-null and valid.
         // And `wake_up_process` is safe to be called for any valid task, even if the task is
         // running.
-        unsafe { bindings::wake_up_process(self.0.get()) };
+        unsafe { bindings::wake_up_process(self.as_raw()) };
     }
 }
 
