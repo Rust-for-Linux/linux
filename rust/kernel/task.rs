@@ -168,8 +168,9 @@ impl Task {
 
     /// Returns the given task's pid in the current pid namespace.
     pub fn pid_in_current_ns(&self) -> Pid {
+        let current = current!();
         // SAFETY: Calling `task_active_pid_ns` with the current task is always safe.
-        let namespace = unsafe { bindings::task_active_pid_ns(bindings::get_current()) };
+        let namespace = unsafe { bindings::task_active_pid_ns(current.as_raw()) };
         // SAFETY: We know that `self.raw()` is valid by the type invariant.
         unsafe { bindings::task_tgid_nr_ns(self.as_raw(), namespace) }
     }
