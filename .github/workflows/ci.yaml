@@ -385,6 +385,15 @@ jobs:
             ${{ env.BUILD_DIR }}rust/*.o \
             ${{ env.BUILD_DIR }}vmlinux
 
+      # GPL access test
+      - run: |
+          CONFIG_SAMPLE_RUST_GPL_ACCESS_TEST=m \
+            make ${{ env.MAKE_ARCH }} ${{ env.MAKE_CROSS_COMPILE }} ${{ env.MAKE_LLVM_IAS }} ${{ env.MAKE_TOOLCHAIN }} ${{ env.MAKE_OUTPUT }} ${{ env.MAKE_SYSROOT }} -j3 2>&1 \
+            | grep "^ERROR: modpost: GPL-incompatible module rust_gpl_access_test\.ko uses GPL-only symbol '_R.*printk'$"
+          CONFIG_SAMPLE_RUST_GPL_ACCESS_TEST=m \
+            make ${{ env.MAKE_ARCH }} ${{ env.MAKE_CROSS_COMPILE }} ${{ env.MAKE_LLVM_IAS }} ${{ env.MAKE_TOOLCHAIN }} ${{ env.MAKE_OUTPUT }} ${{ env.MAKE_SYSROOT }} -j3 2>&1 \
+            | grep "^ERROR: modpost: GPL-incompatible module rust_gpl_access_test\.ko uses GPL-only symbol 'kernel_halt'$"
+
       # Clippy
       - run: make ${{ env.MAKE_ARCH }} ${{ env.MAKE_CROSS_COMPILE }} ${{ env.MAKE_LLVM_IAS }} ${{ env.MAKE_TOOLCHAIN }} ${{ env.MAKE_OUTPUT }} ${{ env.MAKE_SYSROOT }} -j3 CLIPPY=1
 
