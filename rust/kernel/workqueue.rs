@@ -157,9 +157,9 @@ macro_rules! new_work {
 #[repr(transparent)]
 pub struct Queue(Opaque<bindings::workqueue_struct>);
 
-// SAFETY: Accesses to workqueues used by [`Queue`] are thread-safe.
+// SAFETY: Accesses to workqueues used by `Queue` are thread-safe.
 unsafe impl Send for Queue {}
-// SAFETY: Accesses to workqueues used by [`Queue`] are thread-safe.
+// SAFETY: Accesses to workqueues used by `Queue` are thread-safe.
 unsafe impl Sync for Queue {}
 
 impl Queue {

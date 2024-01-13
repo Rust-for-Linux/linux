@@ -189,7 +189,7 @@ macro_rules! print_macro (
 // well as playing with the `doc` attribute. Furthermore, they cannot be easily
 // imported in the prelude due to [1]. So, for the moment, we just write them
 // manually, like in the C side; while keeping most of the logic in another
-// macro, i.e. [`print_macro`].
+// macro, i.e. `print_macro`.
 //
 // [1]: https://github.com/rust-lang/rust/issues/52234
 
