@@ -235,7 +235,7 @@ pub mod macros;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, macros::pin_data, pin_init, stack_pin_init, init::*, sync::Mutex, new_mutex};
 /// # use core::pin::Pin;
@@ -287,7 +287,7 @@ macro_rules! stack_pin_init {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```ignore
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, pin_init, stack_try_pin_init, init::*, sync::Mutex, new_mutex};
 /// # use macros::pin_data;
@@ -313,7 +313,7 @@ macro_rules! stack_pin_init {
 /// pr_info!("a: {}", &*foo.a.lock());
 /// ```
 ///
-/// ```rust,ignore
+/// ```ignore
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, pin_init, stack_try_pin_init, init::*, sync::Mutex, new_mutex};
 /// # use macros::pin_data;
@@ -365,7 +365,7 @@ macro_rules! stack_try_pin_init {
 ///
 /// The syntax is almost identical to that of a normal `struct` initializer:
 ///
-/// ```rust
+/// ```
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
@@ -410,7 +410,7 @@ macro_rules! stack_try_pin_init {
 ///
 /// To create an initializer function, simply declare it like this:
 ///
-/// ```rust
+/// ```
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, pin_init, prelude::*, init::*};
 /// # use core::pin::Pin;
@@ -437,7 +437,7 @@ macro_rules! stack_try_pin_init {
 ///
 /// Users of `Foo` can now create it like this:
 ///
-/// ```rust
+/// ```
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
@@ -465,7 +465,7 @@ macro_rules! stack_try_pin_init {
 ///
 /// They can also easily embed it into their own `struct`s:
 ///
-/// ```rust
+/// ```
 /// # #![allow(clippy::disallowed_names)]
 /// # use kernel::{init, pin_init, macros::pin_data, init::*};
 /// # use core::pin::Pin;
@@ -525,7 +525,7 @@ macro_rules! stack_try_pin_init {
 ///
 /// For instance:
 ///
-/// ```rust
+/// ```
 /// # use kernel::{macros::{Zeroable, pin_data}, pin_init};
 /// # use core::{ptr::addr_of_mut, marker::PhantomPinned};
 /// #[pin_data]
@@ -587,7 +587,7 @@ macro_rules! pin_init {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// # #![feature(new_uninit)]
 /// use kernel::{init::{self, PinInit}, error::Error};
 /// #[pin_data]
@@ -691,7 +691,7 @@ macro_rules! init {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// use kernel::{init::{PinInit, zeroed}, error::Error};
 /// struct BigBuf {
 ///     big: Box<[u8; 1024 * 1024 * 1024]>,
@@ -783,7 +783,7 @@ pub unsafe trait PinInit<T: ?Sized, E = Infallible>: Sized {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// # #![allow(clippy::disallowed_names)]
     /// use kernel::{types::Opaque, init::pin_init_from_closure};
     /// #[repr(C)]
@@ -897,7 +897,7 @@ pub unsafe trait Init<T: ?Sized, E = Infallible>: PinInit<T, E> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// # #![allow(clippy::disallowed_names)]
     /// use kernel::{types::Opaque, init::{self, init_from_closure}};
     /// struct Foo {
@@ -1011,7 +1011,7 @@ pub fn uninit<T, E>() -> impl Init<MaybeUninit<T>, E> {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// use kernel::{error::Error, init::init_array_from_fn};
 /// let array: Box<[usize; 1_000]>= Box::init::<Error>(init_array_from_fn(|i| i)).unwrap();
 /// assert_eq!(array.len(), 1_000);
@@ -1054,7 +1054,7 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```
 /// use kernel::{sync::{Arc, Mutex}, init::pin_init_array_from_fn, new_mutex};
 /// let array: Arc<[Mutex<usize>; 1_000]>=
 ///     Arc::pin_init(pin_init_array_from_fn(|i| new_mutex!(i))).unwrap();
@@ -1216,7 +1216,7 @@ impl<T> InPlaceInit<T> for UniqueArc<T> {
 ///
 /// Use [`pinned_drop`] to implement this trait safely:
 ///
-/// ```rust
+/// ```
 /// # use kernel::sync::Mutex;
 /// use kernel::macros::pinned_drop;
 /// use core::pin::Pin;
@@ -1258,7 +1258,7 @@ pub unsafe trait PinnedDrop: __internal::HasPinData {
 /// The bit pattern consisting of only zeroes is a valid bit pattern for this type. In other words,
 /// this is not UB:
 ///
-/// ```rust,ignore
+/// ```ignore
 /// let val: Self = unsafe { core::mem::zeroed() };
 /// ```
 pub unsafe trait Zeroable {}
