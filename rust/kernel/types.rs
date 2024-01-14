@@ -261,7 +261,7 @@ impl<T> Opaque<T> {
     }
 }
 
-/// Types that are _always_ reference counted.
+/// Types that are _always_ reference-counted.
 ///
 /// It allows such types to define their own custom ref increment and decrement functions.
 /// Additionally, it allows users to convert from a shared reference `&T` to an owned reference
