@@ -398,3 +398,36 @@ pub enum Either<L, R> {
     /// Constructs an instance of [`Either`] containing a value of type `R`.
     Right(R),
 }
+
+/// Returns the size of a struct field in bytes.
+///
+/// This macro can be used in const contexts.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::field_size;
+///
+/// struct Foo {
+///     bar: u64,
+///     baz: [i8; 100],
+/// }
+///
+/// assert_eq!(field_size!(Foo, bar), 8);
+/// assert_eq!(field_size!(Foo, baz), 100);
+/// ```
+// Link: https://stackoverflow.com/a/70222282
+#[macro_export]
+macro_rules! field_size {
+    ($t:ty, $field:ident) => {{
+        let m = core::mem::MaybeUninit::<$t>::uninit();
+        // SAFETY: It is OK to dereference invalid pointers inside of
+        // `addr_of!`.
+        let p = unsafe { core::ptr::addr_of!((*m.as_ptr()).$field) };
+
+        const fn size_of_raw<T>(_: *const T) -> usize {
+            core::mem::size_of::<T>()
+        }
+        size_of_raw(p)
+    }};
+}
