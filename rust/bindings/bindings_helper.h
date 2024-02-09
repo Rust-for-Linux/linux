@@ -10,6 +10,7 @@
 #include <linux/cred.h>
 #include <linux/errname.h>
 #include <linux/ethtool.h>
+#include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/jiffies.h>
@@ -20,6 +21,7 @@
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/slab.h>
+#include <linux/task_work.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 
