@@ -509,6 +509,15 @@ config TCP_CONG_BIC
 	  increase provides TCP friendliness.
 	  See http://www.csc.ncsu.edu/faculty/rhee/export/bitcp/
 
+config TCP_CONG_BIC_RUST
+	tristate "Binary Increase Congestion (BIC) control (Rust rewrite)"
+	depends on RUST_TCP_ABSTRACTIONS
+	help
+	  Rust rewrite of the original implementation of Binary Increase
+	  Congestion (BIC) control.
+
+	  If unsure, say N.
+
 config TCP_CONG_CUBIC
 	tristate "CUBIC TCP"
 	default y
@@ -704,6 +713,9 @@ choice
 	config DEFAULT_BIC
 		bool "Bic" if TCP_CONG_BIC=y
 
+	config DEFAULT_BIC_RUST
+		bool "Bic (Rust)" if TCP_CONG_BIC_RUST=y
+
 	config DEFAULT_CUBIC
 		bool "Cubic" if TCP_CONG_CUBIC=y
 
@@ -745,6 +757,7 @@ config TCP_CONG_CUBIC
 config DEFAULT_TCP_CONG
 	string
 	default "bic" if DEFAULT_BIC
+	default "bic_rust" if DEFAULT_BIC_RUST
 	default "cubic" if DEFAULT_CUBIC
 	default "htcp" if DEFAULT_HTCP
 	default "hybla" if DEFAULT_HYBLA
