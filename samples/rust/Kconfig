@@ -30,6 +30,17 @@ config SAMPLE_RUST_PRINT
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_CCA
+	tristate "Congestion control algorithm"
+	depends on RUST_TCP_ABSTRACTIONS
+	help
+	  This option builds the Rust congestion control algorithm sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_cca.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_HOSTPROGS
 	bool "Host programs"
 	help
