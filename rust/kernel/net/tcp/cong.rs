@@ -21,6 +21,8 @@ use macros::{pin_data, pinned_drop};
 
 use super::{InetConnectionSock, TcpSock};
 
+pub mod hystart;
+
 /// Congestion control algorithm (CCA).
 ///
 /// A CCA is implemented as a set of callbacks that are invoked whenever
