@@ -48,13 +48,26 @@ use crate::{
     macros::vtable,
     regulator::Mode,
     str::CStr,
+    sync::Arc,
     types::ForeignOwnable,
     ThisModule,
 };
+#[cfg(CONFIG_REGMAP)]
+use crate::{error::to_result, regmap::Regmap};
 use core::{
     marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
 };
+
+#[cfg(not(CONFIG_REGMAP))]
+struct Regmap;
+
+#[cfg(not(CONFIG_REGMAP))]
+impl Regmap {
+    fn as_ptr(&self) -> *mut bindings::regmap {
+        core::ptr::null_mut()
+    }
+}
 
 /// [`Regulator`]'s status
 ///
@@ -339,6 +352,7 @@ unsafe impl Sync for Desc {}
 pub struct Config<T: ForeignOwnable + Send + Sync = ()> {
     cfg: bindings::regulator_config,
     data: T,
+    regmap: Option<Arc<Regmap>>,
 }
 
 impl<T: ForeignOwnable + Send + Sync> Config<T> {
@@ -350,7 +364,15 @@ impl<T: ForeignOwnable + Send + Sync> Config<T> {
                 ..Default::default()
             },
             data,
+            regmap: None,
         }
+    }
+
+    /// Assign a regmap device to the config
+    #[cfg(CONFIG_REGMAP)]
+    pub fn with_regmap(mut self, regmap: Arc<Regmap>) -> Self {
+        self.regmap = Some(regmap);
+        self
     }
 }
 
@@ -378,6 +400,7 @@ impl Registration {
 /// * [`Self`] has ownership of `self.rdev` memory allocation.
 pub struct Regulator {
     rdev: *mut bindings::regulator_dev,
+    _regmap: Option<Arc<Regmap>>,
 }
 
 impl Regulator {
@@ -389,6 +412,11 @@ impl Regulator {
     ) -> Result<Self> {
         config.cfg.driver_data = config.data.into_foreign() as _;
 
+        let regmap = config.regmap.take();
+        if let Some(regmap) = &regmap {
+            config.cfg.regmap = regmap.as_ptr();
+        };
+
         // SAFETY: By the type invariants, we know that `dev.raw_device()` is always
         // valid and non-null, and the descriptor and config are guaranteed to be valid values,
         // hence it is safe to perform the FFI call.
@@ -399,7 +427,10 @@ impl Regulator {
         if rdev.is_null() {
             Err(EINVAL)
         } else {
-            Ok(Self { rdev })
+            Ok(Self {
+                rdev,
+                _regmap: regmap,
+            })
         }
     }
 
@@ -434,19 +465,132 @@ impl Regulator {
     }
 }
 
-impl crate::private::Sealed for Regulator {}
-
 impl Drop for Regulator {
     fn drop(&mut self) {
         // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
         // so it is safe to perform the FFI call.
+        let regmap = unsafe { bindings::rdev_get_regmap(self.rdev) };
+
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
         unsafe { bindings::regulator_unregister(self.rdev) }
+
+        if !regmap.is_null() {
+            drop(unsafe { Arc::from_raw(regmap) });
+        }
     }
 }
 
 // SAFETY: `Regulator` has sole ownership of `self.rdev` and is never read outside of the C
 // implementation. It is safe to use it from any thread.
 unsafe impl Send for Regulator {}
+
+impl crate::private::Sealed for Regulator {}
+
+/// Helper functions to implement some of the [`Driver`] trait methods using [`Regmap`].
+///
+/// This trait is implemented by [`Regulator`] and is Sealed to prevent
+/// to be implemented by anyone else.
+#[cfg(CONFIG_REGMAP)]
+pub trait RegmapHelpers: crate::private::Sealed {
+    /// Implementation of [`Driver::get_voltage_sel`] using [`Regmap`].
+    fn get_voltage_sel_regmap(&self) -> Result<i32>;
+    /// Implementation of [`Driver::set_voltage_sel`] using [`Regmap`].
+    fn set_voltage_sel_regmap(&self, sel: u32) -> Result;
+
+    /// Implementation of [`Driver::is_enabled`] using [`Regmap`].
+    ///
+    /// [`Desc::with_enable`] or [`Desc::with_inverted_enable`] must have been called
+    /// to setup the fields required by regmap.
+    fn is_enabled_regmap(&self) -> Result<bool>;
+
+    /// Implementation of [`Driver::enable`] using [`Regmap`].
+    ///
+    /// [`Desc::with_enable`] or [`Desc::with_inverted_enable`] must have been called
+    /// to setup the fields required by regmap.
+    fn enable_regmap(&self) -> Result;
+
+    /// Implementation of [`Driver::disable`] using [`Regmap`].
+    ///
+    /// [`Desc::with_enable`] or [`Desc::with_inverted_enable`] must have been called
+    /// to setup the fields required by regmap.
+    fn disable_regmap(&self) -> Result;
+
+    /// Implementation of [`Driver::set_active_discharge`] using [`Regmap`].
+    ///
+    /// [`Desc::with_active_discharge`] must have been called to setup the fields required
+    /// by regmap.
+    fn set_active_discharge_regmap(&self, enable: bool) -> Result;
+    /// Implementation of [`Driver::set_current_limit`] using [`Regmap`].
+    fn set_current_limit_regmap(&self, min_ua: i32, max_ua: i32) -> Result;
+    /// Implementation of [`Driver::get_current_limit`] using [`Regmap`].
+    fn get_current_limit_regmap(&self) -> Result<i32>;
+}
+
+#[cfg(CONFIG_REGMAP)]
+impl RegmapHelpers for Regulator {
+    fn get_voltage_sel_regmap(&self) -> Result<i32> {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        let ret = unsafe { bindings::regulator_get_voltage_sel_regmap(self.rdev) };
+        if ret < 0 {
+            return Err(Error::from_errno(ret));
+        }
+        Ok(ret)
+    }
+
+    fn set_voltage_sel_regmap(&self, sel: u32) -> Result {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        to_result(unsafe { bindings::regulator_set_voltage_sel_regmap(self.rdev, sel) })
+    }
+
+    fn is_enabled_regmap(&self) -> Result<bool> {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        let ret = unsafe { bindings::regulator_is_enabled_regmap(self.rdev) };
+        if ret < 0 {
+            return Err(Error::from_errno(ret));
+        }
+        Ok(ret > 0)
+    }
+
+    fn enable_regmap(&self) -> Result {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        to_result(unsafe { bindings::regulator_enable_regmap(self.rdev) })
+    }
+
+    fn disable_regmap(&self) -> Result {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        to_result(unsafe { bindings::regulator_disable_regmap(self.rdev) })
+    }
+
+    fn set_active_discharge_regmap(&self, enable: bool) -> Result {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        to_result(unsafe { bindings::regulator_set_active_discharge_regmap(self.rdev, enable) })
+    }
+
+    fn set_current_limit_regmap(&self, min_ua: i32, max_ua: i32) -> Result {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        to_result(unsafe {
+            bindings::regulator_set_current_limit_regmap(self.rdev, min_ua, max_ua)
+        })
+    }
+
+    fn get_current_limit_regmap(&self) -> Result<i32> {
+        // SAFETY: The type invariants guarantee that `self.rdev` is valid and non-null,
+        // so it is safe to perform the FFI call.
+        let ret = unsafe { bindings::regulator_get_current_limit_regmap(self.rdev) };
+        if ret < 0 {
+            return Err(Error::from_errno(ret));
+        }
+        Ok(ret)
+    }
+}
 
 /// [`Regulator`] type
 pub enum Type {
@@ -463,7 +607,10 @@ impl<T: Driver> Adapter<T> {
         rdev: *mut bindings::regulator_dev,
         selector: core::ffi::c_uint,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| T::list_voltage(&rdev, selector))
     }
 
@@ -473,7 +620,10 @@ impl<T: Driver> Adapter<T> {
         max_uv: core::ffi::c_int,
         selector: *mut core::ffi::c_uint,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         match T::set_voltage(&rdev, min_uv, max_uv) {
             Ok(v) => {
                 unsafe { *selector = v as _ };
@@ -488,7 +638,10 @@ impl<T: Driver> Adapter<T> {
         min_uv: core::ffi::c_int,
         max_uv: core::ffi::c_int,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| T::map_voltage(&rdev, min_uv, max_uv))
     }
 
@@ -496,7 +649,10 @@ impl<T: Driver> Adapter<T> {
         rdev: *mut bindings::regulator_dev,
         selector: core::ffi::c_uint,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::set_voltage_sel(&rdev, selector)?;
             Ok(0)
@@ -506,14 +662,20 @@ impl<T: Driver> Adapter<T> {
     unsafe extern "C" fn get_voltage_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| T::get_voltage(&rdev))
     }
 
     unsafe extern "C" fn get_voltage_sel_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| T::get_voltage_sel(&rdev))
     }
 
@@ -522,7 +684,10 @@ impl<T: Driver> Adapter<T> {
         min_ua: core::ffi::c_int,
         max_ua: core::ffi::c_int,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::set_current_limit(&rdev, min_ua, max_ua)?;
             Ok(0)
@@ -532,7 +697,10 @@ impl<T: Driver> Adapter<T> {
     unsafe extern "C" fn get_current_limit_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| T::get_current_limit(&rdev))
     }
 
@@ -540,7 +708,10 @@ impl<T: Driver> Adapter<T> {
         rdev: *mut bindings::regulator_dev,
         enable: bool,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::set_active_discharge(&rdev, enable)?;
             Ok(0)
@@ -548,7 +719,10 @@ impl<T: Driver> Adapter<T> {
     }
 
     unsafe extern "C" fn enable_callback(rdev: *mut bindings::regulator_dev) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::enable(&rdev)?;
             Ok(0)
@@ -556,7 +730,10 @@ impl<T: Driver> Adapter<T> {
     }
 
     unsafe extern "C" fn disable_callback(rdev: *mut bindings::regulator_dev) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::disable(&rdev)?;
             Ok(0)
@@ -566,7 +743,10 @@ impl<T: Driver> Adapter<T> {
     unsafe extern "C" fn is_enabled_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::is_enabled(&rdev)?;
             Ok(0)
@@ -577,7 +757,10 @@ impl<T: Driver> Adapter<T> {
         rdev: *mut bindings::regulator_dev,
         mode: core::ffi::c_uint,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             let mode = Mode::try_from(mode).unwrap_or(Mode::Invalid);
             T::set_mode(&rdev, mode)?;
@@ -588,14 +771,20 @@ impl<T: Driver> Adapter<T> {
     unsafe extern "C" fn get_mode_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_uint {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         T::get_mode(&rdev) as _
     }
 
     unsafe extern "C" fn get_status_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| Ok(T::get_status(&rdev)? as _))
     }
 
@@ -603,7 +792,10 @@ impl<T: Driver> Adapter<T> {
         rdev: *mut bindings::regulator_dev,
         uv: core::ffi::c_int,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::set_suspend_voltage(&rdev, uv)?;
             Ok(0)
@@ -613,7 +805,10 @@ impl<T: Driver> Adapter<T> {
     unsafe extern "C" fn set_suspend_enable_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::set_suspend_enable(&rdev)?;
             Ok(0)
@@ -623,7 +818,10 @@ impl<T: Driver> Adapter<T> {
     unsafe extern "C" fn set_suspend_disable_callback(
         rdev: *mut bindings::regulator_dev,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             T::set_suspend_disable(&rdev)?;
             Ok(0)
@@ -634,7 +832,10 @@ impl<T: Driver> Adapter<T> {
         rdev: *mut bindings::regulator_dev,
         mode: core::ffi::c_uint,
     ) -> core::ffi::c_int {
-        let rdev = ManuallyDrop::new(Regulator { rdev });
+        let rdev = ManuallyDrop::new(Regulator {
+            rdev,
+            _regmap: None,
+        });
         from_result(|| {
             let mode = Mode::try_from(mode).unwrap_or(Mode::Invalid);
             T::set_suspend_mode(&rdev, mode)?;
