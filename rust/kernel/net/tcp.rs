@@ -6,6 +6,8 @@ use crate::time;
 use crate::types::Opaque;
 use core::{num, ptr};
 
+pub mod cong;
+
 /// Representation of a `struct inet_connection_sock`.
 ///
 /// # Invariants
@@ -18,6 +20,21 @@ use core::{num, ptr};
 #[repr(transparent)]
 pub struct InetConnectionSock {
     icsk: Opaque<bindings::inet_connection_sock>,
+}
+
+impl InetConnectionSock {
+    /// Returns the congestion control state of this socket.
+    #[inline]
+    pub fn ca_state(&self) -> Result<cong::State, ()> {
+        const CA_STATE_MASK: u8 = 0b11111;
+        // TODO: Replace code to access the bit field with automatically
+        // generated code by bindgen when it becomes possible.
+        // SAFETY: By the type invariants, it is okay to read `icsk_ca_state`, which is the first
+        // member of the bitfield and has a size of five.
+        cong::State::try_from(unsafe {
+            *(ptr::addr_of!((*self.icsk.get())._bitfield_1).cast::<u8>()) & CA_STATE_MASK
+        })
+    }
 }
 
 /// Representation of a `struct tcp_sock`.

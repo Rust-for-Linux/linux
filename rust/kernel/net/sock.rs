@@ -89,6 +89,46 @@ impl Sock {
         unsafe { &mut *(bindings::tcp_sk(self.sk.get()) as *mut TcpSock) }
     }
 
+    /// Returns the [private data] of the instance of the CCA used by this
+    /// socket.
+    ///
+    /// [private data]: tcp::cong::Algorithm::Data
+    ///
+    /// # Safety
+    ///
+    /// - `sk` must be valid for `inet_csk_ca`,
+    /// - `sk` must use the CCA `T`, the `init` CB of the CCA must have been
+    ///   called, the `release` CB of the CCA must not have been called.
+    #[inline]
+    #[cfg(CONFIG_RUST_TCP_ABSTRACTIONS)]
+    pub(crate) unsafe fn inet_csk_ca<'a, T: tcp::cong::Algorithm + ?Sized>(
+        &'a self,
+    ) -> &'a T::Data {
+        // SAFETY: By the function's preconditions, calling `inet_csk_ca` is OK
+        // and the returned pointer points to a valid instance of `T::Data`.
+        unsafe { &*(bindings::inet_csk_ca(self.sk.get()) as *const T::Data) }
+    }
+
+    /// Returns the [private data] of the instance of the CCA used by this
+    /// socket.
+    ///
+    /// [private data]: tcp::cong::Algorithm::Data
+    ///
+    /// # Safety
+    ///
+    /// - `sk` must be valid for `inet_csk_ca`,
+    /// - `sk` must use the CCA `T`, the `init` CB of the CCA must have been
+    ///   called, the `release` CB of the CCA must not have been called.
+    #[inline]
+    #[cfg(CONFIG_RUST_TCP_ABSTRACTIONS)]
+    pub(crate) unsafe fn inet_csk_ca_mut<'a, T: tcp::cong::Algorithm + ?Sized>(
+        &'a mut self,
+    ) -> &'a mut T::Data {
+        // SAFETY: By the function's preconditions, calling `inet_csk_ca` is OK
+        // and the returned pointer points to a valid instance of `T::Data`.
+        unsafe { &mut *(bindings::inet_csk_ca(self.sk.get()) as *mut T::Data) }
+    }
+
     /// Returns the [`InetConnectionSock`] view of this socket.
     ///
     /// # Safety

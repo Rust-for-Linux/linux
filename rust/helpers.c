@@ -188,6 +188,12 @@ struct inet_connection_sock *rust_helper_inet_csk(const struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(rust_helper_inet_csk);
 
+void *rust_helper_inet_csk_ca(struct sock *sk)
+{
+	return inet_csk_ca(sk);
+}
+EXPORT_SYMBOL_GPL(rust_helper_inet_csk_ca);
+
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can
  * use it in contexts where Rust expects a `usize` like slice (array) indices.
