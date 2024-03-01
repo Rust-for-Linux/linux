@@ -466,6 +466,22 @@ config INET_DIAG_DESTROY
 	  had been disconnected.
 	  If unsure, say N.
 
+config RUST_SOCK_ABSTRACTIONS
+	bool "INET: Rust sock abstractions"
+	depends on RUST
+	help
+	  Adds Rust abstractions for working with `struct sock`s.
+
+	  If unsure, say N.
+
+config RUST_TCP_ABSTRACTIONS
+	bool "TCP: Rust abstractions"
+	depends on RUST_SOCK_ABSTRACTIONS
+	help
+	  Adds support for writing Rust kernel modules that integrate with TCP.
+
+	  If unsure, say N.
+
 menuconfig TCP_CONG_ADVANCED
 	bool "TCP: advanced congestion control"
 	help
