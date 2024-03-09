@@ -16,6 +16,7 @@
 
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/time.h>
 #include <net/tcp.h>
 
 #define BICTCP_BETA_SCALE    1024	/* Scale factor beta calculation
@@ -55,6 +56,7 @@ struct bictcp {
 	u32	epoch_start;	/* beginning of an epoch */
 #define ACK_RATIO_SHIFT	4
 	u32	delayed_ack;	/* estimate the ratio of Packets/ACKs << 4 */
+	u64	start_time;
 };
 
 static inline void bictcp_reset(struct bictcp *ca)
@@ -65,6 +67,7 @@ static inline void bictcp_reset(struct bictcp *ca)
 	ca->last_time = 0;
 	ca->epoch_start = 0;
 	ca->delayed_ack = 2 << ACK_RATIO_SHIFT;
+	ca->start_time = ktime_get_boot_fast_ns();
 }
 
 static void bictcp_init(struct sock *sk)
@@ -75,6 +78,19 @@ static void bictcp_init(struct sock *sk)
 
 	if (initial_ssthresh)
 		tcp_sk(sk)->snd_ssthresh = initial_ssthresh;
+
+	pr_info("Socket created: start %llu\n", ca->start_time);
+}
+
+static void bictcp_release(struct sock* sk)
+{
+	struct bictcp *ca = inet_csk_ca(sk);
+
+        pr_info(
+		"Socket destroyed: start %llu, end %llu\n",
+		ca->start_time,
+		ktime_get_boot_fast_ns()
+        );
 }
 
 /*
@@ -147,11 +163,23 @@ static void bictcp_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 
 	if (tcp_in_slow_start(tp)) {
 		acked = tcp_slow_start(tp, acked);
-		if (!acked)
+		if (!acked) {
+			pr_info(
+				"New cwnd: %u, time %llu, ssthresh %u, start %llu, ss 1\n",
+				tp->snd_cwnd, ktime_get_boot_fast_ns(),
+				tp->snd_ssthresh, ca->start_time
+			);
 			return;
+		}
 	}
 	bictcp_update(ca, tcp_snd_cwnd(tp));
 	tcp_cong_avoid_ai(tp, ca->cnt, acked);
+
+	pr_info(
+		"New cwnd: %u, time %llu, ssthresh %u, start %llu, ss 1\n",
+		tp->snd_cwnd, ktime_get_boot_fast_ns(),
+		tp->snd_ssthresh, ca->start_time
+	);
 }
 
 /*
@@ -162,6 +190,12 @@ static u32 bictcp_recalc_ssthresh(struct sock *sk)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	struct bictcp *ca = inet_csk_ca(sk);
+
+        pr_info(
+		"Enter fast retransmit: time %llu, start %llu\n",
+		ktime_get_boot_fast_ns(),
+		ca->start_time
+	);
 
 	ca->epoch_start = 0;	/* end of epoch */
 
@@ -180,8 +214,20 @@ static u32 bictcp_recalc_ssthresh(struct sock *sk)
 
 static void bictcp_state(struct sock *sk, u8 new_state)
 {
-	if (new_state == TCP_CA_Loss)
+	if (new_state == TCP_CA_Loss) {
+		struct bictcp *ca = inet_csk_ca(sk);
+		u64 tmp = ca->start_time;
+
+		pr_info(
+			"Retransmission timeout fired: time %llu, start %llu\n",
+			ktime_get_boot_fast_ns(),
+			ca->start_time
+		);
+
 		bictcp_reset(inet_csk_ca(sk));
+
+		ca->start_time = tmp;
+	}
 }
 
 /* Track delayed acknowledgment ratio using sliding window
@@ -201,6 +247,7 @@ static void bictcp_acked(struct sock *sk, const struct ack_sample *sample)
 
 static struct tcp_congestion_ops bictcp __read_mostly = {
 	.init		= bictcp_init,
+	.release	= bictcp_release,
 	.ssthresh	= bictcp_recalc_ssthresh,
 	.cong_avoid	= bictcp_cong_avoid,
 	.set_state	= bictcp_state,

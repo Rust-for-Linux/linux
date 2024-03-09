@@ -240,14 +240,22 @@ impl<T> Opaque<T> {
     /// uninitialized. Additionally, access to the inner `T` requires `unsafe`, so the caller needs
     /// to verify at that point that the inner value is valid.
     pub fn ffi_init(init_func: impl FnOnce(*mut T)) -> impl PinInit<Self> {
+        Self::try_ffi_init(move |slot| {
+            init_func(slot);
+            Ok(())
+        })
+    }
+
+    /// Similar to [`Self::ffi_init`], except that the closure can fail.
+    ///
+    /// To avoid leaks on failure, the closure must drop any fields it has initialised before the
+    /// failure.
+    pub fn try_ffi_init<E>(
+        init_func: impl FnOnce(*mut T) -> Result<(), E>,
+    ) -> impl PinInit<Self, E> {
         // SAFETY: We contain a `MaybeUninit`, so it is OK for the `init_func` to not fully
         // initialize the `T`.
-        unsafe {
-            init::pin_init_from_closure::<_, ::core::convert::Infallible>(move |slot| {
-                init_func(Self::raw_get(slot));
-                Ok(())
-            })
-        }
+        unsafe { init::pin_init_from_closure(|slot| init_func(Self::raw_get(slot))) }
     }
 
     /// Returns a raw pointer to the opaque data.
@@ -389,4 +397,37 @@ pub enum Either<L, R> {
 
     /// Constructs an instance of [`Either`] containing a value of type `R`.
     Right(R),
+}
+
+/// Returns the size of a struct field in bytes.
+///
+/// This macro can be used in const contexts.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::field_size;
+///
+/// struct Foo {
+///     bar: u64,
+///     baz: [i8; 100],
+/// }
+///
+/// assert_eq!(field_size!(Foo, bar), 8);
+/// assert_eq!(field_size!(Foo, baz), 100);
+/// ```
+// Link: https://stackoverflow.com/a/70222282
+#[macro_export]
+macro_rules! field_size {
+    ($t:ty, $field:ident) => {{
+        let m = core::mem::MaybeUninit::<$t>::uninit();
+        // SAFETY: It is OK to dereference invalid pointers inside of
+        // `addr_of!`.
+        let p = unsafe { core::ptr::addr_of!((*m.as_ptr()).$field) };
+
+        const fn size_of_raw<T>(_: *const T) -> usize {
+            core::mem::size_of::<T>()
+        }
+        size_of_raw(p)
+    }};
 }

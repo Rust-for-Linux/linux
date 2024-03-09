@@ -466,6 +466,22 @@ config INET_DIAG_DESTROY
 	  had been disconnected.
 	  If unsure, say N.
 
+config RUST_SOCK_ABSTRACTIONS
+	bool "INET: Rust sock abstractions"
+	depends on RUST
+	help
+	  Adds Rust abstractions for working with `struct sock`s.
+
+	  If unsure, say N.
+
+config RUST_TCP_ABSTRACTIONS
+	bool "TCP: Rust abstractions"
+	depends on RUST_SOCK_ABSTRACTIONS
+	help
+	  Adds support for writing Rust kernel modules that integrate with TCP.
+
+	  If unsure, say N.
+
 menuconfig TCP_CONG_ADVANCED
 	bool "TCP: advanced congestion control"
 	help
@@ -493,6 +509,15 @@ config TCP_CONG_BIC
 	  increase provides TCP friendliness.
 	  See http://www.csc.ncsu.edu/faculty/rhee/export/bitcp/
 
+config TCP_CONG_BIC_RUST
+	tristate "Binary Increase Congestion (BIC) control (Rust rewrite)"
+	depends on RUST_TCP_ABSTRACTIONS
+	help
+	  Rust rewrite of the original implementation of Binary Increase
+	  Congestion (BIC) control.
+
+	  If unsure, say N.
+
 config TCP_CONG_CUBIC
 	tristate "CUBIC TCP"
 	default y
@@ -500,6 +525,15 @@ config TCP_CONG_CUBIC
 	  This is version 2.0 of BIC-TCP which uses a cubic growth function
 	  among other techniques.
 	  See http://www.csc.ncsu.edu/faculty/rhee/export/bitcp/cubic-paper.pdf
+
+config TCP_CONG_CUBIC_RUST
+	tristate "CUBIC TCP (Rust rewrite)"
+	depends on RUST_TCP_ABSTRACTIONS
+	help
+	  Rust rewrite of the original implementation of TCP CUBIC congestion
+	  control.
+
+	  If unsure, say N.
 
 config TCP_CONG_WESTWOOD
 	tristate "TCP Westwood+"
@@ -688,8 +722,14 @@ choice
 	config DEFAULT_BIC
 		bool "Bic" if TCP_CONG_BIC=y
 
+	config DEFAULT_BIC_RUST
+		bool "Bic (Rust)" if TCP_CONG_BIC_RUST=y
+
 	config DEFAULT_CUBIC
 		bool "Cubic" if TCP_CONG_CUBIC=y
+
+	config DEFAULT_CUBIC_RUST
+		bool "Cubic (Rust)" if TCP_CONG_CUBIC_RUST=y
 
 	config DEFAULT_HTCP
 		bool "Htcp" if TCP_CONG_HTCP=y
@@ -729,7 +769,9 @@ config TCP_CONG_CUBIC
 config DEFAULT_TCP_CONG
 	string
 	default "bic" if DEFAULT_BIC
+	default "bic_rust" if DEFAULT_BIC_RUST
 	default "cubic" if DEFAULT_CUBIC
+	default "cubic_rust" if DEFAULT_CUBIC_RUST
 	default "htcp" if DEFAULT_HTCP
 	default "hybla" if DEFAULT_HYBLA
 	default "vegas" if DEFAULT_VEGAS

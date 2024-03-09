@@ -31,6 +31,7 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include <net/tcp.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -156,6 +157,42 @@ void rust_helper_init_work_with_key(struct work_struct *work, work_func_t func,
 	work->func = func;
 }
 EXPORT_SYMBOL_GPL(rust_helper_init_work_with_key);
+
+bool rust_helper_tcp_in_slow_start(const struct tcp_sock *tp)
+{
+	return tcp_in_slow_start(tp);
+}
+EXPORT_SYMBOL_GPL(rust_helper_tcp_in_slow_start);
+
+bool rust_helper_tcp_is_cwnd_limited(const struct sock *sk)
+{
+	return tcp_is_cwnd_limited(sk);
+}
+EXPORT_SYMBOL_GPL(rust_helper_tcp_is_cwnd_limited);
+
+struct tcp_sock *rust_helper_tcp_sk(struct sock *sk)
+{
+	return tcp_sk(sk);
+}
+EXPORT_SYMBOL_GPL(rust_helper_tcp_sk);
+
+u32 rust_helper_tcp_snd_cwnd(const struct tcp_sock *tp)
+{
+	return tcp_snd_cwnd(tp);
+}
+EXPORT_SYMBOL_GPL(rust_helper_tcp_snd_cwnd);
+
+struct inet_connection_sock *rust_helper_inet_csk(const struct sock *sk)
+{
+	return inet_csk(sk);
+}
+EXPORT_SYMBOL_GPL(rust_helper_inet_csk);
+
+void *rust_helper_inet_csk_ca(struct sock *sk)
+{
+	return inet_csk_ca(sk);
+}
+EXPORT_SYMBOL_GPL(rust_helper_inet_csk_ca);
 
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can
