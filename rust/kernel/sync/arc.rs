@@ -295,6 +295,36 @@ impl<T: ?Sized> Arc<T> {
     ///
     /// When this destroys the `Arc`, it does so while properly avoiding races. This means that
     /// this method will never call the destructor of the value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::sync::{Arc, UniqueArc};
+    ///
+    /// let arc = Arc::try_new(42)?;
+    /// let unique_arc = arc.into_unique_or_drop();
+    ///
+    /// // The above conversion should succeed since refcount of `arc` is 1.
+    /// assert!(unique_arc.is_some());
+    ///
+    /// assert_eq!(*(unique_arc.unwrap()), 42);
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    ///
+    /// ```
+    /// use kernel::sync::{Arc, UniqueArc};
+    ///
+    /// let arc = Arc::try_new(42)?;
+    /// let another = arc.clone();
+    ///
+    /// let unique_arc = arc.into_unique_or_drop();
+    ///
+    /// // The above conversion should fail since refcount of `arc` is >1.
+    /// assert!(unique_arc.is_none());
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn into_unique_or_drop(self) -> Option<Pin<UniqueArc<T>>> {
         // We will manually manage the refcount in this method, so we disable the destructor.
         let me = ManuallyDrop::new(self);
