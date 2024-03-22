@@ -24,11 +24,16 @@
 #include <linux/bug.h>
 #include <linux/build_bug.h>
 #include <linux/cred.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/errname.h>
 #include <linux/fs.h>
+#include <linux/i2c.h>
 #include <linux/mutex.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/refcount.h>
+#include <linux/regmap.h>
 #include <linux/sched/signal.h>
 #include <linux/security.h>
 #include <linux/spinlock.h>
@@ -250,6 +255,100 @@ void rust_helper_init_task_work(struct callback_head *twork,
 	init_task_work(twork, func);
 }
 EXPORT_SYMBOL_GPL(rust_helper_init_task_work);
+
+void *rust_helper_dev_get_drvdata(struct device *dev)
+{
+	return dev_get_drvdata(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dev_get_drvdata);
+
+const char *rust_helper_dev_name(const struct device *dev)
+{
+	return dev_name(dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_dev_name);
+
+const struct of_device_id *rust_helper_of_match_device(
+		const struct of_device_id *matches, const struct device *dev)
+{
+	return of_match_device(matches, dev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_of_match_device);
+
+void *rust_helper_platform_get_drvdata(const struct platform_device *pdev)
+{
+	return platform_get_drvdata(pdev);
+}
+EXPORT_SYMBOL_GPL(rust_helper_platform_get_drvdata);
+
+void rust_helper_platform_set_drvdata(struct platform_device *pdev, void *data)
+{
+	return platform_set_drvdata(pdev, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_platform_set_drvdata);
+
+void *rust_helper_i2c_get_clientdata(const struct i2c_client *client)
+{
+	return i2c_get_clientdata(client);
+}
+EXPORT_SYMBOL_GPL(rust_helper_i2c_get_clientdata);
+
+void rust_helper_i2c_set_clientdata(struct i2c_client *client, void *data)
+{
+	i2c_set_clientdata(client, data);
+}
+EXPORT_SYMBOL_GPL(rust_helper_i2c_set_clientdata);
+
+#ifdef CONFIG_REGMAP_I2C
+struct regmap *rust_helper_regmap_init_i2c(struct i2c_client *i2c,
+					   const struct regmap_config *config)
+{
+	return regmap_init_i2c(i2c, config);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_init_i2c);
+#endif
+
+int rust_helper_regmap_field_write(struct regmap_field *field, unsigned int val)
+{
+	return regmap_field_write(field, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_write);
+
+int rust_helper_regmap_field_force_write(struct regmap_field *field,
+					 unsigned int val)
+{
+	return regmap_field_force_write(field, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_force_write);
+
+int rust_helper_regmap_field_update_bits(struct regmap_field *field,
+					 unsigned int mask, unsigned int val)
+{
+	return regmap_field_update_bits(field, mask, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_update_bits);
+
+int rust_helper_regmap_field_set_bits(struct regmap_field *field,
+				      unsigned int bits)
+{
+	return regmap_field_set_bits(field, bits);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_set_bits);
+
+int rust_helper_regmap_field_clear_bits(struct regmap_field *field,
+					unsigned int bits)
+{
+	return regmap_field_clear_bits(field, bits);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_clear_bits);
+
+int rust_helper_regmap_field_force_update_bits(struct regmap_field *field,
+					       unsigned int mask,
+						unsigned int val)
+{
+	return regmap_field_force_update_bits(field, mask, val);
+}
+EXPORT_SYMBOL_GPL(rust_helper_regmap_field_force_update_bits);
 
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can

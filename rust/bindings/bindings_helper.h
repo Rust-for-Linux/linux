@@ -8,17 +8,23 @@
 
 #include <kunit/test.h>
 #include <linux/cred.h>
+#include <linux/device.h>
 #include <linux/errname.h>
 #include <linux/ethtool.h>
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/i2c.h>
 #include <linux/jiffies.h>
 #include <linux/mdio.h>
 #include <linux/phy.h>
 #include <linux/pid_namespace.h>
+#include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/refcount.h>
+#include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
+#include <linux/regulator/driver.h>
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/slab.h>

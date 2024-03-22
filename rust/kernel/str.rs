@@ -35,6 +35,12 @@ impl BStr {
         // SAFETY: `BStr` is transparent to `[u8]`.
         unsafe { &*(bytes as *const [u8] as *const BStr) }
     }
+
+    /// Returns a reference to the inner [u8].
+    #[inline]
+    pub const fn deref_const(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 impl fmt::Display for BStr {
@@ -106,7 +112,7 @@ impl Deref for BStr {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.deref_const()
     }
 }
 

@@ -13,8 +13,11 @@
 
 #![no_std]
 #![feature(allocator_api)]
+#![feature(associated_type_defaults)]
 #![feature(coerce_unsized)]
+#![feature(const_refs_to_cell)]
 #![feature(dispatch_from_dyn)]
+#![feature(doc_cfg)]
 #![feature(new_uninit)]
 #![feature(receiver_trait)]
 #![feature(unsize)]
@@ -30,18 +33,30 @@ extern crate self as kernel;
 #[cfg(not(test))]
 #[cfg(not(testlib))]
 mod allocator;
+pub mod bits;
 mod build_assert;
 pub mod cred;
+pub mod device;
+pub mod driver;
 pub mod error;
 pub mod file;
+#[cfg(any(CONFIG_I2C, doc))]
+#[doc(cfg(CONFIG_I2C))]
+pub mod i2c;
 pub mod init;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
 #[cfg(CONFIG_NET)]
 pub mod net;
+pub mod of;
+pub mod platform;
 pub mod prelude;
 pub mod print;
+#[cfg(CONFIG_REGMAP)]
+pub mod regmap;
+#[cfg(CONFIG_REGULATOR)]
+pub mod regulator;
 pub mod security;
 mod static_assert;
 #[doc(hidden)]
@@ -60,6 +75,11 @@ pub use uapi;
 
 #[doc(hidden)]
 pub use build_error::build_error;
+
+pub(crate) mod private {
+    #[allow(unreachable_pub)]
+    pub trait Sealed {}
+}
 
 /// Prefix to appear before log messages printed from within the `kernel` crate.
 const __LOG_PREFIX: &[u8] = b"rust_kernel\0";
@@ -93,6 +113,13 @@ impl ThisModule {
     /// The pointer must be equal to the right `THIS_MODULE`.
     pub const unsafe fn from_ptr(ptr: *mut bindings::module) -> ThisModule {
         ThisModule(ptr)
+    }
+
+    /// Access the raw pointer for this module.
+    ///
+    /// It is up to the user to use it correctly.
+    pub const fn as_ptr(&self) -> *mut bindings::module {
+        self.0
     }
 }
 
