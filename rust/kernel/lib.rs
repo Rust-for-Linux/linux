@@ -37,6 +37,7 @@ mod build_assert;
 pub mod device;
 pub mod driver;
 pub mod error;
+pub mod hrtimer;
 pub mod init;
 pub mod io_mem;
 pub mod ioctl;
