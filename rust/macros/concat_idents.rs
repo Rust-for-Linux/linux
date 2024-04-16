@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use proc_macro::{token_stream, Ident, TokenStream, TokenTree};
-
-use crate::helpers::expect_punct;
+use proc_macro2::{token_stream, Ident, TokenStream, TokenTree};
 
 fn expect_ident(it: &mut token_stream::IntoIter) -> Ident {
     if let Some(TokenTree::Ident(ident)) = it.next() {
         ident
     } else {
         panic!("Expected Ident")
+    }
+}
+fn expect_punct(it: &mut token_stream::IntoIter) -> char {
+    if let TokenTree::Punct(punct) = it.next().expect("Reached end of token stream for Punct") {
+        punct.as_char()
+    } else {
+        panic!("Expected Punct");
     }
 }
 

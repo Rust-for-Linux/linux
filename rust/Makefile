@@ -11,6 +11,7 @@ always-$(CONFIG_RUST) += exports_core_generated.h
 obj-$(CONFIG_RUST) += helpers.o
 CFLAGS_REMOVE_helpers.o = -Wmissing-prototypes -Wmissing-declarations
 
+always-$(CONFIG_RUST) += libproc_macro2.rlib libquote.rlib libsyn.rlib
 always-$(CONFIG_RUST) += libmacros.so
 no-clean-files += libmacros.so
 
@@ -65,11 +66,60 @@ alloc-cfgs = \
     --cfg no_rc \
     --cfg no_sync
 
+proc_macro2-cfgs := \
+    --cfg 'feature="proc-macro"' \
+    --cfg wrap_proc_macro
+
+proc_macro2-skip_flags := \
+    -Drust_2018_idioms \
+    -Dunreachable_pub
+
+proc_macro2-flags := \
+    -Amissing_docs \
+    $(proc_macro2-cfgs)
+
+quote-cfgs := \
+    --cfg 'feature="proc-macro"'
+
+quote-skip_flags := \
+    --edition=2021 \
+    -Drust_2018_idioms
+
+quote-flags := \
+    --edition=2018 \
+    -Amissing_docs \
+    --extern proc_macro2 \
+    $(quote-cfgs)
+
+syn-cfgs := \
+    --cfg 'feature="clone-impls"' \
+    --cfg 'feature="derive"' \
+    --cfg 'feature="extra-traits"' \
+    --cfg 'feature="fold"' \
+    --cfg 'feature="full"' \
+    --cfg 'feature="parsing"' \
+    --cfg 'feature="printing"' \
+    --cfg 'feature="proc-macro"' \
+    --cfg 'feature="quote"' \
+    --cfg 'feature="visit"' \
+    --cfg 'feature="visit-mut"'
+
+syn-skip_flags := \
+    -Drust_2018_idioms \
+    -Dunreachable_pub
+
+syn-flags := \
+    -Amissing_docs \
+    --extern proc_macro2 \
+    --extern quote \
+    $(syn-cfgs)
+
 quiet_cmd_rustdoc = RUSTDOC $(if $(rustdoc_host),H, ) $<
       cmd_rustdoc = \
 	OBJTREE=$(abspath $(objtree)) \
 	$(RUSTDOC) $(if $(rustdoc_host),$(rust_common_flags),$(rust_flags)) \
 		$(rustc_target_flags) -L$(objtree)/$(obj) \
+		--extern proc_macro2 --extern quote --extern syn \
 		--output $(rustdoc_output) \
 		--crate-name $(subst rustdoc-,,$@) \
 		$(if $(rustdoc_host),,--sysroot=/dev/null) \
@@ -131,8 +181,9 @@ rustdoc-kernel: $(src)/kernel/lib.rs rustdoc-core rustdoc-macros \
 quiet_cmd_rustc_test_library = RUSTC TL $<
       cmd_rustc_test_library = \
 	OBJTREE=$(abspath $(objtree)) \
-	$(RUSTC) $(rust_common_flags) \
-		@$(objtree)/include/generated/rustc_cfg $(rustc_target_flags) \
+	$(RUSTC) \
+		$(filter-out $(skip_flags),$(rust_common_flags) $(rustc_target_flags)) \
+		@$(objtree)/include/generated/rustc_cfg \
 		--crate-type $(if $(rustc_test_library_proc),proc-macro,rlib) \
 		--out-dir $(objtree)/$(obj)/test --cfg testlib \
 		--sysroot $(objtree)/$(obj)/test/sysroot \
@@ -142,9 +193,25 @@ quiet_cmd_rustc_test_library = RUSTC TL $<
 rusttestlib-build_error: $(src)/build_error.rs rusttest-prepare FORCE
 	+$(call if_changed,rustc_test_library)
 
-rusttestlib-macros: private rustc_target_flags = --extern proc_macro
+rusttestlib-proc_macro2: private skip_flags = $(proc_macro2-skip_flags)
+rusttestlib-proc_macro2: private rustc_target_flags = $(proc_macro2-flags)
+rusttestlib-proc_macro2: $(src)/proc-macro2/lib.rs rusttest-prepare FORCE
+	+$(call if_changed,rustc_test_library)
+
+rusttestlib-quote: private skip_flags = $(quote-skip_flags)
+rusttestlib-quote: private rustc_target_flags = $(quote-flags)
+rusttestlib-quote: $(src)/quote/lib.rs rusttestlib-proc_macro2 FORCE
+	+$(call if_changed,rustc_test_library)
+
+rusttestlib-syn: private skip_flags = $(syn-skip_flags)
+rusttestlib-syn: private rustc_target_flags = $(syn-flags)
+rusttestlib-syn: $(src)/syn/lib.rs rusttestlib-quote FORCE
+	+$(call if_changed,rustc_test_library)
+
+rusttestlib-macros: private rustc_target_flags = --extern proc_macro \
+    --extern proc_macro2 --extern quote --extern syn
 rusttestlib-macros: private rustc_test_library_proc = yes
-rusttestlib-macros: $(src)/macros/lib.rs rusttest-prepare FORCE
+rusttestlib-macros: $(src)/macros/lib.rs rusttestlib-syn FORCE
 	+$(call if_changed,rustc_test_library)
 
 rusttestlib-bindings: $(src)/bindings/lib.rs rusttest-prepare FORCE
@@ -246,9 +313,10 @@ quiet_cmd_rustsysroot = RUSTSYSROOT
 rusttest-prepare: FORCE
 	+$(call if_changed,rustsysroot)
 
-rusttest-macros: private rustc_target_flags = --extern proc_macro
+rusttest-macros: private rustc_target_flags = --extern proc_macro \
+    --extern proc_macro2 --extern quote --extern syn
 rusttest-macros: private rustdoc_test_target_flags = --crate-type proc-macro
-rusttest-macros: $(src)/macros/lib.rs rusttest-prepare FORCE
+rusttest-macros: $(src)/macros/lib.rs rusttestlib-syn FORCE
 	+$(call if_changed,rustc_test)
 	+$(call if_changed,rustdoc_test)
 
@@ -374,19 +442,48 @@ $(obj)/exports_bindings_generated.h: $(obj)/bindings.o FORCE
 $(obj)/exports_kernel_generated.h: $(obj)/kernel.o FORCE
 	$(call if_changed,exports)
 
+quiet_cmd_rustc_hostlibrary = $(RUSTC_OR_CLIPPY_QUIET) H $@
+      cmd_rustc_hostlibrary = \
+	$(if $(skip_clippy),$(RUSTC),$(RUSTC_OR_CLIPPY)) \
+		$(filter-out $(skip_flags),$(KBUILD_HOSTRUSTFLAGS) $(rustc_target_flags)) \
+		-Clinker-flavor=gcc -Clinker=$(HOSTCC) \
+		-Clink-args='$(call escsq,$(KBUILD_HOSTLDFLAGS))' \
+		--emit=dep-info=$(depfile) --emit=link=$@ --crate-type rlib \
+		--out-dir $(objtree)/$(obj) -L$(objtree)/$(obj) \
+		--crate-name $(patsubst lib%.rlib,%,$(notdir $@)) $<
+
+$(obj)/libproc_macro2.rlib: private skip_clippy = 1
+$(obj)/libproc_macro2.rlib: private skip_flags = $(proc_macro2-skip_flags)
+$(obj)/libproc_macro2.rlib: private rustc_target_flags = $(proc_macro2-flags)
+$(obj)/libproc_macro2.rlib: $(src)/proc-macro2/lib.rs FORCE
+	+$(call if_changed_dep,rustc_hostlibrary)
+
+$(obj)/libquote.rlib: private skip_clippy = 1
+$(obj)/libquote.rlib: private skip_flags = $(quote-skip_flags)
+$(obj)/libquote.rlib: private rustc_target_flags = $(quote-flags)
+$(obj)/libquote.rlib: $(src)/quote/lib.rs $(obj)/libproc_macro2.rlib FORCE
+	+$(call if_changed_dep,rustc_hostlibrary)
+
+$(obj)/libsyn.rlib: private skip_clippy = 1
+$(obj)/libsyn.rlib: private skip_flags = $(syn-skip_flags)
+$(obj)/libsyn.rlib: private rustc_target_flags = $(syn-flags)
+$(obj)/libsyn.rlib: $(src)/syn/lib.rs $(obj)/libquote.rlib FORCE
+	+$(call if_changed_dep,rustc_hostlibrary)
+
 quiet_cmd_rustc_procmacro = $(RUSTC_OR_CLIPPY_QUIET) P $@
       cmd_rustc_procmacro = \
-	$(RUSTC_OR_CLIPPY) $(rust_common_flags) \
+	$(RUSTC_OR_CLIPPY) $(KBUILD_HOSTRUSTFLAGS) \
 		-Clinker-flavor=gcc -Clinker=$(HOSTCC) \
 		-Clink-args='$(call escsq,$(KBUILD_HOSTLDFLAGS))' \
 		--emit=dep-info=$(depfile) --emit=link=$@ --extern proc_macro \
+		--extern proc_macro2 --extern quote --extern syn \
 		--crate-type proc-macro \
-		--crate-name $(patsubst lib%.so,%,$(notdir $@)) $<
+		-L$(objtree)/$(obj) --crate-name $(patsubst lib%.so,%,$(notdir $@)) $<
 
 # Procedural macros can only be used with the `rustc` that compiled it.
 # Therefore, to get `libmacros.so` automatically recompiled when the compiler
 # version changes, we add `core.o` as a dependency (even if it is not needed).
-$(obj)/libmacros.so: $(src)/macros/lib.rs $(obj)/core.o FORCE
+$(obj)/libmacros.so: $(src)/macros/lib.rs $(obj)/libsyn.rlib $(obj)/core.o FORCE
 	+$(call if_changed_dep,rustc_procmacro)
 
 quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L $@
@@ -403,7 +500,11 @@ quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L 
 
 rust-analyzer:
 	$(Q)$(srctree)/scripts/generate_rust_analyzer.py \
-		--cfgs='core=$(core-cfgs)' --cfgs='alloc=$(alloc-cfgs)' \
+		--cfgs='core=$(call escsq,$(core-cfgs))' \
+		--cfgs='alloc=$(call escsq,$(alloc-cfgs))' \
+		--cfgs='proc_macro2=$(call escsq,$(proc_macro2-cfgs))' \
+		--cfgs='quote=$(call escsq,$(quote-cfgs))' \
+		--cfgs='syn=$(call escsq,$(syn-cfgs))' \
 		$(realpath $(srctree)) $(realpath $(objtree)) \
 		$(RUST_LIB_SRC) $(KBUILD_EXTMOD) > \
 		$(if $(KBUILD_EXTMOD),$(extmod_prefix),$(objtree))/rust-project.json

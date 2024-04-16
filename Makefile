@@ -845,6 +845,9 @@ KBUILD_CFLAGS += $(stackp-flags-y)
 KBUILD_RUSTFLAGS-$(CONFIG_WERROR) += -Dwarnings
 KBUILD_RUSTFLAGS += $(KBUILD_RUSTFLAGS-y)
 
+KBUILD_HOSTRUSTFLAGS-$(CONFIG_WERROR) += -Dwarnings
+KBUILD_HOSTRUSTFLAGS += $(KBUILD_HOSTRUSTFLAGS-y)
+
 ifdef CONFIG_FRAME_POINTER
 KBUILD_CFLAGS	+= -fno-omit-frame-pointer -fno-optimize-sibling-calls
 KBUILD_RUSTFLAGS += -Cforce-frame-pointers=y
@@ -1734,8 +1737,14 @@ PHONY += rustfmt rustfmtcheck
 rustfmt:
 	$(Q)find $(abs_srctree) -type f -name '*.rs' \
 		-o -path $(abs_srctree)/rust/alloc -prune \
+		-o -path $(abs_srctree)/rust/proc-macro2 -prune \
+		-o -path $(abs_srctree)/rust/quote -prune \
+		-o -path $(abs_srctree)/rust/syn -prune \
 		-o -path $(abs_objtree)/rust/test -prune \
 		| grep -Fv $(abs_srctree)/rust/alloc \
+		| grep -Fv $(abs_srctree)/rust/proc-macro2 \
+		| grep -Fv $(abs_srctree)/rust/quote \
+		| grep -Fv $(abs_srctree)/rust/syn \
 		| grep -Fv $(abs_objtree)/rust/test \
 		| grep -Fv generated \
 		| xargs $(RUSTFMT) $(rustfmt_flags)

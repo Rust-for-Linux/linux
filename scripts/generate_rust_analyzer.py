@@ -8,13 +8,14 @@ import json
 import logging
 import os
 import pathlib
+import shlex
 import sys
 
 def args_crates_cfgs(cfgs):
     crates_cfgs = {}
     for cfg in cfgs:
         crate, vals = cfg.split("=", 1)
-        crates_cfgs[crate] = vals.replace("--cfg", "").split()
+        crates_cfgs[crate] = shlex.split(vals.replace("--cfg", ""))
 
     return crates_cfgs
 
@@ -72,9 +73,30 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
     )
 
     append_crate(
+        "proc_macro2",
+        srctree / "rust" / "proc-macro2" / "lib.rs",
+        [],
+        cfg=crates_cfgs.get("proc_macro2", []),
+    )
+
+    append_crate(
+        "quote",
+        srctree / "rust" / "quote" / "lib.rs",
+        ["proc_macro2"],
+        cfg=crates_cfgs.get("quote", []),
+    )
+
+    append_crate(
+        "syn",
+        srctree / "rust" / "syn" / "lib.rs",
+        ["proc_macro2", "quote"],
+        cfg=crates_cfgs.get("syn", []),
+    )
+
+    append_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
-        [],
+        ["proc_macro2", "quote", "syn"],
         is_proc_macro=True,
     )
     crates[-1]["proc_macro_dylib_path"] = f"{objtree}/rust/libmacros.so"

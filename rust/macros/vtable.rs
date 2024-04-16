@@ -1,96 +1,67 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
+use proc_macro2::{Ident, TokenStream};
+use quote::quote;
 use std::collections::HashSet;
-use std::fmt::Write;
+use syn::{parse_quote, Error, ImplItem, Item, Result, TraitItem};
 
-pub(crate) fn vtable(_attr: TokenStream, ts: TokenStream) -> TokenStream {
-    let mut tokens: Vec<_> = ts.into_iter().collect();
-
-    // Scan for the `trait` or `impl` keyword.
-    let is_trait = tokens
-        .iter()
-        .find_map(|token| match token {
-            TokenTree::Ident(ident) => match ident.to_string().as_str() {
-                "trait" => Some(true),
-                "impl" => Some(false),
-                _ => None,
-            },
-            _ => None,
-        })
-        .expect("#[vtable] attribute should only be applied to trait or impl block");
-
-    // Retrieve the main body. The main body should be the last token tree.
-    let body = match tokens.pop() {
-        Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Brace => group,
-        _ => panic!("cannot locate main body of trait or impl block"),
-    };
-
-    let mut body_it = body.stream().into_iter();
-    let mut functions = Vec::new();
-    let mut consts = HashSet::new();
-    while let Some(token) = body_it.next() {
-        match token {
-            TokenTree::Ident(ident) if ident.to_string() == "fn" => {
-                let fn_name = match body_it.next() {
-                    Some(TokenTree::Ident(ident)) => ident.to_string(),
-                    // Possibly we've encountered a fn pointer type instead.
-                    _ => continue,
-                };
-                functions.push(fn_name);
+macro_rules! handle_item {
+    ($item_type:ident, $item:ident, $with_comment:literal) => {{
+        let mut functions = Vec::new();
+        let mut consts = HashSet::new();
+        for item in &$item.items {
+            match item {
+                $item_type::Fn(fn_) => functions.push(fn_.sig.ident.clone()),
+                $item_type::Const(const_) => {
+                    consts.insert(const_.ident.clone());
+                }
+                _ => {}
             }
-            TokenTree::Ident(ident) if ident.to_string() == "const" => {
-                let const_name = match body_it.next() {
-                    Some(TokenTree::Ident(ident)) => ident.to_string(),
-                    // Possibly we've encountered an inline const block instead.
-                    _ => continue,
-                };
-                consts.insert(const_name);
-            }
-            _ => (),
         }
-    }
-
-    let mut const_items;
-    if is_trait {
-        const_items = "
-                /// A marker to prevent implementors from forgetting to use [`#[vtable]`](vtable)
-                /// attribute when implementing this trait.
-                const USE_VTABLE_ATTR: ();
-        "
-        .to_owned();
-
-        for f in functions {
-            let gen_const_name = format!("HAS_{}", f.to_uppercase());
+        let item = if $with_comment {
+            parse_quote! {
+                /// A marker to prevent implementors from forgetting to use the [`#[vtable]`](vtable)
+                /// attribute macro when implementing this trait.
+                const USE_VTABLE_ATTR: () = ();
+            }
+        } else {
+            parse_quote!(const USE_VTABLE_ATTR: () = ();)
+        };
+        $item.items.push(item);
+        for func in functions {
+            let gen_const_name = Ident::new(
+                &format!("HAS_{}", func.to_string().to_uppercase()),
+                func.span(),
+            );
             // Skip if it's declared already -- this allows user override.
             if consts.contains(&gen_const_name) {
                 continue;
             }
             // We don't know on the implementation-site whether a method is required or provided
             // so we have to generate a const for all methods.
-            write!(
-                const_items,
-                "/// Indicates if the `{f}` method is overridden by the implementor.
-                const {gen_const_name}: bool = false;",
-            )
-            .unwrap();
+            let comment = format!("Indicates if the `{func}` method is overridden by the implementor.");
+            let item = if $with_comment {
+                parse_quote!(
+                    #[doc = #comment]
+                    const #gen_const_name: bool = false;
+                )
+            } else {
+                parse_quote!(const #gen_const_name: bool = false;)
+            };
+            $item.items.push(item);
             consts.insert(gen_const_name);
         }
-    } else {
-        const_items = "const USE_VTABLE_ATTR: () = ();".to_owned();
+        quote!(#$item)
+    }}
+}
 
-        for f in functions {
-            let gen_const_name = format!("HAS_{}", f.to_uppercase());
-            if consts.contains(&gen_const_name) {
-                continue;
-            }
-            write!(const_items, "const {gen_const_name}: bool = true;").unwrap();
-        }
+pub(crate) fn vtable(input: Item) -> Result<TokenStream> {
+    match input {
+        Item::Impl(mut impl_) => Ok(handle_item!(ImplItem, impl_, false)),
+        Item::Trait(mut trait_) => Ok(handle_item!(TraitItem, trait_, true)),
+        other => Err(Error::new_spanned(
+            other,
+            "`#[vtable]` expects a `trait` or `impl`.",
+        )),
     }
-
-    let new_body = vec![const_items.parse().unwrap(), body.stream()]
-        .into_iter()
-        .collect();
-    tokens.push(TokenTree::Group(Group::new(Delimiter::Brace, new_body)));
-    tokens.into_iter().collect()
 }

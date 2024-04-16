@@ -2,18 +2,18 @@
 
 //! Crate for all kernel procedural macros.
 
-#[macro_use]
-mod quote;
 mod concat_idents;
-mod helpers;
 mod module;
 mod paste;
 mod pin_data;
 mod pinned_drop;
+mod primitive_init;
 mod vtable;
 mod zeroable;
 
 use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
 
 /// Declares a kernel module.
 ///
@@ -75,8 +75,20 @@ use proc_macro::TokenStream;
 ///   - `license`: byte array of the license of the kernel module (required).
 ///   - `alias`: byte array of alias name of the kernel module.
 #[proc_macro]
-pub fn module(ts: TokenStream) -> TokenStream {
-    module::module(ts)
+pub fn module(input: TokenStream) -> TokenStream {
+    match syn::parse(input) {
+        Ok(input) => module::module(input),
+        Err(err) => {
+            let err = err.into_compile_error();
+            quote! {
+                // Supresses missing `__LOG_PREFIX` errors from printing macros.
+                const __LOG_PREFIX: &[u8] = b"";
+                // Due to this error, it will not compile, so an empty `__LOG_PREFIX` is fine.
+                #err
+            }
+        }
+    }
+    .into()
 }
 
 /// Declares or implements a vtable trait.
@@ -150,8 +162,11 @@ pub fn module(ts: TokenStream) -> TokenStream {
 ///
 /// [`kernel::error::VTABLE_DEFAULT_ERROR`]: ../kernel/error/constant.VTABLE_DEFAULT_ERROR.html
 #[proc_macro_attribute]
-pub fn vtable(attr: TokenStream, ts: TokenStream) -> TokenStream {
-    vtable::vtable(attr, ts)
+pub fn vtable(args: TokenStream, input: TokenStream) -> TokenStream {
+    parse_macro_input!(args as syn::parse::Nothing);
+    vtable::vtable(parse_macro_input!(input))
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
 }
 
 /// Concatenate two identifiers.
@@ -194,7 +209,7 @@ pub fn vtable(attr: TokenStream, ts: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn concat_idents(ts: TokenStream) -> TokenStream {
-    concat_idents::concat_idents(ts)
+    concat_idents::concat_idents(ts.into()).into()
 }
 
 /// Used to specify the pinning information of the fields of a struct.
@@ -242,8 +257,10 @@ pub fn concat_idents(ts: TokenStream) -> TokenStream {
 /// [`pin_init!`]: ../kernel/macro.pin_init.html
 //  ^ cannot use direct link, since `kernel` is not a dependency of `macros`.
 #[proc_macro_attribute]
-pub fn pin_data(inner: TokenStream, item: TokenStream) -> TokenStream {
-    pin_data::pin_data(inner, item)
+pub fn pin_data(args: TokenStream, input: TokenStream) -> TokenStream {
+    pin_data::pin_data(args.into(), parse_macro_input!(input))
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
 }
 
 /// Used to implement `PinnedDrop` safely.
@@ -270,7 +287,10 @@ pub fn pin_data(inner: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn pinned_drop(args: TokenStream, input: TokenStream) -> TokenStream {
-    pinned_drop::pinned_drop(args, input)
+    parse_macro_input!(args as syn::parse::Nothing);
+    pinned_drop::pinned_drop(parse_macro_input!(input))
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
 }
 
 /// Paste identifiers together.
@@ -382,9 +402,13 @@ pub fn pinned_drop(args: TokenStream, input: TokenStream) -> TokenStream {
 /// [`paste`]: https://docs.rs/paste/
 #[proc_macro]
 pub fn paste(input: TokenStream) -> TokenStream {
+    let input: proc_macro2::TokenStream = input.into();
     let mut tokens = input.into_iter().collect();
     paste::expand(&mut tokens);
-    tokens.into_iter().collect()
+    tokens
+        .into_iter()
+        .collect::<proc_macro2::TokenStream>()
+        .into()
 }
 
 /// Derives the [`Zeroable`] trait for the given struct.
@@ -403,5 +427,18 @@ pub fn paste(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_derive(Zeroable)]
 pub fn derive_zeroable(input: TokenStream) -> TokenStream {
-    zeroable::derive(input)
+    let raw_input = input.clone().into();
+    zeroable::derive(parse_macro_input!(input), raw_input)
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
+}
+
+/// Universal in-place initialization macro.
+///
+/// Please use `[try_][pin_]init!` instead. This macro implements their behavior in a general way.
+#[proc_macro]
+pub fn primitive_init(input: TokenStream) -> TokenStream {
+    primitive_init::primitive_init(parse_macro_input!(input))
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
 }

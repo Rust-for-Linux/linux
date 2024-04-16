@@ -229,8 +229,6 @@ use core::{
 
 #[doc(hidden)]
 pub mod __internal;
-#[doc(hidden)]
-pub mod macros;
 
 /// Initialize and pin a type directly on the stack.
 ///
@@ -558,16 +556,9 @@ macro_rules! pin_init {
     ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
         $($fields:tt)*
     }) => {
-        $crate::__init_internal!(
-            @this($($this)?),
-            @typ($t $(::<$($generics),*>)?),
-            @fields($($fields)*),
-            @error(::core::convert::Infallible),
-            @data(PinData, use_data),
-            @has_data(HasPinData, __pin_data),
-            @construct_closure(pin_init_from_closure),
-            @munch_fields($($fields)*),
-        )
+        $crate::macros::primitive_init!($(&$this in)? pin $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? ::core::convert::Infallible)
     };
 }
 
@@ -615,30 +606,16 @@ macro_rules! try_pin_init {
     ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
         $($fields:tt)*
     }) => {
-        $crate::__init_internal!(
-            @this($($this)?),
-            @typ($t $(::<$($generics),*>)? ),
-            @fields($($fields)*),
-            @error($crate::error::Error),
-            @data(PinData, use_data),
-            @has_data(HasPinData, __pin_data),
-            @construct_closure(pin_init_from_closure),
-            @munch_fields($($fields)*),
-        )
+        $crate::macros::primitive_init!($(&$this in)? pin $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $crate::error::Error)
     };
     ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
         $($fields:tt)*
     }? $err:ty) => {
-        $crate::__init_internal!(
-            @this($($this)?),
-            @typ($t $(::<$($generics),*>)? ),
-            @fields($($fields)*),
-            @error($err),
-            @data(PinData, use_data),
-            @has_data(HasPinData, __pin_data),
-            @construct_closure(pin_init_from_closure),
-            @munch_fields($($fields)*),
-        )
+        $crate::macros::primitive_init!($(&$this in)? pin $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $err)
     };
 }
 
@@ -664,16 +641,9 @@ macro_rules! init {
     ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
         $($fields:tt)*
     }) => {
-        $crate::__init_internal!(
-            @this($($this)?),
-            @typ($t $(::<$($generics),*>)?),
-            @fields($($fields)*),
-            @error(::core::convert::Infallible),
-            @data(InitData, /*no use_data*/),
-            @has_data(HasInitData, __init_data),
-            @construct_closure(init_from_closure),
-            @munch_fields($($fields)*),
-        )
+        $crate::macros::primitive_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? ::core::convert::Infallible)
     }
 }
 
@@ -715,30 +685,16 @@ macro_rules! try_init {
     ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
         $($fields:tt)*
     }) => {
-        $crate::__init_internal!(
-            @this($($this)?),
-            @typ($t $(::<$($generics),*>)?),
-            @fields($($fields)*),
-            @error($crate::error::Error),
-            @data(InitData, /*no use_data*/),
-            @has_data(HasInitData, __init_data),
-            @construct_closure(init_from_closure),
-            @munch_fields($($fields)*),
-        )
+        $crate::macros::primitive_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $crate::error::Error)
     };
     ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
         $($fields:tt)*
     }? $err:ty) => {
-        $crate::__init_internal!(
-            @this($($this)?),
-            @typ($t $(::<$($generics),*>)?),
-            @fields($($fields)*),
-            @error($err),
-            @data(InitData, /*no use_data*/),
-            @has_data(HasInitData, __init_data),
-            @construct_closure(init_from_closure),
-            @munch_fields($($fields)*),
-        )
+        $crate::macros::primitive_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $err)
     };
 }
 
