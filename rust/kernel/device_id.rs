@@ -37,11 +37,20 @@ pub unsafe trait RawDeviceId {
     const ZERO: Self::RawType;
 }
 
+/// A zero-terminated device id array.
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct IdArrayIds<T: RawDeviceId, const N: usize> {
+    ids: [T::RawType; N],
+    sentinel: T::RawType,
+}
+
+unsafe impl<T: RawDeviceId, const N: usize> Sync for IdArrayIds<T, N> {}
+
 /// A zero-terminated device id array, followed by context data.
 #[repr(C)]
 pub struct IdArray<T: RawDeviceId, U, const N: usize> {
-    ids: [T::RawType; N],
-    sentinel: T::RawType,
+    ids: IdArrayIds<T, N>,
     id_infos: [Option<U>; N],
 }
 
@@ -53,9 +62,22 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
     /// This is used to essentially erase the array size.
     pub const fn as_table(&self) -> IdTable<'_, T, U> {
         IdTable {
-            first: &self.ids[0],
+            first: &self.ids.ids[0],
             _p: PhantomData,
         }
+    }
+
+    /// Returns the number of items in the ID table.
+    pub const fn count(&self) -> usize {
+        self.ids.ids.len()
+    }
+
+    /// Returns the inner IdArray array, without the context data.
+    pub const fn as_ids(&self) -> IdArrayIds<T, N>
+    where
+        T: RawDeviceId + Copy,
+    {
+        self.ids
     }
 
     /// Creates a new instance of the array.
@@ -68,8 +90,10 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
         T::RawType: Copy + Clone,
     {
         Self {
-            ids: raw_ids,
-            sentinel: T::ZERO,
+            ids: IdArrayIds {
+                ids: raw_ids,
+                sentinel: T::ZERO,
+            },
             id_infos: infos,
         }
     }
@@ -87,7 +111,7 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
         // so the pointers are necessarily 1-byte aligned.
         let ret = unsafe {
             (&array.id_infos[idx] as *const _ as *const u8)
-                .offset_from(&array.ids[idx] as *const _ as _)
+                .offset_from(&array.ids.ids[idx] as *const _ as _)
         };
         core::mem::forget(array);
         ret
@@ -276,6 +300,11 @@ macro_rules! second_item {
 /// define_id_array!(A6, Id, &'static [u8], [(Id(10), None), (Id(20), Some(b"id2")), ]);
 /// define_id_array!(A7, Id, &'static [u8], [(Id(10), Some(b"id1")), (Id(20), None), ]);
 /// define_id_array!(A8, Id, &'static [u8], [(Id(10), None), (Id(20), None), ]);
+///
+/// // Within a bus driver:
+/// driver_id_table!(BUS_ID_TABLE, Id, &'static [u8], A1);
+/// // At the top level:
+/// module_id_table!(MODULE_ID_TABLE, "mybus", Id, A1);
 /// ```
 #[macro_export]
 macro_rules! define_id_array {
@@ -290,7 +319,7 @@ macro_rules! define_id_array {
     };
 }
 
-/// Defines a new constant [`IdTable`] with a concise syntax.
+/// Declares an [`IdArray`] as an [`IdTable`] for a bus driver with a concise syntax.
 ///
 /// It is meant to be used by buses and subsystems to create a similar macro with their device id
 /// type already specified, i.e., with fewer parameters to the end user.
@@ -326,11 +355,32 @@ macro_rules! define_id_array {
 /// define_id_table!(T7, Id, &'static [u8], [(Id(10), None), (Id(20), None), ]);
 /// ```
 #[macro_export]
-macro_rules! define_id_table {
-    ($table_name:ident, $id_type:ty, $data_type:ty, [ $($t:tt)* ]) => {
-        const $table_name: Option<$crate::device_id::IdTable<'static, $id_type, $data_type>> = {
-            $crate::define_id_array!(ARRAY, $id_type, $data_type, [ $($t)* ]);
-            Some(ARRAY.as_table())
-        };
+macro_rules! driver_id_table {
+    ($table_name:ident, $id_type:ty, $data_type:ty, $target:expr) => {
+        const $table_name: Option<$crate::device_id::IdTable<'static, $id_type, $data_type>> =
+            Some($target.as_table());
+    };
+}
+
+/// Declares an [`IdArray`] as a module-level ID tablewith a concise syntax.
+///
+/// It is meant to be used by buses and subsystems to create a similar macro with their device id
+/// type already specified, i.e., with fewer parameters to the end user.
+///
+/// # Examples
+///
+// TODO: Exported but not usable by kernel modules (requires `const_trait_impl`).
+/// ```ignore
+/// #![feature(const_trait_impl)]
+/// # use kernel::{driver_id_table};
+
+/// driver_id_table!(BUS_ID_TABLE, Id, &'static [u8], MY_ID_ARRAY);
+/// ```
+#[macro_export]
+macro_rules! module_id_table {
+    ($item_name:ident, $table_type:literal, $id_type:ty, $table_name:ident) => {
+        #[export_name = concat!("__mod_", $table_type, "__", stringify!($table_name), "_device_table")]
+        static $item_name: $crate::device_id::IdArrayIds<$id_type, { $table_name.count() }> =
+            $table_name.as_ids();
     };
 }
