@@ -31,6 +31,7 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include <linux/spi/spi.h>
 
 __noreturn void rust_helper_BUG(void)
 {
@@ -156,6 +157,13 @@ void rust_helper_init_work_with_key(struct work_struct *work, work_func_t func,
 	work->func = func;
 }
 EXPORT_SYMBOL_GPL(rust_helper_init_work_with_key);
+
+void rust_helper_spi_message_init(struct spi_message *m)
+{
+	memset(m, 0, sizeof *m);
+	spi_message_init_no_memset(m);
+}
+EXPORT_SYMBOL_GPL(rust_helper_spi_message_init);
 
 /*
  * `bindgen` binds the C `size_t` type as the Rust `usize` type, so we can

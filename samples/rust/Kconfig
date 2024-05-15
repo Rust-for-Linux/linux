@@ -37,4 +37,14 @@ config SAMPLE_RUST_HOSTPROGS
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_SPI_DUMMY
+	tristate "SPI dummy"
+	help
+	  This option builds the Rust SPI dummy sample.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_spi_dummy.
+
+	  If unsure, say N.
+
 endif # SAMPLES_RUST
