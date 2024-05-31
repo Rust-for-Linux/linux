@@ -38,6 +38,7 @@ pub mod net;
 pub mod prelude;
 pub mod print;
 mod static_assert;
+pub mod static_call;
 #[doc(hidden)]
 pub mod std_vendor;
 pub mod str;
