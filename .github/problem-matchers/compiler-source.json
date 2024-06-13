@@ -1,0 +1,19 @@
+{
+    "problemMatcher": [
+        {
+            "__comment_owner": "match compiler warning/error lines associated with specific source file",
+            "owner": "compiler-source",
+            "pattern": [
+                {
+                    "__comment_regexp1": "/builds/linux/arch/x86/include/asm/checksum_32.h:149:6: error: inline assembly requires more registers than available",
+                    "regexp": "^(?:/builds/)?(?:linux/)?(.*):(\\d+):(\\d+):\\s+(?:fatal\\s+)?(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            ]
+        }
+    ]
+}

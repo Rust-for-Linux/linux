@@ -1,0 +1,17 @@
+{
+    "problemMatcher": [
+        {
+            "__comment_owner": "match generic tool warnings/errors",
+            "owner": "generic",
+            "pattern": [
+                {
+                    "__comment_regexp1": "depmod: ERROR: Cycle detected: crypto -> crypto_algapi -> crypto",
+                    "__comment_regexp2": "depmod: ERROR: Found 2 modules in dependency cycles!",
+                    "regexp": "(^[^:]+:\\s+([^:]+):\\s+.*)$",
+                    "message": 1,
+                    "severity": 2
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "problemMatcher": [
+        {
+            "__comment_owner": "match Linux kernel Oopses",
+            "owner": "linux-kernel-oopses",
+            "__comment_severity": "don't fail the whole run if we see Oopses",
+            "severity": "warning",
+            "pattern": [
+                {
+                    "__comment_regexp1": "[   22.269632] Call Trace:",
+                    "__comment_regexp1_note": "Intentionally not matching start of line in case systemd output has started",
+                    "regexp": "\\[[^\\]]+\\] (Call Trace):$",
+                    "message": 1
+                }
+            ]
+        }
+    ]
+}
