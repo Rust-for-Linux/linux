@@ -325,8 +325,10 @@ impl ModuleParam for bool {
     fn try_from_param_arg(arg: Option<&'static [u8]>) -> Option<Self> {
         match arg {
             None => Some(true),
-            Some(b"y") | Some(b"Y") | Some(b"1") | Some(b"true") => Some(true),
-            Some(b"n") | Some(b"N") | Some(b"0") | Some(b"false") => Some(false),
+            Some([b'y' | b'Y' | b'1' | b't' | b'T', ..]) => Some(true),
+            Some([b'n' | b'N' | b'0' | b'f' | b'F', ..]) => Some(false),
+            Some([b'o' | b'O', b'n' | b'N', ..]) => Some(true),
+            Some([b'o' | b'O', b'f' | b'F', ..]) => Some(false),
             _ => None,
         }
     }
