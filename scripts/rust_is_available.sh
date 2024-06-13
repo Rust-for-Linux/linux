@@ -21,6 +21,12 @@ get_canonical_version()
 	echo $((100000 * $1 + 100 * $2 + $3))
 }
 
+show_documentation_on_exit() {
+  echo >&2 "*** Please refer to Documentation/rust/quick-start.rst"
+  echo >&2 "***"
+  exit 1
+}
+
 # Check that the Rust compiler exists.
 if ! command -v "$RUSTC" >/dev/null; then
 	if [ "$1" = -v ]; then
@@ -28,7 +34,7 @@ if ! command -v "$RUSTC" >/dev/null; then
 		echo >&2 "*** Rust compiler '$RUSTC' could not be found."
 		echo >&2 "***"
 	fi
-	exit 1
+	show_documentation_on_exit
 fi
 
 # Check that the Rust bindings generator exists.
@@ -38,7 +44,7 @@ if ! command -v "$BINDGEN" >/dev/null; then
 		echo >&2 "*** Rust bindings generator '$BINDGEN' could not be found."
 		echo >&2 "***"
 	fi
-	exit 1
+	show_documentation_on_exit
 fi
 
 # Check that the Rust compiler version is suitable.
@@ -60,7 +66,7 @@ if [ "$rust_compiler_cversion" -lt "$rust_compiler_min_cversion" ]; then
 		echo >&2 "***   Minimum version: $rust_compiler_min_version"
 		echo >&2 "***"
 	fi
-	exit 1
+	show_documentation_on_exit
 fi
 if [ "$1" = -v ] && [ "$rust_compiler_cversion" -gt "$rust_compiler_min_cversion" ]; then
 	echo >&2 "***"
@@ -89,7 +95,7 @@ if [ "$rust_bindings_generator_cversion" -lt "$rust_bindings_generator_min_cvers
 		echo >&2 "***   Minimum version: $rust_bindings_generator_min_version"
 		echo >&2 "***"
 	fi
-	exit 1
+	show_documentation_on_exit
 fi
 if [ "$1" = -v ] && [ "$rust_bindings_generator_cversion" -gt "$rust_bindings_generator_min_cversion" ]; then
 	echo >&2 "***"
@@ -117,7 +123,7 @@ if [ "$bindgen_libclang_cversion" -lt "$bindgen_libclang_min_cversion" ]; then
 		echo >&2 "***   Minimum version: $bindgen_libclang_min_version"
 		echo >&2 "***"
 	fi
-	exit 1
+	show_documentation_on_exit
 fi
 
 # If the C compiler is Clang, then we can also check whether its version
@@ -156,5 +162,5 @@ if [ ! -e "$rustc_src_core" ]; then
 		echo >&2 "*** at '$rustc_src_core'."
 		echo >&2 "***"
 	fi
-	exit 1
+	show_documentation_on_exit
 fi
