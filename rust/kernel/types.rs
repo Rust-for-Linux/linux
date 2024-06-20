@@ -161,6 +161,44 @@ impl<T> ForeignOwnable for *mut T {
     }
 }
 
+/// Implements [`PointerWrapper`] for `{i,u}{8,16,32,64,size}`.
+macro_rules! primitive_pointer_wrapper {
+    ($t:ty) => {
+        impl PointerWrapper for $t {
+            // Pointers that carry values for primitives should not be
+            // borrowed, therefore makes `borrow` always return a
+            // reference to `()`.
+            type Borrowed = UnsafeReference<()>;
+
+            fn into_pointer(self) -> *const c_types::c_void {
+                self as usize as *mut _
+            }
+
+            unsafe fn borrow(_ptr: *const c_types::c_void) -> Self::Borrowed {
+                // SAFETY: `()` always remains valid and immutable.
+                unsafe { UnsafeReference::new(&()) }
+            }
+
+            unsafe fn from_pointer(ptr: *const c_types::c_void) -> $t {
+                ptr as usize as $t
+            }
+        }
+    };
+}
+primitive_pointer_wrapper! {i8}
+primitive_pointer_wrapper! {i16}
+primitive_pointer_wrapper! {i32}
+primitive_pointer_wrapper! {isize}
+primitive_pointer_wrapper! {u8}
+primitive_pointer_wrapper! {u16}
+primitive_pointer_wrapper! {u32}
+primitive_pointer_wrapper! {usize}
+
+#[cfg(target_pointer_width = "64")]
+primitive_pointer_wrapper! {i64}
+#[cfg(target_pointer_width = "64")]
+primitive_pointer_wrapper! {u64}
+
 /// Runs a cleanup function/closure when dropped.
 ///
 /// The [`ScopeGuard::dismiss`] function prevents the cleanup function from running.
