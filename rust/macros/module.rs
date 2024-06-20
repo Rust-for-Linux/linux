@@ -126,20 +126,24 @@ fn permissions_are_readonly(perms: &str) -> bool {
 }
 
 fn param_ops_path(param_type: &str) -> &'static str {
+    try_param_ops_path(param_type).unwrap_or_else(|| panic!("Unrecognized type {}", param_type))
+}
+
+fn try_param_ops_path(param_type: &str) -> Option<&'static str> {
     match param_type {
-        "bool" => "kernel::module_param::PARAM_OPS_BOOL",
-        "i8" => "kernel::module_param::PARAM_OPS_I8",
-        "u8" => "kernel::module_param::PARAM_OPS_U8",
-        "i16" => "kernel::module_param::PARAM_OPS_I16",
-        "u16" => "kernel::module_param::PARAM_OPS_U16",
-        "i32" => "kernel::module_param::PARAM_OPS_I32",
-        "u32" => "kernel::module_param::PARAM_OPS_U32",
-        "i64" => "kernel::module_param::PARAM_OPS_I64",
-        "u64" => "kernel::module_param::PARAM_OPS_U64",
-        "isize" => "kernel::module_param::PARAM_OPS_ISIZE",
-        "usize" => "kernel::module_param::PARAM_OPS_USIZE",
-        "str" => "kernel::module_param::PARAM_OPS_STR",
-        t => panic!("Unrecognized type {}", t),
+        "bool" => Some("kernel::module_param::PARAM_OPS_BOOL"),
+        "i8" => Some("kernel::module_param::PARAM_OPS_I8"),
+        "u8" => Some("kernel::module_param::PARAM_OPS_U8"),
+        "i16" => Some("kernel::module_param::PARAM_OPS_I16"),
+        "u16" => Some("kernel::module_param::PARAM_OPS_U16"),
+        "i32" => Some("kernel::module_param::PARAM_OPS_I32"),
+        "u32" => Some("kernel::module_param::PARAM_OPS_U32"),
+        "i64" => Some("kernel::module_param::PARAM_OPS_I64"),
+        "u64" => Some("kernel::module_param::PARAM_OPS_U64"),
+        "isize" => Some("kernel::module_param::PARAM_OPS_ISIZE"),
+        "usize" => Some("kernel::module_param::PARAM_OPS_USIZE"),
+        "str" => Some("kernel::module_param::PARAM_OPS_STR"),
+        _ => None,
     }
 }
 
@@ -340,6 +344,18 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
 
             assert_eq!(expect_punct(&mut it), ':');
             let param_type = expect_type(&mut it);
+            if let (false, ident) = match param_type {
+                ParamType::Ident(ref param_type) => {
+                    (try_param_ops_path(param_type) != None, param_type)
+                }
+                ParamType::Array {
+                    ref vals,
+                    max_length: _,
+                } => (true, vals),
+            } {
+                panic!("Unrecognized type {:?}", ident);
+            }
+
             let group = expect_group(&mut it);
             assert_eq!(expect_punct(&mut it), ',');
 
