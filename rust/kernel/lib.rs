@@ -75,6 +75,7 @@ pub mod security;
 pub mod task;
 pub mod workqueue;
 
+pub mod align;
 pub mod linked_list;
 mod raw_list;
 pub mod rbtree;
