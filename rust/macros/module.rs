@@ -226,17 +226,17 @@ impl ModuleInfo {
     fn parse(it: &mut token_stream::IntoIter) -> Self {
         let mut info = ModuleInfo::default();
 
-        const EXPECTED_KEYS: &[&str] = &[
-            "type",
-            "name",
-            "author",
-            "description",
-            "license",
-            "alias",
-            "alias_rtnl_link",
-            "params",
+        const ALL_KEYS: &[(bool, &str)] = &[
+            //required: bool,   key: &str
+            (true, "type"),
+            (true, "name"),
+            (false, "author"),
+            (false, "description"),
+            (true, "license"),
+            (false, "alias"),
+            (false, "alias_rtnl_link"),
+            (false, "params"),
         ];
-        const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
         let mut seen_keys = Vec::new();
 
         loop {
@@ -267,8 +267,9 @@ impl ModuleInfo {
                 }
                 "params" => info.params = Some(expect_group(it)),
                 _ => panic!(
-                    "Unknown key \"{}\". Valid keys are: {:?}.",
-                    key, EXPECTED_KEYS
+                    "Unknown key \"{}\". Valid keys are: \"{}\".",
+                    key,
+                    ALL_KEYS.iter().map(|e| e.1).collect::<Vec<_>>().join(", ")
                 ),
             }
 
@@ -279,16 +280,15 @@ impl ModuleInfo {
 
         expect_end(it);
 
-        for key in REQUIRED_KEYS {
-            if !seen_keys.iter().any(|e| e == key) {
-                panic!("Missing required key \"{}\".", key);
-            }
-        }
-
         let mut ordered_keys: Vec<&str> = Vec::new();
-        for key in EXPECTED_KEYS {
-            if seen_keys.iter().any(|e| e == key) {
-                ordered_keys.push(key);
+        for key in ALL_KEYS {
+            let has_key = seen_keys.iter().any(|e| e == key.1);
+            if key.0 && !has_key {
+                panic!("Missing required key \"{}\".", key.1);
+            }
+
+            if has_key {
+                ordered_keys.push(&key.1);
             }
         }
 
