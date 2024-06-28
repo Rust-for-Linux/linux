@@ -12,6 +12,7 @@ endif
 KASAN_SHADOW_OFFSET ?= $(CONFIG_KASAN_SHADOW_OFFSET)
 
 cc-param = $(call cc-option, -mllvm -$(1), $(call cc-option, --param $(1)))
+rustc-param = $(call rustc-option, -Cllvm-args=-$(1),)
 
 ifdef CONFIG_KASAN_STACK
 	stack_enable := 1
@@ -28,6 +29,7 @@ else
 endif
 
 CFLAGS_KASAN_MINIMAL := -fsanitize=kernel-address
+RUSTFLAGS_KASAN_MINIMAL := -Zsanitizer=kernel-address -Zsanitizer-recover=kernel-address
 
 # -fasan-shadow-offset fails without -fsanitize
 CFLAGS_KASAN_SHADOW := $(call cc-option, -fsanitize=kernel-address \
@@ -36,13 +38,36 @@ CFLAGS_KASAN_SHADOW := $(call cc-option, -fsanitize=kernel-address \
 			-mllvm -asan-mapping-offset=$(KASAN_SHADOW_OFFSET)))
 
 ifeq ($(strip $(CFLAGS_KASAN_SHADOW)),)
+	KASAN_SHADOW_SUPPORTED := n
+else
+	KASAN_SHADOW_SUPPORTED := y
+endif
+
+ifdef CONFIG_RUST
+	RUSTFLAGS_KASAN_SHADOW := $(call rustc-option $(RUSTFLAGS_KASAN_MINIMAL) \
+				  -Cllvm-args=-asan-mapping-offset=$(KASAN_SHADOW_OFFSET))
+	ifeq ($(strip $(RUSTFLAGS_KASAN_SHADOW)),)
+		KASAN_SHADOW_SUPPORTED := n
+	endif
+endif
+
+ifeq ($(KASAN_SHADOW_SUPPORTED),y)
 	CFLAGS_KASAN := $(CFLAGS_KASAN_MINIMAL)
+	ifdef CONFIG_RUST
+		RUSTFLAGS_KASAN := $(RUSTFLAGS_KASAN_MINIMAL)
+	endif
 else
 	# Now add all the compiler specific options that are valid standalone
 	CFLAGS_KASAN := $(CFLAGS_KASAN_SHADOW) \
 	 $(call cc-param,asan-globals=1) \
 	 $(call cc-param,asan-instrumentation-with-call-threshold=$(call_threshold)) \
 	 $(call cc-param,asan-instrument-allocas=1)
+	ifdef CONFIG_RUST
+		RUSTFLAGS_KASAN := $(RUSTFLAGS_KASAN_SHADOW) \
+		 $(call rustc-param,asan-globals=1) \
+		 $(call rustc-param,asan-instrumentation-with-call-threshold=$(call_threshold)) \
+		 $(call rustc-param,asan-instrument-allocas=1)
+	endif
 endif
 
 CFLAGS_KASAN += $(call cc-param,asan-stack=$(stack_enable))
@@ -51,6 +76,11 @@ CFLAGS_KASAN += $(call cc-param,asan-stack=$(stack_enable))
 # instead. With compilers that don't support this option, compiler-inserted
 # memintrinsics won't be checked by KASAN on GENERIC_ENTRY architectures.
 CFLAGS_KASAN += $(call cc-param,asan-kernel-mem-intrinsic-prefix=1)
+
+ifdef CONFIG_RUST
+	RUSTFLAGS_KASAN += $(call rustc-param,asan-stack=$(stack_enable))
+	RUSTFLAGS_KASAN += $(call rustc-param,asan-kernel-mem-intrinsic-prefix=1)
+endif
 
 endif # CONFIG_KASAN_GENERIC
 
@@ -73,6 +103,20 @@ ifeq ($(call clang-min-version, 150000)$(call gcc-min-version, 130000),y)
 CFLAGS_KASAN += $(call cc-param,hwasan-kernel-mem-intrinsic-prefix=1)
 endif
 
+ifdef CONFIG_RUST
+	ifdef CONFIG_KASAN_INLINE
+		rust_instrumentation_flags := $(call rustc-param,hwasan-mapping-offset=$(KASAN_SHADOW_OFFSET))
+	else
+		rust_instrumentation_flags := $(call rustc-param,hwasan-instrument-with-calls=1)
+	endif
+	RUSTFLAGS_KASAN := -Zsanitizer=kernel-hwaddress -Zsanitizer-recover=kernel-hwaddress \
+			   $(call rustc-param,hwasan-instrument-stack=$(stack_enable)) \
+			   $(call rustc-param,hwasan-use-short-granules=0) \
+			   $(call rustc-param,hwasan-inline-all-checks=0) \
+			   $(call rustc-param,hwasan-kernel-mem-intrinsic-prefix=1) \
+			   $(instrumentation_flags)
+endif
+
 endif # CONFIG_KASAN_SW_TAGS
 
-export CFLAGS_KASAN CFLAGS_KASAN_NOSANITIZE
+export CFLAGS_KASAN CFLAGS_KASAN_NOSANITIZE RUSTFLAGS_KASAN
