@@ -66,6 +66,7 @@ pub mod irq;
 pub mod kasync;
 pub mod miscdev;
 pub mod mm;
+pub mod tty;
 #[cfg(CONFIG_NET)]
 pub mod net;
 pub mod pages;

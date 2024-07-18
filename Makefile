@@ -629,6 +629,7 @@ scripts_basic:
 	$(Q)$(MAKE) $(build)=scripts/basic
 
 PHONY += outputmakefile
+
 ifdef building_out_of_srctree
 # Before starting out-of-tree build, make sure the source tree is clean.
 # outputmakefile generates a Makefile in the output directory, if using a
@@ -1356,6 +1357,11 @@ PHONY += headerdep
 headerdep:
 	$(Q)find $(srctree)/include/ -name '*.h' | xargs --max-args 1 \
 	$(srctree)/scripts/headerdep.pl -I$(srctree)/include
+	
+	
+PHONY += rustvm
+rustvm:
+	$(Q) make && qemu-system-x86_64 -nographic -kernel vmlinux -initrd initrd.img
 
 # ---------------------------------------------------------------------------
 # Kernel headers

@@ -155,6 +155,13 @@ config SAMPLE_RUST_HOSTPROGS
 	  This option builds the Rust host program samples.
 
 	  If unsure, say N.
+	  
+config SAMPLE_RUST_TTY
+	tristate "rust tty0tty module"
+	help
+	  This option builds the Rust tty0tty samples.
+
+	  If unsure, say N.
 
 config SAMPLE_RUST_SELFTESTS
 	tristate "Self tests"

@@ -37,6 +37,16 @@
 #include <linux/uaccess.h>
 #include <linux/uio.h>
 
+//below is for tty0tty
+#include <linux/tty.h>
+#include <linux/tty_driver.h>
+#include <linux/tty_flip.h>
+#include <linux/termbits.h>
+#include <linux/serial.h>
+#include <linux/semaphore.h>
+#include <linux/sched.h>
+#include <asm/uaccess.h>
+
 /* `bindgen` gets confused at certain things. */
 const gfp_t BINDINGS_GFP_KERNEL = GFP_KERNEL;
 const gfp_t BINDINGS___GFP_ZERO = __GFP_ZERO;
