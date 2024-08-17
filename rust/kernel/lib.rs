@@ -44,12 +44,15 @@ pub mod page;
 pub mod prelude;
 pub mod print;
 mod static_assert;
+pub mod static_call;
+pub mod static_key;
 #[doc(hidden)]
 pub mod std_vendor;
 pub mod str;
 pub mod sync;
 pub mod task;
 pub mod time;
+pub mod tracepoint;
 pub mod types;
 pub mod uaccess;
 pub mod workqueue;

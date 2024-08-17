@@ -49,3 +49,18 @@ mod bindings_helper {
 }
 
 pub use bindings_raw::*;
+
+/// Rust version of the C macro `rcu_dereference_raw`.
+///
+/// The rust helper only works with void pointers, but this wrapper method makes it work with any
+/// pointer type using pointer casts.
+///
+/// # Safety
+///
+/// This method has the same safety requirements as the C macro of the same name.
+#[inline(always)]
+pub unsafe fn rcu_dereference_raw<T>(p: *const *mut T) -> *mut T {
+    // SAFETY: This helper calls into the C macro, so the caller promises to uphold the safety
+    // requirements.
+    unsafe { __rcu_dereference_raw(p as *mut *mut _) as *mut T }
+}
