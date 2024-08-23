@@ -396,6 +396,38 @@ impl<T: AlwaysRefCounted> ARef<T> {
             _p: PhantomData,
         }
     }
+
+    /// Deconstructs a [`ARef`] object into a raw pointer.
+    ///
+    /// It can be reconstructed once via [`ARef::from_raw`].
+    ///
+    /// Note: This function does not decrement the reference count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::ptr::NonNull;
+    /// use kernel::AlwaysRefCounted;
+    ///
+    /// struct Empty {}
+    ///
+    /// unsafe impl AlwaysRefCounted for Empty {
+    ///     fn inc_ref(&self) {}
+    ///     unsafe fn dec_ref(_obj: NonNull<Self>) {}
+    /// }
+    ///
+    /// let mut data = Empty {};
+    /// let ptr = NonNull::<Empty>::new(&mut data as *mut _).unwrap();
+    /// let data_ref: ARef<Empty> = unsafe { ARef::from_raw(ptr) };
+    /// let raw_ptr: *mut Empty = ARef::into_raw(data_ref);
+    ///
+    /// assert_eq!(ptr.as_ptr(), raw_ptr);
+    /// ```
+    pub fn into_raw(obj: Self) -> *mut T {
+        let ptr = obj.ptr.as_ptr();
+        core::mem::forget(obj);
+        ptr
+    }
 }
 
 impl<T: AlwaysRefCounted> Clone for ARef<T> {
