@@ -3901,12 +3901,11 @@ sub process {
 		}
 
 # check that document section headers are plural in rust files
-        if (   $realfile =~ /\.rs$/
-            && $rawline =~ /^\+\s*\/\/\/\s+#+\s+(Example|Invariant)\s*$/ )
-        {
-            WARN( "RUST_DOC_HEADER",
-                "Rust doc headers should be plural\n" . $herecurr );
-        }
+		if ($realfile =~ /\.rs$/
+			&& $rawline =~ /^\+\s*\/\/\/\s+#+\s+(Example|Invariant|Guarantee|Panic)\s*$/) {
+			WARN( "RUST_DOC_HEADER",
+				"Rust doc headers should be plural\n" . $herecurr );
+		}
 
 # check we are in a valid source file C or perl if not then ignore this hunk
 		next if ($realfile !~ /\.(h|c|pl|dtsi|dts)$/);
