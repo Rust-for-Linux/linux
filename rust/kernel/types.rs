@@ -460,6 +460,118 @@ impl<T: AlwaysRefCounted> Drop for ARef<T> {
     }
 }
 
+/// Define a Rust wrapper for a C struct that is always reference counted.
+///
+/// This will implement [`AlwaysRefCounted`] for the generated Rust wrapper.
+/// Additionally it makes sure that [`UnsafeCell`] is used to avoid UB and
+/// adds relevant documentation.
+///
+/// # Safety
+///
+/// Callers must ensure that all instances of the C type are reference-counted.
+/// (Otherwise this macro won't be able to honour the requirement that
+/// [`AlwaysRefCounted::inc_ref`] keep the object alive.)
+///
+/// Callers must also ensure that the correct get and put functions for the C
+/// type are passed in.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// unsafe_define_aref_type! {
+///     pub struct Credential(cred);
+///     get = get_cred;
+///     put = put_cred;
+/// }
+/// ```
+///
+/// will define the following wrapper type and `AlwaysRefCounted` implementation
+///
+/// ```rust,ignore
+/// /// Wraps the kernel's `struct cred`.
+/// ///
+/// /// # Invariants
+/// ///
+/// /// Instances of this type are always ref-counted, that is, a call to `get_cred` ensures that the
+/// /// allocation remains valid at least until the matching call to `put_cred`.
+/// #[repr(transparent)]
+/// pub struct Credential(pub(crate) UnsafeCell<bindings::cred>);
+///
+/// impl Credential {
+///     /// Creates a reference to a [`Credential`] from a valid pointer.
+///     ///
+///     /// # Safety
+///     ///
+///     /// The caller must ensure that `ptr` is valid and remains valid for the lifetime of the
+///     /// returned [`Credential`] reference.
+///     pub(crate) unsafe fn from_ptr<'a>(ptr: *const bindings::cred) -> &'a Self {
+///         // SAFETY: The safety requirements guarantee the validity of the dereference, while the
+///         // `Credential` type being transparent makes the cast ok.
+///         unsafe { &*ptr.cast() }
+///     }
+/// }
+///
+/// // SAFETY: The type invariants guarantee that `Credential` is always ref-counted.
+/// unsafe impl AlwaysRefCounted for Credential {
+///     fn inc_ref(&self) {
+///         // SAFETY: The existence of a shared reference means that the refcount is nonzero.
+///         unsafe { bindings::get_cred(self.0.get()) };
+///     }
+///
+///     unsafe fn dec_ref(obj: core::ptr::NonNull<Self>) {
+///         // SAFETY: The safety requirements guarantee that the refcount is nonzero.
+///         unsafe { bindings::put_cred(obj.cast().as_ptr()) };
+///     }
+/// }
+/// ```
+macro_rules! unsafe_define_aref_type {
+    {
+        $(#[$attr:meta])*
+        $vis:vis struct $rust_ty:ident($cty:ident);
+        get = $get_fn:ident;
+        put = $put_fn:ident;
+    } => {
+        #[doc = concat!("Wraps the kernel's `struct ", stringify!($cty), "`.")]
+        ///
+        /// # Invariants
+        ///
+        #[doc = concat!("Instances of this type are always ref-counted, that is, a call to `", stringify!($get_fn), "` ensures that the")]
+        #[doc = concat!("allocation remains valid at least until the matching call to `", stringify!($put_fn), "`.")]
+        $(#[$attr])*
+        #[repr(transparent)]
+        $vis struct $rust_ty(pub(crate) core::cell::UnsafeCell<$crate::bindings::$cty>);
+
+        impl $rust_ty {
+            #[doc = concat!("Creates a reference to a [`", stringify!($rust_ty), "`] from a valid pointer.")]
+            ///
+            /// # Safety
+            ///
+            /// The caller must ensure that `ptr` is valid and remains valid for the lifetime of the
+            #[doc = concat!("returned [`", stringify!($rust_ty), "`] reference.")]
+            #[allow(dead_code)]
+            pub(crate) unsafe fn from_ptr<'a>(ptr: *const $crate::bindings::$cty) -> &'a Self {
+                // SAFETY: The safety requirements guarantee the validity of the dereference, while
+                // the `$rust_ty` type being transparent makes the cast ok.
+                unsafe { &*ptr.cast() }
+            }
+        }
+
+        // SAFETY: The type invariants guarantee that `$rust_ty` is always ref-counted.
+        unsafe impl $crate::types::AlwaysRefCounted for $rust_ty {
+            fn inc_ref(&self) {
+                // SAFETY: The existence of a shared reference means that the refcount is nonzero.
+                unsafe { $crate::bindings::$get_fn(self.0.get()) };
+            }
+
+            unsafe fn dec_ref(obj: core::ptr::NonNull<Self>) {
+                // SAFETY: The safety requirements guarantee that the refcount is nonzero.
+                unsafe { $crate::bindings::$put_fn(obj.cast::<$crate::bindings::$cty>().as_ptr()) };
+            }
+        }
+    }
+}
+pub(crate) use unsafe_define_aref_type;
+
 /// A sum type that always holds either a value of type `L` or `R`.
 pub enum Either<L, R> {
     /// Constructs an instance of [`Either`] containing a value of type `L`.
