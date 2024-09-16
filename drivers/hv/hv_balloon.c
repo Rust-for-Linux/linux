@@ -1366,7 +1366,7 @@ static void balloon_down(struct hv_dynmem_device *dm,
 	dm->state = DM_INITIALIZED;
 }
 
-static void balloon_onchannelcallback(void *context);
+static void balloon_onchannelcallback(void *context, struct vmbus_channel *chan);
 
 static int dm_thread_func(void *dm_dev)
 {
@@ -1468,7 +1468,7 @@ static void cap_resp(struct hv_dynmem_device *dm,
 	complete(&dm->host_event);
 }
 
-static void balloon_onchannelcallback(void *context)
+static void balloon_onchannelcallback(void *context, struct vmbus_channel *chan)
 {
 	struct hv_device *dev = context;
 	u32 recvlen;
@@ -1723,7 +1723,7 @@ static int balloon_connect_vsp(struct hv_device *dev)
 	 */
 	dev->channel->max_pkt_size = HV_HYP_PAGE_SIZE * 2;
 
-	ret = vmbus_open(dev->channel, dm_ring_size, dm_ring_size, NULL, 0,
+	ret = vmbus_open_channel(dev->channel, dm_ring_size, dm_ring_size, NULL, 0,
 			 balloon_onchannelcallback, dev);
 	if (ret)
 		return ret;
