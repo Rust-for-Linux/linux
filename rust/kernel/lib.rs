@@ -13,6 +13,7 @@
 
 #![no_std]
 #![feature(arbitrary_self_types)]
+#![feature(associated_type_defaults)]
 #![feature(coerce_unsized)]
 #![feature(const_refs_to_cell)]
 #![feature(dispatch_from_dyn)]
