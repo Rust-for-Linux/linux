@@ -17,6 +17,7 @@
 #include "kunit.c"
 #include "mutex.c"
 #include "page.c"
+#include "pci.c"
 #include "rbtree.c"
 #include "rcu.c"
 #include "refcount.c"
