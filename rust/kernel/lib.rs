@@ -14,10 +14,16 @@
 #![no_std]
 #![feature(arbitrary_self_types)]
 #![feature(coerce_unsized)]
+#![feature(const_refs_to_cell)]
 #![feature(dispatch_from_dyn)]
 #![feature(inline_const)]
 #![feature(lint_reasons)]
 #![feature(unsize)]
+#![allow(stable_features)]
+// Stable in Rust 1.83
+#![feature(const_mut_refs)]
+#![feature(const_ptr_write)]
+#![feature(const_maybe_uninit_as_mut_ptr)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
@@ -32,6 +38,7 @@ pub mod alloc;
 pub mod block;
 mod build_assert;
 pub mod device;
+pub mod device_id;
 pub mod driver;
 pub mod error;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
