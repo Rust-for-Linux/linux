@@ -333,8 +333,10 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
                     ///
                     /// This function must only be called once.
                     unsafe fn __init() -> core::ffi::c_int {{
-                        let initer =
-                            <{type_} as kernel::InPlaceModule>::init(&super::super::THIS_MODULE);
+                        let initer = <{type_} as kernel::InPlaceModule>::init(
+                            kernel::c_str!(\"{name}\"),
+                            &super::super::THIS_MODULE
+                        );
                         // SAFETY: No data race, since `__MOD` can only be accessed by this module
                         // and there only `__init` and `__exit` access it. These functions are only
                         // called once and `__exit` cannot be called before or during `__init`.
