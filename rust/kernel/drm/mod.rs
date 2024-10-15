@@ -2,4 +2,5 @@
 
 //! DRM subsystem abstractions.
 
+pub mod drv;
 pub mod ioctl;
