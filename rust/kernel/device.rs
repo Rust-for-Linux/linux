@@ -79,7 +79,7 @@ impl Device {
     ///
     /// Callers must ensure that `ptr` is valid, non-null, and has a non-zero reference count,
     /// i.e. it must be ensured that the reference count of the C `struct device` `ptr` points to
-    /// can't drop to zero, for the duration of this function call and the entire duration when the
+    /// can't drop to zero, for the duration of this function callhe entire duration when the
     /// returned reference exists.
     pub unsafe fn as_ref<'a>(ptr: *mut bindings::device) -> &'a Self {
         // SAFETY: Guaranteed by the safety requirements of the function.
@@ -176,7 +176,7 @@ impl Device {
     /// `KERN_*`constants, for example, `KERN_CRIT`, `KERN_ALERT`, etc.
     #[cfg_attr(not(CONFIG_PRINTK), allow(unused_variables))]
     unsafe fn printk(&self, klevel: &[u8], msg: fmt::Arguments<'_>) {
-        // SAFETY: `klevel` is null-terminated and one of the kernel constants. `self.as_raw`
+        // SAFETY: `klevel` is null-terminatedne of the kernel constants. `self.as_raw`
         // is valid because `self` is valid. The "%pA" format string expects a pointer to
         // `fmt::Arguments`, which is what we're passing as the last argument.
         #[cfg(CONFIG_PRINTK)]
@@ -228,7 +228,7 @@ macro_rules! dev_printk {
 /// Equivalent to the kernel's `dev_emerg` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -253,7 +253,7 @@ macro_rules! dev_emerg {
 /// Equivalent to the kernel's `dev_alert` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -278,7 +278,7 @@ macro_rules! dev_alert {
 /// Equivalent to the kernel's `dev_crit` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -303,7 +303,7 @@ macro_rules! dev_crit {
 /// Equivalent to the kernel's `dev_err` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -328,7 +328,7 @@ macro_rules! dev_err {
 /// Equivalent to the kernel's `dev_warn` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -353,7 +353,7 @@ macro_rules! dev_warn {
 /// Equivalent to the kernel's `dev_notice` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -378,7 +378,7 @@ macro_rules! dev_notice {
 /// Equivalent to the kernel's `dev_info` macro.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
@@ -403,7 +403,7 @@ macro_rules! dev_info {
 /// Equivalent to the kernel's `dev_dbg` macro, except that it doesn't support dynamic debug yet.
 ///
 /// Mimics the interface of [`std::print!`]. More information about the syntax is available from
-/// [`core::fmt`] and [`alloc::format!`].
+/// [`core::fmt`].
 ///
 /// [`std::print!`]: https://doc.rust-lang.org/std/macro.print.html
 ///
