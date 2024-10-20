@@ -40,11 +40,25 @@ pub unsafe trait RawDeviceId {
     const DRIVER_DATA_OFFSET: usize;
 }
 
+/// A zero-terminated device id array.
+#[repr(C)]
+pub struct RawIdArray<T: RawDeviceId, const N: usize> {
+    ids: [T::RawType; N],
+    sentinel: MaybeUninit<T::RawType>,
+}
+
+impl<T: RawDeviceId, const N: usize> RawIdArray<T, N> {
+    #[doc(hidden)]
+    pub const fn len(&self) -> usize {
+        (N + 1) * core::mem::size_of::<T>()
+    }
+}
+
 /// A zero-terminated device id array, followed by context data.
 #[repr(C)]
 pub struct IdArray<T: RawDeviceId, U, const N: usize> {
-    ids: [T::RawType; N],
-    sentinel: MaybeUninit<T::RawType>,
+    #[doc(hidden)]
+    pub raw_ids: RawIdArray<T, N>,
     id_infos: [U; N],
 }
 
@@ -83,8 +97,10 @@ impl<T: RawDeviceId, U, const N: usize> IdArray<T, U, N> {
             // SAFETY: this is effectively `array_assume_init`, which is unstable, so we use
             // `transmute_copy` instead. We have initialized all elements of `raw_ids` so this
             // `array_assume_init` is safe.
-            ids: unsafe { core::mem::transmute_copy(&raw_ids) },
-            sentinel: MaybeUninit::zeroed(),
+            raw_ids: RawIdArray {
+                ids: unsafe { core::mem::transmute_copy(&raw_ids) },
+                sentinel: MaybeUninit::zeroed(),
+            },
             // SAFETY: We have initialized all elements of `infos` so this `array_assume_init` is
             // safe.
             id_infos: unsafe { core::mem::transmute_copy(&infos) },
@@ -117,10 +133,20 @@ impl<T: RawDeviceId, U, const N: usize> IdTable<T, U> for IdArray<T, U, N> {
     }
 
     fn id(&self, index: usize) -> &T::RawType {
-        &self.ids[index]
+        &self.raw_ids.ids[index]
     }
 
     fn info(&self, index: usize) -> &U {
         &self.id_infos[index]
     }
+}
+
+/// Create device table alias for modpost.
+#[macro_export]
+macro_rules! module_device_table {
+    ($table_type: literal, $module_table_name:ident, $table_name:ident) => {
+        #[export_name = concat!("__mod_", $table_type, "__", stringify!($table_name), "_device_table")]
+        static $module_table_name: [u8; $table_name.raw_ids.len()] =
+            unsafe { core::mem::transmute_copy(&$table_name.raw_ids) };
+    };
 }
