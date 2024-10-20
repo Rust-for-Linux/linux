@@ -152,7 +152,7 @@ impl<T> Devres<T> {
         Ok(Devres(inner))
     }
 
-    /// Same as [Devres::new`], but does not return a `Devres` instance. Instead the given `data`
+    /// Same as [`Devres::new`], but does not return a `Devres` instance. Instead the given `data`
     /// is owned by devres and will be revoked / dropped, once the device is detached.
     pub fn new_foreign_owned(dev: &Device, data: T, flags: Flags) -> Result {
         let _ = DevresInner::new(dev, data, flags)?;
