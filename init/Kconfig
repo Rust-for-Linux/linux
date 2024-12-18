@@ -1978,6 +1978,9 @@ config RUST
 
 	  If unsure, say N.
 
+config RUST_COERCE_POINTEE
+	def_bool y if RUSTC_VERSION >= 108300
+
 config RUSTC_VERSION_TEXT
 	string
 	depends on RUST

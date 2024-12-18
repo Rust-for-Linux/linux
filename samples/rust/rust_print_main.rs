@@ -34,6 +34,21 @@ fn arc_print() -> Result {
     // Uses `dbg` to print, will move `c` (for temporary debugging purposes).
     dbg!(c);
 
+    {
+        use core::fmt::Display;
+        fn arc_dyn_print(arc: &Arc<dyn Display>) {
+            pr_info!("Arc<dyn Display> says {arc}");
+        }
+        // `Arc` can be used to delegate dynamic dispatch and the following is an example.
+        // Both `i32` and `&str` implements `Display`.
+        // This enables us to express a unified behaviour, contract or protocol
+        // on both `i32` and `&str` into a single `Arc` type `Arc<dyn Display>`.
+        let a_i32_display: Arc<dyn Display> = Arc::new(42i32, GFP_KERNEL)?;
+        let a_str_display: Arc<dyn Display> = a.clone();
+        arc_dyn_print(&a_i32_display);
+        arc_dyn_print(&a_str_display);
+    }
+
     // Pretty-prints the debug formatting with lower-case hexadecimal integers.
     pr_info!("{:#x?}", a);
 
