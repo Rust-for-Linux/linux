@@ -218,6 +218,7 @@ impl UserSliceReader {
     /// # Guarantees
     ///
     /// After a successful call to this method, all bytes in `out` are initialized.
+    #[inline]
     pub fn read_raw(&mut self, out: &mut [MaybeUninit<u8>]) -> Result {
         let len = out.len();
         let out_ptr = out.as_mut_ptr().cast::<c_void>();
@@ -239,6 +240,7 @@ impl UserSliceReader {
     ///
     /// Fails with [`EFAULT`] if the read happens on a bad address, or if the read goes out of
     /// bounds of this [`UserSliceReader`]. This call may modify `out` even if it returns an error.
+    #[inline]
     pub fn read_slice(&mut self, out: &mut [u8]) -> Result {
         // SAFETY: The types are compatible and `read_raw` doesn't write uninitialized bytes to
         // `out`.
