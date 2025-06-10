@@ -901,12 +901,16 @@ pub trait Driver {
 #[repr(transparent)]
 pub struct Registration<T: Driver>(KBox<UnsafeCell<bindings::cpufreq_driver>>, PhantomData<T>);
 
-/// SAFETY: `Registration` doesn't offer any methods or access to fields when shared between threads
+/// # Safety
+///
+/// `Registration` doesn't offer any methods or access to fields when shared between threads
 /// or CPUs, so it is safe to share it.
 unsafe impl<T: Driver> Sync for Registration<T> {}
 
 #[allow(clippy::non_send_fields_in_send_ty)]
-/// SAFETY: Registration with and unregistration from the cpufreq subsystem can happen from any
+/// # Safety
+///
+/// Registration with and unregistration from the cpufreq subsystem can happen from any
 /// thread.
 unsafe impl<T: Driver> Send for Registration<T> {}
 
@@ -1055,7 +1059,9 @@ impl<T: Driver> Registration<T> {
 impl<T: Driver> Registration<T> {
     /// Driver's `init` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn init_callback(ptr: *mut bindings::cpufreq_policy) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1070,7 +1076,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `exit` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn exit_callback(ptr: *mut bindings::cpufreq_policy) {
         // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
         // lifetime of `policy`.
@@ -1082,7 +1090,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `online` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn online_callback(ptr: *mut bindings::cpufreq_policy) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1094,7 +1104,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `offline` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn offline_callback(ptr: *mut bindings::cpufreq_policy) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1106,7 +1118,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `suspend` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn suspend_callback(ptr: *mut bindings::cpufreq_policy) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1118,7 +1132,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `resume` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn resume_callback(ptr: *mut bindings::cpufreq_policy) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1130,7 +1146,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `ready` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn ready_callback(ptr: *mut bindings::cpufreq_policy) {
         // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
         // lifetime of `policy`.
@@ -1140,7 +1158,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `verify` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn verify_callback(ptr: *mut bindings::cpufreq_policy_data) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1152,7 +1172,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `setpolicy` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn setpolicy_callback(ptr: *mut bindings::cpufreq_policy) -> kernel::ffi::c_int {
         from_result(|| {
             // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
@@ -1164,7 +1186,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `target` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn target_callback(
         ptr: *mut bindings::cpufreq_policy,
         target_freq: u32,
@@ -1180,7 +1204,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `target_index` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn target_index_callback(
         ptr: *mut bindings::cpufreq_policy,
         index: u32,
@@ -1200,7 +1226,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `fast_switch` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn fast_switch_callback(
         ptr: *mut bindings::cpufreq_policy,
         target_freq: u32,
@@ -1225,7 +1253,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `get_intermediate` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn get_intermediate_callback(
         ptr: *mut bindings::cpufreq_policy,
         index: u32,
@@ -1243,7 +1273,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `target_intermediate` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn target_intermediate_callback(
         ptr: *mut bindings::cpufreq_policy,
         index: u32,
@@ -1276,7 +1308,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `bios_limit` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn bios_limit_callback(cpu: i32, limit: *mut u32) -> kernel::ffi::c_int {
         from_result(|| {
             let mut policy = PolicyCpu::from_cpu(cpu as u32)?;
@@ -1288,7 +1322,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `set_boost` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn set_boost_callback(
         ptr: *mut bindings::cpufreq_policy,
         state: i32,
@@ -1303,7 +1339,9 @@ impl<T: Driver> Registration<T> {
 
     /// Driver's `register_em` callback.
     ///
-    /// SAFETY: Called from C. Inputs must be valid pointers.
+    /// # Safety
+    ///
+    /// Called from C. Inputs must be valid pointers.
     extern "C" fn register_em_callback(ptr: *mut bindings::cpufreq_policy) {
         // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
         // lifetime of `policy`.
