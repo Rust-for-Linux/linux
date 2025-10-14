@@ -28,6 +28,8 @@
 *.gcda
 *.gz
 *.i
+*.klint
+*.klint-journal
 *.ko
 *.lex.c
 *.ll
