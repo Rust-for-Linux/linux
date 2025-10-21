@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config RUSTLFS
+	tristate "RustLFS filesystem support"
+	depends on RUST
+	help
+	  This is a log-structured filesystem written in Rust.
+
+	  To compile this as a module, choose M here: the module
+	  will be called rustlfs.
+
+	  If unsure, say N.
