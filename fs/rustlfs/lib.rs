@@ -2,6 +2,7 @@
 
 //! Log-based filesystem written in Rust
 
+mod inode;
 use kernel::{c_str, fs, module_fs, prelude::*};
 
 module_fs! {
