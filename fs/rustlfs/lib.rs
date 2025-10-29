@@ -2,9 +2,9 @@
 
 //! Log-based filesystem written in Rust
 
-use kernel::prelude::*;
+use kernel::{c_str, fs, module_fs, prelude::*};
 
-module! {
+module_fs! {
     type: RustLFS,
     name: "rustlfs",
     authors: ["ls4121@columbia.edu", "kfb2117@columbia.edu"],
@@ -14,15 +14,6 @@ module! {
 
 struct RustLFS;
 
-impl kernel::Module for RustLFS {
-    fn init(_module: &'static ThisModule) -> Result<Self> {
-        pr_info!("RustLFS loaded\n");
-        Ok(RustLFS)
-    }
-}
-
-impl Drop for RustLFS {
-    fn drop(&mut self) {
-        pr_info!("RustLFS unloaded\n")
-    }
+impl fs::Type for RustLFS {
+    const NAME: &'static CStr = c_str!("rustlfs");
 }
