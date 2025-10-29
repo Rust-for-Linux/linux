@@ -61,6 +61,16 @@ impl Registration {
             return Err(EINVAL);
         }
 
+        let mut fs = this.fs.get_mut();
+        fs.owner = module.0;
+        fs.name = T::NAME.as_char_ptr();
+
+        let ptr = this.fs.get();
+        
+        // SAFETY: Pointers stored in `fs` are either static so will live for as long as the
+        // registration is active (it is undone in `drop`).
+        to_result(unsafe { bindings::register_filesystem(ptr) })?;
+
         this.is_registered = true;
         Ok(())
     }
@@ -81,7 +91,7 @@ impl Drop for Registration {
 
             // SAFETY: When `is_registered` is `true`, a previous call to `register_filesystem` has
             // succeeded, so it is safe to unregister here.
-            // unsafe { bindings::unregister_filesystem(self.fs.get()) };
+            unsafe { bindings::unregister_filesystem(self.fs.get()) };
         }
     }
 }
