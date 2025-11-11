@@ -11,6 +11,7 @@ pub(crate) struct EzfsSuperblockDiskRaw {
 }
 
 // TODO: assert size is equal to 4096 bytes
+// in-memory representation of sb
 #[repr(C)]
 pub(crate) struct EzfsSuperblockDisk {
     data: EzfsSuperblockDiskRaw,
@@ -18,7 +19,6 @@ pub(crate) struct EzfsSuperblockDisk {
 }
 
 // TODO: pin data because of mutexes
-// in-memory representation of sb
 pub(crate) struct EzfsSuperblock {
     magic: u64,
     disk_blocks: u64,
