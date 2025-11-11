@@ -2,8 +2,11 @@
 
 //! Log-based filesystem written in Rust
 
+mod defs;
+mod dir;
 mod inode;
-use kernel::{c_str, fs, module_fs, prelude::*};
+mod sb;
+use kernel::{c_str, fs, module_fs, prelude::*, str::CStr};
 
 module_fs! {
     type: RustLFS,
