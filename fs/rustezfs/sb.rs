@@ -26,3 +26,9 @@ pub(crate) struct EzfsSuperblock {
     free_data_blocks: Mutex<[u32; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
     zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
 }
+
+impl EzfsSuperblock {
+    // fn fill_super() {}
+
+    // fn init_root() {}
+}
