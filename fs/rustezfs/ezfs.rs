@@ -6,11 +6,13 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
-use kernel::dentry::Root;
+use defs::*;
+use kernel::dentry;
 use kernel::fs::{FileSystem, Registration};
-use kernel::inode::{INode, INodeState, Mapper};
+use kernel::inode::{INode, INodeState, Mapper, Params, Type};
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock};
+use kernel::time::UNIX_EPOCH;
 use kernel::types::ARef;
 use kernel::{c_str, fs, str::CStr};
 
@@ -37,25 +39,41 @@ impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
 
 impl RustEzFs {
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
-        let mut new = match sb.get_or_create_inode(ino)? {
+        let mut inode = match sb.get_or_create_inode(ino)? {
             INodeState::Existing(inode) => return Ok(inode),
             INodeState::Uninitilized(new_inode) => new_inode,
         };
-        todo!()
+
+        inode.init(Params {
+            typ: Type::Dir,
+            mode: 0o755,
+            size: 0,
+            blocks: 0,
+            nlink: 2,
+            uid: 0,
+            gid: 0,
+            ctime: UNIX_EPOCH,
+            mtime: UNIX_EPOCH,
+            atime: UNIX_EPOCH,
+            value: (),
+        })
     }
 }
 
 impl FileSystem for RustEzFs {
-    type Data = KBox<Self>;
+    // type Data = KBox<Self>;
+    type Data = ();
     type INodeData = ();
     const NAME: &'static CStr = c_str!("rustezfs");
 
     fn fill_super(sb: &mut SuperBlock<Self, New>, _: Option<Mapper<Self>>) -> Result<Self::Data> {
-        todo!()
+        sb.set_magic(EZFS_MAGIC_NUMBER);
+        Ok(())
     }
 
-    fn init_root(_: &SuperBlock<Self>) -> Result<Root<Self>> {
-        todo!()
+    fn init_root(sb: &SuperBlock<Self>) -> Result<dentry::Root<Self>> {
+        let inode = Self::iget(sb, EZFS_ROOT_INODE_NUMBER)?;
+        dentry::Root::try_new(inode)
     }
 }
 
