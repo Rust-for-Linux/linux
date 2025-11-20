@@ -6,8 +6,12 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
+use kernel::dentry::Root;
 use kernel::fs::{FileSystem, Registration};
+use kernel::inode::{INode, INodeState, Mapper};
 use kernel::prelude::*;
+use kernel::sb::{New, SuperBlock};
+use kernel::types::ARef;
 use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
@@ -31,8 +35,28 @@ impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
     }
 }
 
+impl RustEzFs {
+    fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
+        let mut new = match sb.get_or_create_inode(ino)? {
+            INodeState::Existing(inode) => return Ok(inode),
+            INodeState::Uninitilized(new_inode) => new_inode,
+        };
+        todo!()
+    }
+}
+
 impl FileSystem for RustEzFs {
+    type Data = KBox<Self>;
+    type INodeData = ();
     const NAME: &'static CStr = c_str!("rustezfs");
+
+    fn fill_super(sb: &mut SuperBlock<Self, New>, _: Option<Mapper<Self>>) -> Result<Self::Data> {
+        todo!()
+    }
+
+    fn init_root(_: &SuperBlock<Self>) -> Result<Root<Self>> {
+        todo!()
+    }
 }
 
 type FsModule = RustEzFsModule<RustEzFs>;

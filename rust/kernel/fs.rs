@@ -7,16 +7,21 @@
 use pin_init::{pin_data, pinned_drop, PinInit, PinnedDrop};
 
 use crate::{
-    bindings,
-    error::{to_result, Error},
+    bindings, dentry,
+    error::{from_result, to_result, Error, Result},
+    inode,
+    prelude::*,
+    sb::{self, SuperBlock},
     str::CStr,
     try_pin_init,
-    types::Opaque,
+    types::{ForeignOwnable, Opaque},
     ThisModule,
 };
 use core::{
     marker::{Send, Sync},
+    mem::ManuallyDrop,
     pin::Pin,
+    ptr,
 };
 
 pub mod file;
@@ -25,10 +30,40 @@ pub use self::file::{File, LocalFile};
 mod kiocb;
 pub use self::kiocb::Kiocb;
 
+/// The offset of a file in a file system.
+///
+/// This is C's `loff_t`.
+pub type Offset = i64;
+
+/// An index into the page cache.
+///
+/// This is C's `pgoff_t`.
+pub type PageOffset = usize;
+
 /// A file system type.
 pub trait FileSystem {
+    /// Data associated with each file system instance (super-block).
+    type Data: ForeignOwnable + Send + Sync;
+
+    /// Type of data associated with each inode.
+    type INodeData: Send + Sync;
+
     /// The name of the file system type.
     const NAME: &'static CStr;
+
+    /// Determines how superblocks for this file system type are keyed.
+    const SUPER_TYPE: sb::Type = sb::Type::Independent;
+
+    fn fill_super(
+        sb: &mut SuperBlock<Self, sb::New>,
+        mapper: Option<inode::Mapper<Self>>, //TODO: Default type parameter should be UnspecifiedFS
+    ) -> Result<Self::Data>;
+
+    /// Initialises and returns the root inode of the given superblock.
+    ///
+    /// This is called during initialisation of a superblock after [`FileSystem::fill_super`] has
+    /// completed successfully.
+    fn init_root(sb: &SuperBlock<Self>) -> Result<dentry::Root<Self>>;
 }
 
 /// A file system registration.
@@ -41,7 +76,7 @@ pub struct Registration {
 impl Registration {
     /// Creates a new file system registration.
     ///
-    /// It is not visible or accessible yet. A successful call to [`Registration::register`] needs
+    /// It is not visible or accessible yet. A successful call to [`Registration::new`] needs
     /// to be made before users can mount it.
     pub fn new<T: FileSystem + ?Sized>(module: &'static ThisModule) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
@@ -58,6 +93,34 @@ impl Registration {
                 to_result(unsafe { bindings::register_filesystem(fs_ptr) })
             }),
         })
+    }
+
+    unsafe extern "C" fn kill_sb_callback<T: FileSystem + ?Sized>(
+        sb_ptr: *mut bindings::super_block,
+    ) {
+        match T::SUPER_TYPE {
+            // SAFETY: In `get_tree_callback` we always call `get_tree_bdev` for
+            // `sb::Type::BlockDev`, so `kill_block_super` is the appropriate function to call
+            // for cleanup.
+            sb::Type::BlockDev => unsafe {
+                bindings::kill_block_super(sb_ptr);
+            },
+            // SAFETY: In `get_tree_callback` we always call `get_tree_nodev` for
+            // `sb::Type::Independent`, so `kill_anon_super` is the appropriate function to call
+            // for cleanup.
+            sb::Type::Independent => unsafe {
+                bindings::kill_anon_super(sb_ptr);
+            },
+        }
+
+        let ptr = unsafe { (*sb_ptr).s_fs_info };
+        if !ptr.is_null() {
+            // SAFETY: The only place where `s_fs_info` is assigned is `NewSuperBlock::init`, where
+            // it's initialised with the result of an `into_foreign` call. We checked above that
+            // `ptr` is non-null because it would be null if we never reached the point where we
+            // init the field.
+            unsafe { T::Data::from_foreign(ptr) };
+        }
     }
 }
 
@@ -77,4 +140,113 @@ impl PinnedDrop for Registration {
         // `unregister_filesystem` on the previously registered fs.
         unsafe { bindings::unregister_filesystem(self.fs.get()) };
     }
+}
+
+struct Tables<T: FileSystem + ?Sized>(T);
+impl<T: FileSystem + ?Sized> Tables<T> {
+    const CONTEXT: bindings::fs_context_operations = bindings::fs_context_operations {
+        free: None,
+        parse_param: None,
+        get_tree: Some(Self::get_tree_callback),
+        reconfigure: None,
+        parse_monolithic: None,
+        dup: None,
+    };
+
+    unsafe extern "C" fn get_tree_callback(fc: *mut bindings::fs_context) -> ffi::c_int {
+        match T::SUPER_TYPE {
+            sb::Type::BlockDev => unsafe {
+                bindings::get_tree_bdev(fc, Some(Self::fill_super_callback))
+            },
+            sb::Type::Independent => unsafe {
+                bindings::get_tree_nodev(fc, Some(Self::fill_super_callback))
+            },
+        }
+    }
+
+    unsafe extern "C" fn fill_super_callback(
+        sb_ptr: *mut bindings::super_block,
+        _fc: *mut bindings::fs_context,
+    ) -> ffi::c_int {
+        from_result(|| {
+            // SAFETY: The callback contract guarantees that `sb_ptr` is a unique pointer to a
+            // newly-created superblock.
+            let new_sb = unsafe { SuperBlock::from_raw_mut(sb_ptr) };
+
+            // SAFETY: The callback contract guarantees that `sb_ptr`, from which `new_sb` is
+            // derived, is valid for write.
+            let sb = unsafe { &mut *new_sb.0.get() };
+            sb.s_op = &Tables::<T>::SUPER_BLOCK;
+
+            let mapper = if matches!(T::SUPER_TYPE, sb::Type::BlockDev) {
+                // SAFETY: This is the only mapper created for this inode, so it is unique.
+                Some(unsafe { new_sb.bdev().inode().mapper() })
+            } else {
+                None
+            };
+
+            let data = T::fill_super(new_sb, mapper)?;
+
+            // N.B.: Even on failure, `kill_sb` is called and frees the data.
+            sb.s_fs_info = data.into_foreign();
+
+            // SAFETY: The callback contract guarantees that `sb_ptr` is a unique pointer to a
+            // newly-created (and initialised above) superblock. And we have just initialised
+            // `s_fs_info`.
+            let sb = unsafe { SuperBlock::from_raw(sb_ptr) };
+            let root = T::init_root(sb)?;
+
+            // Reject root inode if it belongs to a different superblock.
+            if !ptr::eq(root.super_block(), sb) {
+                return Err(EINVAL);
+            }
+
+            let dentry = ManuallyDrop::new(root).0.get();
+
+            // SAFETY: The callback contract guarantees that `sb_ptr` is a unique pointer to a
+            // newly-created (and initialised above) superblock.
+            unsafe { (*sb_ptr).s_root = dentry };
+
+            Ok(0)
+        })
+    }
+
+    const SUPER_BLOCK: bindings::super_operations = bindings::super_operations {
+        alloc_inode: None,
+        // alloc_inode: if size_of::<T::INodeData>() != 0 {
+        //     Some(INode::<T>::alloc_inode_callback)
+        // } else {
+        //     None
+        // },
+        // destroy_inode: Some(INode::<T>::destroy_inode_callback),
+        destroy_inode: None,
+        free_inode: None,
+        dirty_inode: None,
+        write_inode: None,
+        drop_inode: None,
+        evict_inode: None,
+        put_super: None,
+        sync_fs: None,
+        freeze_super: None,
+        freeze_fs: None,
+        thaw_super: None,
+        unfreeze_fs: None,
+        statfs: None,
+        remount_fs: None,
+        remove_bdev: None, // TODO: New field, research
+        umount_begin: None,
+        show_options: None,
+        show_devname: None,
+        show_path: None,
+        show_stats: None,
+        #[cfg(CONFIG_QUOTA)]
+        quota_read: None,
+        #[cfg(CONFIG_QUOTA)]
+        quota_write: None,
+        #[cfg(CONFIG_QUOTA)]
+        get_dquots: None,
+        nr_cached_objects: None,
+        free_cached_objects: None,
+        shutdown: None,
+    };
 }
