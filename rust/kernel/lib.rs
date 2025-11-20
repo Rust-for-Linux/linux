@@ -118,6 +118,7 @@ pub mod pci;
 pub mod pid_namespace;
 pub mod platform;
 pub mod prelude;
+pub mod phys_addr;
 pub mod print;
 pub mod processor;
 pub mod ptr;

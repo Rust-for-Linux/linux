@@ -235,12 +235,12 @@ impl<const SIZE: usize> IoMem<SIZE> {
             // SAFETY:
             // - `res_start` and `size` are read from a presumably valid `struct resource`.
             // - `size` is known not to be zero at this point.
-            unsafe { bindings::ioremap_np(res_start, size) }
+            unsafe { bindings::ioremap_np(res_start.as_raw(), size) }
         } else {
             // SAFETY:
             // - `res_start` and `size` are read from a presumably valid `struct resource`.
             // - `size` is known not to be zero at this point.
-            unsafe { bindings::ioremap(res_start, size) }
+            unsafe { bindings::ioremap(res_start.as_raw(), size) }
         };
 
         if addr.is_null() {

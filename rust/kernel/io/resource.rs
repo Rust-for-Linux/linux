@@ -11,8 +11,11 @@ use core::ptr::NonNull;
 use crate::prelude::*;
 use crate::str::{CStr, CString};
 use crate::types::Opaque;
+use crate::phys_addr::PhysAddr;
 
-pub use super::ResourceSize;
+pub use super::{
+    ResourceSize, //
+};
 
 /// A region allocated from a parent [`Resource`].
 ///
@@ -51,7 +54,7 @@ impl Drop for Region {
         };
 
         // SAFETY: Safe as per the invariant of `Region`.
-        unsafe { release_fn(start, size) };
+        unsafe { release_fn(start.as_raw(), size) };
     }
 }
 
@@ -93,7 +96,7 @@ impl Resource {
     /// the region, or a part of it, is already in use.
     pub fn request_region(
         &self,
-        start: ResourceSize,
+        start: PhysAddr,
         size: ResourceSize,
         name: CString,
         flags: Flags,
@@ -106,7 +109,7 @@ impl Resource {
         let region = unsafe {
             bindings::__request_region(
                 self.0.get(),
-                start,
+                start.as_raw(),
                 size,
                 name.as_char_ptr(),
                 flags.0 as c_int,
@@ -127,10 +130,10 @@ impl Resource {
     }
 
     /// Returns the start address of the resource.
-    pub fn start(&self) -> ResourceSize {
+    pub fn start(&self) -> PhysAddr {
         let inner = self.0.get();
         // SAFETY: Safe as per the invariants of `Resource`.
-        unsafe { (*inner).start }
+        unsafe { PhysAddr((*inner).start) }
     }
 
     /// Returns the name of the resource.
