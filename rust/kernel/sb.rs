@@ -85,6 +85,16 @@ impl<T: FileSystem + ?Sized, S> SuperBlock<T, S> {
     }
 }
 
+impl<T: FileSystem + ?Sized> SuperBlock<T, New> {
+    /// Sets the magic number of the superblock.
+    pub fn set_magic(&mut self, magic: usize) -> &mut Self {
+        // SAFETY: This is a new superblock that is being initialised, so it's ok to write to its
+        // fields.
+        unsafe { (*self.0.get()).s_magic = magic };
+        self
+    }
+}
+
 impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
     /// Tries to get an existing inode or create a new one if it doesn't exist yet.
     ///
