@@ -87,11 +87,27 @@ impl Registration {
                 let fs = unsafe { &mut *fs_ptr };
                 fs.owner = module.0;
                 fs.name = T::NAME.as_char_ptr();
+                fs.init_fs_context = Some(Self::init_fs_context_callback::<T>);
+                fs.kill_sb = Some(Self::kill_sb_callback::<T>);
+                fs.fs_flags = if let sb::Type::BlockDev = T::SUPER_TYPE {
+                    bindings::FS_REQUIRES_DEV as i32
+                } else { 0 };
 
                 // SAFETY: Pointers stored in `fs` are static so will live for as long as the
                 // registration is active (it is undone in `drop`).
                 to_result(unsafe { bindings::register_filesystem(fs_ptr) })
             }),
+        })
+    }
+
+    unsafe extern "C" fn init_fs_context_callback<T: FileSystem + ?Sized>(
+        fc_ptr: *mut bindings::fs_context,
+    ) -> ffi::c_int {
+        from_result(|| {
+            // SAFETY: The C callback API guarantees that `fc_ptr` is valid.
+            let fc = unsafe { &mut *fc_ptr };
+            fc.ops = &Tables::<T>::CONTEXT;
+            Ok(0)
         })
     }
 
