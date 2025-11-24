@@ -1,7 +1,7 @@
 use core::{marker::PhantomData, ptr};
 
 use crate::error::{code::*, Result};
-use crate::types::ARef;
+use crate::types::{ARef, ForeignOwnable};
 use crate::{block, inode};
 use crate::{
     build_error,
@@ -96,6 +96,19 @@ impl<T: FileSystem + ?Sized> SuperBlock<T, New> {
 }
 
 impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
+    /// Returns the data associated with the superblock.
+    pub fn data(&self) -> <T::Data as ForeignOwnable>::Borrowed<'_> {
+        // TODO: Add UnspecifiedFS
+        // if T::IS_UNSPECIFIED {
+        //     crate::build_error!("super block data type is unspecified");
+        // }
+
+        // SAFETY: This method is only available if the typestate implements `DataInited`, whose
+        // safety requirements include `s_fs_info` being properly initialised.
+        let ptr = unsafe { (*self.0.get()).s_fs_info };
+        unsafe { T::Data::borrow(ptr) }
+    }
+
     /// Tries to get an existing inode or create a new one if it doesn't exist yet.
     ///
     /// This method is not callable from a superblock where data isn't inited yet because it would

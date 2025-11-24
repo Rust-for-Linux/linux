@@ -6,7 +6,7 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
-use crate::sb::EzfsSuperblockDisk;
+use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::dentry;
 use kernel::fs::{FileSystem, Registration};
@@ -63,8 +63,7 @@ impl RustEzFs {
 }
 
 impl FileSystem for RustEzFs {
-    // type Data = KBox<Self>;
-    type Data = ();
+    type Data = Pin<KBox<EzfsSuperblock>>;
     type INodeData = ();
     const NAME: &'static CStr = c_str!("rustezfs");
     const SUPER_TYPE: SuperType = SuperType::BlockDev;
@@ -78,14 +77,24 @@ impl FileSystem for RustEzFs {
         };
 
         let offset = 0;
-        let mapped_sb = mapper.mapped_folio(offset.try_into()?)?;
+        let disk_sb = {
+            let mapped_sb = mapper.mapped_folio(offset.try_into()?)?;
+            EzfsSuperblockDisk::from_bytes_copy(&mapped_sb).ok_or(EIO)?
+        };
 
-        let sb_disk = EzfsSuperblockDisk::from_bytes(&mapped_sb).ok_or(EIO)?;
+        if disk_sb.magic() != EZFS_MAGIC_NUMBER.try_into()? {
+            return Err(EINVAL);
+        }
 
-        pr_info!("sb disk magic: {:?}", sb_disk.magic());
+        pr_info!("sb disk magic: {:?}", disk_sb.magic());
 
-        // sb.set_magic(EZFS_MAGIC_NUMBER);
-        Ok(())
+        let ezfs_sb = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
+
+        pr_info!("sb in-memory magic: {:?}", ezfs_sb.magic());
+
+        sb.set_magic(EZFS_MAGIC_NUMBER);
+
+        Ok(ezfs_sb)
     }
 
     fn init_root(sb: &SuperBlock<Self>) -> Result<dentry::Root<Self>> {

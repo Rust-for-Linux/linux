@@ -1,5 +1,10 @@
 use crate::defs::{EZFS_BLOCK_SIZE, EZFS_MAX_DATA_BLKS, EZFS_MAX_INODES};
+use crate::RustEzFs;
 use core::mem::size_of;
+use kernel::fs::FileSystem;
+use kernel::inode;
+use kernel::new_mutex;
+use kernel::prelude::*;
 use kernel::sync::Mutex;
 use kernel::transmute::FromBytes;
 
@@ -29,13 +34,34 @@ impl EzfsSuperblockDisk {
 // which accept any bit pattern. The struct is #[repr(C)] for consistent layout.
 unsafe impl FromBytes for EzfsSuperblockDisk {}
 
-// TODO: pin data because of mutexes
-// in-memory representation of sb
+#[pin_data]
 pub(crate) struct EzfsSuperblock {
     version: u64,
     magic: u64,
     disk_blocks: u64,
+    #[pin]
     free_inodes: Mutex<[u32; (EZFS_MAX_INODES / 32) + 1]>,
+    #[pin]
     free_data_blocks: Mutex<[u32; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
+    #[pin]
     zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
+    mapper: inode::Mapper<RustEzFs>,
+}
+
+impl EzfsSuperblock {
+    pub fn new(disk_sb: EzfsSuperblockDisk, mapper: inode::Mapper<RustEzFs>) -> impl PinInit<Self> {
+        pin_init!(Self {
+            version: disk_sb.data.version,
+            magic: disk_sb.data.magic,
+            disk_blocks: disk_sb.data.disk_blocks,
+            free_inodes <- new_mutex!(disk_sb.data.free_inodes),
+            free_data_blocks <- new_mutex!(disk_sb.data.free_data_blocks),
+            zero_data_blocks <- new_mutex!(disk_sb.data.zero_data_blocks),
+            mapper,
+        })
+    }
+
+    pub fn magic(&self) -> u64 {
+        self.magic
+    }
 }
