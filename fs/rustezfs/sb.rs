@@ -48,6 +48,7 @@ pub(crate) struct EzfsSuperblock {
     #[pin]
     zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
     mapper: inode::Mapper<RustEzFs>,
+    // TODO: Add mutex around inode store
     inode_store: InodeStore,
 }
 
