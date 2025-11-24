@@ -4,6 +4,7 @@ use kernel::sync::Mutex;
 use kernel::transmute::FromBytes;
 
 pub(crate) struct EzfsSuperblockDiskRaw {
+    version: u64,
     magic: u64,
     disk_blocks: u64,
     free_inodes: [u32; (EZFS_MAX_INODES / 32) + 1],
@@ -31,6 +32,7 @@ unsafe impl FromBytes for EzfsSuperblockDisk {}
 // TODO: pin data because of mutexes
 // in-memory representation of sb
 pub(crate) struct EzfsSuperblock {
+    version: u64,
     magic: u64,
     disk_blocks: u64,
     free_inodes: Mutex<[u32; (EZFS_MAX_INODES / 32) + 1]>,
