@@ -20,6 +20,7 @@ use kernel::types::ARef;
 use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
+use core::mem::size_of;
 use pin_init::{pin_data, PinInit, PinnedDrop};
 
 struct RustEzFs;
@@ -90,13 +91,15 @@ impl FileSystem for RustEzFs {
         let inode_store = {
             let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
             let mapped_inode_store = mapper.mapped_folio(offset.try_into()?)?;
-            InodeStore::from_bytes_copy(&mapped_inode_store).ok_or(EIO)?
+            InodeStore::from_bytes_copy(&mapped_inode_store[..size_of::<InodeStore>()])
+                .ok_or(EIO)?
         };
 
         let ezfs_sb = KBox::pin_init(
             EzfsSuperblock::new(disk_sb, inode_store, mapper),
             GFP_KERNEL,
         )?;
+
         sb.set_magic(EZFS_MAGIC_NUMBER);
 
         Ok(ezfs_sb)
