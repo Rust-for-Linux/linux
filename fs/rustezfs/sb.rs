@@ -1,4 +1,5 @@
 use crate::defs::{EZFS_BLOCK_SIZE, EZFS_MAX_DATA_BLKS, EZFS_MAX_INODES};
+use crate::inode::InodeStore;
 use crate::RustEzFs;
 use core::mem::size_of;
 use kernel::fs::FileSystem;
@@ -8,6 +9,7 @@ use kernel::prelude::*;
 use kernel::sync::Mutex;
 use kernel::transmute::FromBytes;
 
+#[repr(C)]
 pub(crate) struct EzfsSuperblockDiskRaw {
     version: u64,
     magic: u64,
@@ -46,10 +48,15 @@ pub(crate) struct EzfsSuperblock {
     #[pin]
     zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
     mapper: inode::Mapper<RustEzFs>,
+    inode_store: InodeStore,
 }
 
 impl EzfsSuperblock {
-    pub fn new(disk_sb: EzfsSuperblockDisk, mapper: inode::Mapper<RustEzFs>) -> impl PinInit<Self> {
+    pub fn new(
+        disk_sb: EzfsSuperblockDisk,
+        inode_store: InodeStore,
+        mapper: inode::Mapper<RustEzFs>,
+    ) -> impl PinInit<Self> {
         pin_init!(Self {
             version: disk_sb.data.version,
             magic: disk_sb.data.magic,
@@ -58,6 +65,7 @@ impl EzfsSuperblock {
             free_data_blocks <- new_mutex!(disk_sb.data.free_data_blocks),
             zero_data_blocks <- new_mutex!(disk_sb.data.zero_data_blocks),
             mapper,
+            inode_store,
         })
     }
 

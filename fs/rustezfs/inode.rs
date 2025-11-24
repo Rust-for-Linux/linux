@@ -1,3 +1,6 @@
+use crate::defs::*;
+use core::ops::Deref;
+use kernel::transmute::FromBytes;
 use kernel::uapi::{gid_t, mode_t, uid_t};
 
 #[repr(C)]
@@ -13,3 +16,19 @@ pub(crate) struct EzfsInode {
     file_size: u64,
     nblocks: u64,
 }
+
+#[repr(C)]
+pub(crate) struct InodeStore {
+    inodes: [EzfsInode; EZFS_MAX_INODES],
+}
+
+impl Deref for InodeStore {
+    type Target = [EzfsInode];
+
+    fn deref(&self) -> &Self::Target {
+        &self.inodes
+    }
+}
+
+// SAFETY: EzfsInode is FromBytes, so array of them is too
+unsafe impl FromBytes for InodeStore {}

@@ -6,6 +6,7 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
+use crate::inode::InodeStore;
 use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::dentry;
@@ -76,8 +77,8 @@ impl FileSystem for RustEzFs {
             return Err(EINVAL);
         };
 
-        let offset = 0;
         let disk_sb = {
+            let offset = EZFS_SUPERBLOCK_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
             let mapped_sb = mapper.mapped_folio(offset.try_into()?)?;
             EzfsSuperblockDisk::from_bytes_copy(&mapped_sb).ok_or(EIO)?
         };
@@ -86,12 +87,16 @@ impl FileSystem for RustEzFs {
             return Err(EINVAL);
         }
 
-        pr_info!("sb disk magic: {:?}", disk_sb.magic());
+        let inode_store = {
+            let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
+            let mapped_inode_store = mapper.mapped_folio(offset.try_into()?)?;
+            InodeStore::from_bytes_copy(&mapped_inode_store).ok_or(EIO)?
+        };
 
-        let ezfs_sb = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
-
-        pr_info!("sb in-memory magic: {:?}", ezfs_sb.magic());
-
+        let ezfs_sb = KBox::pin_init(
+            EzfsSuperblock::new(disk_sb, inode_store, mapper),
+            GFP_KERNEL,
+        )?;
         sb.set_magic(EZFS_MAGIC_NUMBER);
 
         Ok(ezfs_sb)
