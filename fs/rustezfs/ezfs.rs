@@ -6,13 +6,15 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
+use crate::sb::EzfsSuperblockDisk;
 use defs::*;
 use kernel::dentry;
 use kernel::fs::{FileSystem, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
 use kernel::prelude::*;
-use kernel::sb::{New, SuperBlock};
+use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::time::UNIX_EPOCH;
+use kernel::transmute::FromBytes;
 use kernel::types::ARef;
 use kernel::{c_str, fs, str::CStr};
 
@@ -65,9 +67,24 @@ impl FileSystem for RustEzFs {
     type Data = ();
     type INodeData = ();
     const NAME: &'static CStr = c_str!("rustezfs");
+    const SUPER_TYPE: SuperType = SuperType::BlockDev;
 
-    fn fill_super(sb: &mut SuperBlock<Self, New>, _: Option<Mapper<Self>>) -> Result<Self::Data> {
-        sb.set_magic(EZFS_MAGIC_NUMBER);
+    fn fill_super(
+        sb: &mut SuperBlock<Self, New>,
+        mapper: Option<Mapper<Self>>,
+    ) -> Result<Self::Data> {
+        let Some(mapper) = mapper else {
+            return Err(EINVAL);
+        };
+
+        let offset = 0;
+        let mapped_sb = mapper.mapped_folio(offset.try_into()?)?;
+
+        let sb_disk = EzfsSuperblockDisk::from_bytes(&mapped_sb).ok_or(EIO)?;
+
+        pr_info!("sb disk magic: {:?}", sb_disk.magic());
+
+        // sb.set_magic(EZFS_MAGIC_NUMBER);
         Ok(())
     }
 
