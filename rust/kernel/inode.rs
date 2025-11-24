@@ -1,7 +1,10 @@
 use core::marker::PhantomData;
 use core::mem::{ManuallyDrop, MaybeUninit};
 
-use crate::error::Result;
+use crate::error::{from_err_ptr, Result};
+use crate::folio::{self, Folio};
+use crate::fs::PageOffset;
+use crate::prelude::{EIO, ERANGE};
 use crate::str::CString;
 use crate::time::Timespec;
 use crate::types::AlwaysRefCounted;
@@ -60,6 +63,44 @@ impl<T: FileSystem + ?Sized> INode<T> {
             end: Offset::MAX,
         }
     }
+
+    /// Returns a mapped folio at the given offset.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that there are no concurrent mutable mappings of the folio.
+    pub unsafe fn mapped_folio(
+        &self,
+        offset: Offset,
+    ) -> Result<folio::Mapped<'_, folio::PageCache<T>>> {
+        let page_index = offset >> bindings::PAGE_SHIFT;
+        let page_offset = offset & ((bindings::PAGE_SIZE - 1) as Offset);
+        let folio = self.read_mapping_folio(page_index.try_into()?)?;
+
+        // SAFETY: The safety requirements guarantee that there are no concurrent mutable mappings
+        // of the folio.
+        unsafe { Folio::map_owned(folio, page_offset.try_into()?) }
+    }
+
+    /// Returns the folio at the given page index
+    pub fn read_mapping_folio(
+        &self,
+        index: PageOffset,
+    ) -> Result<ARef<Folio<folio::PageCache<T>>>> {
+        let folio = from_err_ptr(unsafe {
+            bindings::read_mapping_folio(
+                (*self.0.get()).i_mapping,
+                index.try_into()?,
+                ptr::null_mut(),
+            )
+        })?;
+        let ptr = ptr::NonNull::new(folio)
+            .ok_or(EIO)?
+            .cast::<Folio<folio::PageCache<T>>>();
+
+        // SAFETY: The folio returned by read_mapping_folio has had its refcount incremented.
+        Ok(unsafe { ARef::from_raw(ptr) })
+    }
 }
 
 // SAFETY: The type invariants guarantee that `INode` is always ref-counted.
@@ -92,6 +133,20 @@ unsafe impl<T: FileSystem + ?Sized> Send for Mapper<T> {}
 
 // SAFETY: All inode and folio operations are safe from any thread.
 unsafe impl<T: FileSystem + ?Sized> Sync for Mapper<T> {}
+
+impl<T: FileSystem + ?Sized> Mapper<T> {
+    /// Returns a mapped folio at the given offset.
+    pub fn mapped_folio(&self, offset: Offset) -> Result<folio::Mapped<'_, folio::PageCache<T>>> {
+        if offset < self.begin || offset >= self.end {
+            return Err(ERANGE);
+        }
+
+        // SAFETY: By the type invariant, there are no other mutable mappings of the folio.
+        let mut map = unsafe { self.inode.mapped_folio(offset) }?;
+        map.cap_len((self.end - offset).try_into()?);
+        Ok(map)
+    }
+}
 
 struct WithData<T> {
     data: MaybeUninit<T>,

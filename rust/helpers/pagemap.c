@@ -6,3 +6,8 @@ void rust_helper_mapping_set_large_folios(struct address_space *mapping)
 {
 	mapping_set_large_folios(mapping);
 }
+
+struct folio *rust_helper_read_mapping_folio(struct address_space *mapping, pgoff_t index, struct file *file)
+{
+	return read_mapping_folio(mapping, index, file);
+}

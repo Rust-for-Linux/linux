@@ -94,6 +94,7 @@ pub mod faux;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
 pub mod fmt;
+pub mod folio;
 pub mod fs;
 pub mod id_pool;
 pub mod init;
