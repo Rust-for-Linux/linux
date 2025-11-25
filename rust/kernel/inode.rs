@@ -1,13 +1,17 @@
 use core::marker::PhantomData;
 use core::mem::{ManuallyDrop, MaybeUninit};
 
+use macros::vtable;
+
+use crate::dentry::{self, DEntry};
 use crate::error::{from_err_ptr, Result};
 use crate::folio::{self, Folio};
 use crate::fs::PageOffset;
-use crate::prelude::{EIO, ERANGE};
+use crate::prelude::{EIO, ENOTSUPP, ERANGE};
+use crate::sb::SuperBlock;
 use crate::str::CString;
 use crate::time::Timespec;
-use crate::types::AlwaysRefCounted;
+use crate::types::{AlwaysRefCounted, Lockable, Locked};
 use crate::{block, container_of};
 use crate::{
     fs::{FileSystem, Offset},
@@ -21,6 +25,21 @@ pub type Ino = usize;
 pub enum INodeState<T: FileSystem + ?Sized> {
     Existing(ARef<INode<T>>),
     Uninitilized(New<T>),
+}
+
+/// Operations implemented by inodes.
+#[vtable]
+pub trait Operations {
+    /// File system that these operations are compatible with.
+    type FileSystem: FileSystem + ?Sized;
+
+    /// Returns the inode corresponding to the directory entry with the given name
+    fn lookup(
+        _parent: &Locked<&INode<Self::FileSystem>, ReadSem>,
+        _dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<Option<ARef<DEntry<Self::FileSystem>>>> {
+        Err(ENOTSUPP)
+    }
 }
 
 /// A node (inode) in the file index.
@@ -47,6 +66,34 @@ impl<T: FileSystem + ?Sized> INode<T> {
     pub(crate) unsafe fn from_raw<'a>(ptr: *mut bindings::inode) -> &'a Self {
         // SAFETY: The safety requirements guarantee that the cast below is ok.
         unsafe { &*ptr.cast::<Self>() }
+    }
+
+    /// Returns the number of the inode.
+    pub fn ino(&self) -> Ino {
+        // SAFETY: `i_ino` is immutable, and `self` is guaranteed to be valid by the existence of a
+        // shared reference (&self) to it.
+        unsafe { (*self.0.get()).i_ino }
+    }
+
+    /// Returns the super-block that owns the inode.
+    pub fn super_block(&self) -> &SuperBlock<T> {
+        // SAFETY: `i_sb` is immutable, and `self` is guaranteed to be valid by the existence of a
+        // shared reference (&self) to it.
+        unsafe { SuperBlock::from_raw((*self.0.get()).i_sb) }
+    }
+
+    /// Returns the data associated with the inode.
+    pub fn data(&self) -> &T::INodeData {
+        // TODO: add UnspecifiedFS
+        // if T::IS_UNSPECIFIED {
+        //     crate::build_error!("inode data type is unspecified");
+        // }
+        // TODO: Add safety
+        let outerp = unsafe { container_of!(self.0.get(), WithData<T::INodeData>, inode) };
+        // SAFETY: `self` is guaranteed to be valid by the existence of a shared reference
+        // (`&self`) to it. Additionally, we know `T::INodeData` is always initialised in an
+        // `INode`.
+        unsafe { &*(*outerp).data.as_ptr() }
     }
 
     /// Returns a mapper for this inode.
@@ -113,6 +160,22 @@ unsafe impl<T: FileSystem + ?Sized> AlwaysRefCounted for INode<T> {
     unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
         // SAFETY: The safety requirements guarantee that the refcount is nonzero.
         unsafe { bindings::iput(obj.as_ref().0.get()) }
+    }
+}
+
+/// Indicates that the an inode's rw semapahore is locked in read (shared) mode.
+pub struct ReadSem;
+
+unsafe impl<T: FileSystem + ?Sized> Lockable<ReadSem> for INode<T> {
+    fn raw_lock(&self) {
+        // SAFETY: Since there's a reference to the inode, it must be valid.
+        unsafe { bindings::inode_lock_shared(self.0.get()) }
+    }
+
+    unsafe fn unlock(&self) {
+        // SAFETY: Since there's a reference to the inode, it must be valid. Additionally, the
+        // safety requirements of this functino require that the inode be locked in read mode.
+        unsafe { bindings::inode_unlock_shared(self.0.get()) }
     }
 }
 
@@ -259,6 +322,13 @@ impl<T: FileSystem + ?Sized> New<T> {
         // being called with the `ManuallyDrop` instance created above.
         Ok(unsafe { ARef::from_raw(manual.0.cast::<INode<T>>()) })
     }
+
+    pub fn set_iops(&mut self, iops: Ops<T>) -> &mut Self {
+        let inode = unsafe { self.0.as_mut() };
+        inode.i_op = iops.0;
+
+        self
+    }
 }
 
 impl<T: FileSystem + ?Sized> Drop for New<T> {
@@ -334,4 +404,94 @@ pub struct Params<T> {
 
     /// Value to attach to this node.
     pub value: T,
+}
+
+/// Represents inode operations.
+pub struct Ops<T: FileSystem + ?Sized>(*const bindings::inode_operations, PhantomData<T>);
+
+impl<T: FileSystem + ?Sized> Ops<T> {
+    /// Returns inode operations for symbolic links that are stored in a single page.
+    pub fn page_symlink_inode() -> Self {
+        // SAFETY: This is a constant in C, it never changes.
+        Self(
+            unsafe { &bindings::page_symlink_inode_operations },
+            PhantomData,
+        )
+    }
+
+    /// Returns inode operations for symbolic links that are stored in the `i_lnk` field.
+    pub fn simple_symlink_inode() -> Self {
+        // SAFETY: This is a constant in C, it never changes.
+        Self(
+            unsafe { &bindings::simple_symlink_inode_operations },
+            PhantomData,
+        )
+    }
+
+    /// Creates the inode operations from a type that implements the [`Operations`] trait.
+    pub const fn new<U: Operations<FileSystem = T> + ?Sized>() -> Self {
+        struct Table<T: Operations + ?Sized>(PhantomData<T>);
+        impl<T: Operations + ?Sized> Table<T> {
+            const TABLE: bindings::inode_operations = bindings::inode_operations {
+                lookup: if T::HAS_LOOKUP {
+                    Some(Self::lookup_callback)
+                } else {
+                    None
+                },
+                get_link: None,
+                // get_link: if T::HAS_GET_LINK {
+                //     Some(Self::get_link_callback)
+                // } else {
+                //     None
+                // },
+                permission: None,
+                get_inode_acl: None,
+                readlink: None,
+                create: None,
+                link: None,
+                unlink: None,
+                symlink: None,
+                mkdir: None,
+                rmdir: None,
+                mknod: None,
+                rename: None,
+                setattr: None,
+                getattr: None,
+                listxattr: None,
+                fiemap: None,
+                update_time: None,
+                atomic_open: None,
+                tmpfile: None,
+                get_acl: None,
+                set_acl: None,
+                fileattr_set: None,
+                fileattr_get: None,
+                get_offset_ctx: None,
+            };
+
+            extern "C" fn lookup_callback(
+                parent_ptr: *mut bindings::inode,
+                dentry_ptr: *mut bindings::dentry,
+                _flags: u32,
+            ) -> *mut bindings::dentry {
+                // SAFETY: The C API guarantees that `parent_ptr` is a valid inode.
+                let parent = unsafe { INode::from_raw(parent_ptr) };
+
+                // SAFETY: The C API guarantees that `dentry_ptr` is a valid dentry.
+                let dentry = unsafe { DEntry::from_raw(dentry_ptr) };
+
+                // SAFETY: The C API guarantees that the inode's rw semaphore is locked at least in
+                // read mode. It does not expect callees to unlock it, so we make the locked object
+                // manually dropped to avoid unlocking it.
+                let locked = ManuallyDrop::new(unsafe { Locked::new(parent) });
+
+                match T::lookup(&locked, dentry::Unhashed(dentry)) {
+                    Err(e) => e.to_ptr(),
+                    Ok(None) => ptr::null_mut(),
+                    Ok(Some(ret)) => ManuallyDrop::new(ret).0.get(),
+                }
+            }
+        }
+        Self(&Table::<U>::TABLE, PhantomData)
+    }
 }

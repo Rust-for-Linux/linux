@@ -38,24 +38,21 @@ unsafe impl FromBytes for EzfsSuperblockDisk {}
 
 #[pin_data]
 pub(crate) struct EzfsSuperblock {
-    version: u64,
-    magic: u64,
-    disk_blocks: u64,
+    pub(crate) version: u64,
+    pub(crate) magic: u64,
+    pub(crate) disk_blocks: u64,
     #[pin]
-    free_inodes: Mutex<[u32; (EZFS_MAX_INODES / 32) + 1]>,
+    pub(crate) free_inodes: Mutex<[u32; (EZFS_MAX_INODES / 32) + 1]>,
     #[pin]
-    free_data_blocks: Mutex<[u32; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
+    pub(crate) free_data_blocks: Mutex<[u32; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
     #[pin]
-    zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
-    mapper: inode::Mapper<RustEzFs>,
-    // TODO: Add mutex around inode store
-    inode_store: InodeStore,
+    pub(crate) zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
+    pub(crate) mapper: inode::Mapper<RustEzFs>,
 }
 
 impl EzfsSuperblock {
-    pub fn new(
+    pub(crate) fn new(
         disk_sb: EzfsSuperblockDisk,
-        inode_store: InodeStore,
         mapper: inode::Mapper<RustEzFs>,
     ) -> impl PinInit<Self> {
         pin_init!(Self {
@@ -66,11 +63,10 @@ impl EzfsSuperblock {
             free_data_blocks <- new_mutex!(disk_sb.data.free_data_blocks),
             zero_data_blocks <- new_mutex!(disk_sb.data.zero_data_blocks),
             mapper,
-            inode_store,
         })
     }
 
-    pub fn magic(&self) -> u64 {
+    pub(crate) fn magic(&self) -> u64 {
         self.magic
     }
 }

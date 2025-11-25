@@ -10,12 +10,14 @@
 use crate::{
     bindings,
     cred::Credential,
-    error::{code::*, to_result, Error, Result},
+    error::{code::*, from_result, to_result, Error, Result},
     fmt,
+    fs::{FileSystem, Offset},
+    inode::{self, INode},
     sync::aref::{ARef, AlwaysRefCounted},
-    types::{NotThreadSafe, Opaque},
+    types::{Locked, NotThreadSafe, Opaque},
 };
-use core::ptr;
+use core::{marker::PhantomData, mem::ManuallyDrop, ptr};
 
 /// Flags associated with a [`File`].
 pub mod flags {

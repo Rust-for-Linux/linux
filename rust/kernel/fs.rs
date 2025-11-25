@@ -40,6 +40,33 @@ pub type Offset = i64;
 /// This is C's `pgoff_t`.
 pub type PageOffset = usize;
 
+/// Contains constants related to Linux file modes.
+pub mod mode {
+    /// A bitmask used to the file type from a mode value.
+    pub const S_IFMT: u32 = bindings::S_IFMT;
+
+    /// File type constant for block devices.
+    pub const S_IFBLK: u32 = bindings::S_IFBLK;
+
+    /// File type constant for char devices.
+    pub const S_IFCHR: u32 = bindings::S_IFCHR;
+
+    /// File type constant for directories.
+    pub const S_IFDIR: u32 = bindings::S_IFDIR;
+
+    /// File type constant for pipes.
+    pub const S_IFIFO: u32 = bindings::S_IFIFO;
+
+    /// File type constant for symbolic links.
+    pub const S_IFLNK: u32 = bindings::S_IFLNK;
+
+    /// File type constant for regular files.
+    pub const S_IFREG: u32 = bindings::S_IFREG;
+
+    /// File type constant for sockets.
+    pub const S_IFSOCK: u32 = bindings::S_IFSOCK;
+}
+
 /// A file system type.
 pub trait FileSystem {
     /// Data associated with each file system instance (super-block).
