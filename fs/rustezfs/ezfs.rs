@@ -50,14 +50,13 @@ impl RustEzFs {
         };
 
         let h = &*sb.data();
-        let inode_store = {
-            let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
-            let mapped_inode_store = h.mapper.mapped_folio(offset.try_into()?)?;
-            InodeStore::from_bytes_copy(&mapped_inode_store[..size_of::<InodeStore>()])
-                .ok_or(EIO)?
-        };
 
-        let ezfs_inode = inode_store[ino];
+        let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
+        let mapped_inode_store = h.mapper.mapped_folio(offset.try_into()?)?;
+        let inode_store =
+            InodeStore::from_bytes(&mapped_inode_store[..size_of::<InodeStore>()]).ok_or(EIO)?;
+
+        let ezfs_inode = inode_store[ino - 1];
         let mode = ezfs_inode.mode();
 
         const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
@@ -142,16 +141,30 @@ impl kernel::inode::Operations for RustEzFs {
         let h = sb.data();
         let name = dentry.name();
         let ezfs_dir_inode = parent.data();
+        pr_info!("data_blk_num: {:?}", ezfs_dir_inode.data_blk_num());
 
-        let dir_entries = {
-            let offset = ezfs_dir_inode.data_blk_num() * EZFS_BLOCK_SIZE as u64;
-            let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
-            DirEntryStore::from_bytes_copy(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?
-        };
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
 
-        let dir_entry = dir_entries
-            .iter()
-            .find(|x| x.filename() == name && x.is_active());
+        let dir_entry = dir_entries.iter().find(|x| {
+            pr_info!(
+                "filename: {:?} = {}\n",
+                x.filename(),
+                core::str::from_utf8(x.filename()).unwrap_or("<invalid utf8>")
+            );
+
+            pr_info!(
+                "dname: {:?} = {}\n",
+                name,
+                core::str::from_utf8(name).unwrap_or("<invalid utf8>")
+            );
+            x.filename() == name && x.is_active()
+        });
 
         let inode = if let Some(entry) = dir_entry {
             Some(Self::iget(sb, entry.inode_no().try_into()?)?)
