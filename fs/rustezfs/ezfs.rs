@@ -64,7 +64,9 @@ impl RustEzFs {
 
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
-                inode.set_fops(file::Ops::generic_ro_file());
+                inode
+                    .set_iops(Self::DIR_IOPS)
+                    .set_fops(file::Ops::generic_ro_file());
                 // .set_aops(FILE_AOPS);
                 Type::Reg
             }

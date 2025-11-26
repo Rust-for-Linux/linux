@@ -98,10 +98,9 @@ impl<T: FileSystem + ?Sized> SuperBlock<T, New> {
 impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
     /// Returns the data associated with the superblock.
     pub fn data(&self) -> <T::Data as ForeignOwnable>::Borrowed<'_> {
-        // TODO: Add UnspecifiedFS
-        // if T::IS_UNSPECIFIED {
-        //     crate::build_error!("super block data type is unspecified");
-        // }
+        if T::IS_UNSPECIFIED {
+            crate::build_error!("super block data type is unspecified");
+        }
 
         // SAFETY: This method is only available if the typestate implements `DataInited`, whose
         // safety requirements include `s_fs_info` being properly initialised.

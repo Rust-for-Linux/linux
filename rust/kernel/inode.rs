@@ -258,6 +258,7 @@ impl<T: FileSystem + ?Sized> New<T> {
                         unsafe { bindings::inode_nohighmem(inode) };
                     }
                 }
+                // TODO: Look into this
                 // if let Some(s) = str {
                 //     inode.__bindgen_anon_5.i_link = s.into_foreign().cast::<i8>().cast_mut();
                 // }
@@ -325,7 +326,6 @@ impl<T: FileSystem + ?Sized> New<T> {
     pub fn set_iops(&mut self, iops: Ops<T>) -> &mut Self {
         let inode = unsafe { self.0.as_mut() };
         inode.i_op = iops.0;
-
         self
     }
 
