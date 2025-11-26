@@ -43,6 +43,9 @@ impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
 }
 
 impl RustEzFs {
+    const DIR_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
+    const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
+
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
         let mut inode = match sb.get_or_create_inode(ino)? {
             INodeState::Existing(inode) => return Ok(inode),
@@ -59,9 +62,6 @@ impl RustEzFs {
         let ezfs_inode = inode_store[ino - 1];
         let mode = ezfs_inode.mode();
 
-        const DIR_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
-        const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
-
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
                 inode.set_fops(file::Ops::generic_ro_file());
@@ -69,7 +69,7 @@ impl RustEzFs {
                 Type::Reg
             }
             fs::mode::S_IFDIR => {
-                inode.set_iops(DIR_IOPS).set_fops(DIR_FOPS);
+                inode.set_iops(Self::DIR_IOPS).set_fops(Self::DIR_FOPS);
                 Type::Dir
             }
             _ => return Err(ENOENT),
