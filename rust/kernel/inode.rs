@@ -6,7 +6,7 @@ use macros::vtable;
 use crate::dentry::{self, DEntry};
 use crate::error::{from_err_ptr, Result};
 use crate::folio::{self, Folio};
-use crate::fs::PageOffset;
+use crate::fs::{file, PageOffset, UnspecifiedFS};
 use crate::prelude::{EIO, ENOTSUPP, ERANGE};
 use crate::sb::SuperBlock;
 use crate::str::CString;
@@ -184,8 +184,7 @@ unsafe impl<T: FileSystem + ?Sized> Lockable<ReadSem> for INode<T> {
 /// # Invariants
 ///
 /// Mappers are unique per range per inode.
-// TODO: should be default UnspecifiedFS
-pub struct Mapper<T: FileSystem + ?Sized> {
+pub struct Mapper<T: FileSystem + ?Sized = UnspecifiedFS> {
     inode: ARef<INode<T>>,
     begin: Offset,
     end: Offset,
@@ -327,6 +326,14 @@ impl<T: FileSystem + ?Sized> New<T> {
         let inode = unsafe { self.0.as_mut() };
         inode.i_op = iops.0;
 
+        self
+    }
+
+    /// Sets the file operations on this new inode.
+    pub fn set_fops(&mut self, fops: file::Ops<T>) -> &mut Self {
+        // SAFETY: By the type invariants, it's ok to modify the inode.
+        let inode = unsafe { self.0.as_mut() };
+        inode.__bindgen_anon_3.i_fop = fops.inner;
         self
     }
 }

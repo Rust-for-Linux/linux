@@ -6,12 +6,12 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
-use crate::dir::DirEntryStore;
+use crate::dir::{DirEntryStore, EzfsDirEntry};
 use crate::inode::{EzfsInode, InodeStore};
 use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::dentry;
-use kernel::fs::{FileSystem, Registration};
+use kernel::fs::{file, File, FileSystem, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
@@ -59,18 +59,17 @@ impl RustEzFs {
         let ezfs_inode = inode_store[ino - 1];
         let mode = ezfs_inode.mode();
 
+        const DIR_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
         const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
 
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
-                // inode
-                //     .set_fops(file::Ops::generic_ro_file())
-                //     .set_aops(FILE_AOPS);
+                inode.set_fops(file::Ops::generic_ro_file());
+                // .set_aops(FILE_AOPS);
                 Type::Reg
             }
             fs::mode::S_IFDIR => {
-                inode.set_iops(DIR_IOPS);
-                // inode.set_iops(DIR_IOPS).set_fops(DIR_FOPS);
+                inode.set_iops(DIR_IOPS).set_fops(DIR_FOPS);
                 Type::Dir
             }
             _ => return Err(ENOENT),
@@ -173,6 +172,65 @@ impl kernel::inode::Operations for RustEzFs {
         };
 
         dentry.splice_alias(inode)
+    }
+}
+
+#[vtable]
+impl file::Operations for RustEzFs {
+    type FileSystem = Self;
+
+    fn read_dir(
+        _file: &File<Self>,
+        inode: &Locked<&INode<Self>, kernel::inode::ReadSem>,
+        emitter: &mut file::DirEmitter,
+    ) -> Result {
+        let sb = &*inode.super_block();
+        let h = sb.data();
+
+        let index = {
+            let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
+            pr_info!("emitter position: {:?}", pos);
+
+            if pos % size_of::<EzfsDirEntry>() != 0 {
+                return Err(ENOENT);
+            }
+
+            pos / size_of::<EzfsDirEntry>()
+        };
+
+        pr_info!("emitter index: {:?}", index);
+
+        if index >= EZFS_MAX_CHILDREN {
+            return Ok(());
+        }
+
+        let ezfs_dir_inode = inode.data();
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let active_entries = dir_entries
+            .iter()
+            .skip(index)
+            .filter(|&entry| entry.is_active());
+
+        for entry in active_entries {
+            if !emitter.emit(
+                size_of::<EzfsDirEntry>() as i64,
+                entry.filename(),
+                entry.inode_no(),
+                file::DirEntryType::Unknown,
+            ) {
+                return Ok(());
+            }
+        }
+
+        Ok(())
     }
 }
 
