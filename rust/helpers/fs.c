@@ -20,3 +20,14 @@ void rust_helper_i_gid_write(struct inode *inode, gid_t gid)
 {
 	i_gid_write(inode, gid);
 }
+
+
+void rust_helper_inode_lock_shared(struct inode *inode)
+{
+	inode_lock_shared(inode);
+}
+
+void rust_helper_inode_unlock_shared(struct inode *inode)
+{
+	inode_unlock_shared(inode);
+}

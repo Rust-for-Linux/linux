@@ -2,7 +2,7 @@ use core::{marker::PhantomData, mem::ManuallyDrop, ops::Deref, ptr};
 
 use crate::{
     bindings,
-    error::Result,
+    error::{from_err_ptr, Result},
     fs::FileSystem,
     inode::INode,
     prelude::*,
@@ -42,6 +42,58 @@ impl<T: FileSystem + ?Sized> DEntry<T> {
     pub fn super_block(&self) -> &SuperBlock<T> {
         // `d_sb` is immutable, so it's safe to read it.
         unsafe { SuperBlock::from_raw((*self.0.get()).d_sb) }
+    }
+}
+
+pub struct Unhashed<'a, T: FileSystem + ?Sized>(pub(crate) &'a DEntry<T>);
+
+impl<T: FileSystem + ?Sized> Unhashed<'_, T> {
+    /// Splices a disconnected dentry into the tree if one exists.
+    pub fn splice_alias(self, inode: Option<ARef<INode<T>>>) -> Result<Option<ARef<DEntry<T>>>> {
+        let inode_ptr = if let Some(i) = inode {
+            // Reject inode if it belongs to a different superblock.
+            if !ptr::eq(i.super_block(), self.0.super_block()) {
+                return Err(EINVAL);
+            }
+
+            ManuallyDrop::new(i).0.get()
+        } else {
+            ptr::null_mut()
+        };
+
+        // SAFETY: Both inode and dentry are known to be valid.
+        let ptr = from_err_ptr(unsafe { bindings::d_splice_alias(inode_ptr, self.0 .0.get()) })?;
+
+        // SAFETY: The C API guarantees that if a dentry is returned, the refcount has been
+        // incremented.
+        Ok(ptr::NonNull::new(ptr).map(|v| unsafe { ARef::from_raw(v.cast::<DEntry<T>>()) }))
+    }
+
+    /// Returns the name of the dentry.
+    ///
+    /// Being unhashed guarantees that the name won't change.
+    pub fn name(&self) -> &[u8] {
+        // SAFETY: The name is immutable, so it is ok to read it.
+        let name = unsafe { &*ptr::addr_of!((*self.0 .0.get()).__bindgen_anon_1.d_name) };
+
+        // This ensures that a `u32` is representable in `usize`. If it isn't, we'll get a build
+        // break.
+        const _: usize = 0xffffffff;
+
+        // SAFETY: The union is just allow an easy way to get the `hash` and `len` at once. `len`
+        // is always valid.
+        let len = unsafe { name.__bindgen_anon_1.__bindgen_anon_1.len } as usize;
+
+        // SAFETY: The name is immutable, so it is ok to read it.
+        unsafe { core::slice::from_raw_parts(name.name, len) }
+    }
+}
+
+impl<T: FileSystem + ?Sized> Deref for Unhashed<'_, T> {
+    type Target = DEntry<T>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
     }
 }
 

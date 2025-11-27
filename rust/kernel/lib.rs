@@ -143,6 +143,7 @@ pub mod tracepoint;
 pub mod transmute;
 pub mod types;
 pub mod uaccess;
+pub mod user;
 pub mod workqueue;
 pub mod xarray;
 

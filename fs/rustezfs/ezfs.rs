@@ -6,19 +6,22 @@ mod defs;
 mod dir;
 mod inode;
 mod sb;
-use crate::sb::EzfsSuperblockDisk;
+use crate::dir::{DirEntryStore, EzfsDirEntry};
+use crate::inode::{EzfsInode, InodeStore};
+use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::dentry;
-use kernel::fs::{FileSystem, Registration};
+use kernel::fs::{file, File, FileSystem, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::time::UNIX_EPOCH;
 use kernel::transmute::FromBytes;
-use kernel::types::ARef;
+use kernel::types::{ARef, Locked};
 use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
+use core::mem::size_of;
 use pin_init::{pin_data, PinInit, PinnedDrop};
 
 struct RustEzFs;
@@ -40,32 +43,59 @@ impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
 }
 
 impl RustEzFs {
+    const DIR_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
+    const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
+
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
         let mut inode = match sb.get_or_create_inode(ino)? {
             INodeState::Existing(inode) => return Ok(inode),
             INodeState::Uninitilized(new_inode) => new_inode,
         };
 
+        let h = &*sb.data();
+
+        let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
+        let mapped_inode_store = h.mapper.mapped_folio(offset.try_into()?)?;
+        let inode_store =
+            InodeStore::from_bytes(&mapped_inode_store[..size_of::<InodeStore>()]).ok_or(EIO)?;
+
+        let ezfs_inode = inode_store[ino - 1];
+        let mode = ezfs_inode.mode();
+
+        let typ = match mode & fs::mode::S_IFMT {
+            fs::mode::S_IFREG => {
+                inode
+                    .set_iops(Self::DIR_IOPS)
+                    .set_fops(file::Ops::generic_ro_file());
+                // .set_aops(FILE_AOPS);
+                Type::Reg
+            }
+            fs::mode::S_IFDIR => {
+                inode.set_iops(Self::DIR_IOPS).set_fops(Self::DIR_FOPS);
+                Type::Dir
+            }
+            _ => return Err(ENOENT),
+        };
+
         inode.init(Params {
-            typ: Type::Dir,
-            mode: 0o755,
-            size: 0,
-            blocks: 0,
-            nlink: 2,
-            uid: 0,
-            gid: 0,
-            ctime: UNIX_EPOCH,
-            mtime: UNIX_EPOCH,
-            atime: UNIX_EPOCH,
-            value: (),
+            typ,
+            mode: ezfs_inode.mode().try_into()?,
+            size: ezfs_inode.file_size().try_into()?,
+            blocks: ezfs_inode.nblocks(),
+            nlink: ezfs_inode.nlink(),
+            uid: ezfs_inode.uid(),
+            gid: ezfs_inode.gid(),
+            ctime: ezfs_inode.ctime()?,
+            mtime: ezfs_inode.mtime()?,
+            atime: ezfs_inode.atime()?,
+            value: ezfs_inode,
         })
     }
 }
 
 impl FileSystem for RustEzFs {
-    // type Data = KBox<Self>;
-    type Data = ();
-    type INodeData = ();
+    type Data = Pin<KBox<EzfsSuperblock>>;
+    type INodeData = EzfsInode;
     const NAME: &'static CStr = c_str!("rustezfs");
     const SUPER_TYPE: SuperType = SuperType::BlockDev;
 
@@ -77,20 +107,132 @@ impl FileSystem for RustEzFs {
             return Err(EINVAL);
         };
 
-        let offset = 0;
-        let mapped_sb = mapper.mapped_folio(offset.try_into()?)?;
+        let disk_sb = {
+            let offset = EZFS_SUPERBLOCK_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
+            let mapped_sb = mapper.mapped_folio(offset.try_into()?)?;
+            EzfsSuperblockDisk::from_bytes_copy(&mapped_sb).ok_or(EIO)?
+        };
 
-        let sb_disk = EzfsSuperblockDisk::from_bytes(&mapped_sb).ok_or(EIO)?;
+        if disk_sb.magic() != EZFS_MAGIC_NUMBER.try_into()? {
+            return Err(EINVAL);
+        }
 
-        pr_info!("sb disk magic: {:?}", sb_disk.magic());
+        let ezfs_sb = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
 
-        // sb.set_magic(EZFS_MAGIC_NUMBER);
-        Ok(())
+        sb.set_magic(EZFS_MAGIC_NUMBER);
+
+        Ok(ezfs_sb)
     }
 
     fn init_root(sb: &SuperBlock<Self>) -> Result<dentry::Root<Self>> {
         let inode = Self::iget(sb, EZFS_ROOT_INODE_NUMBER)?;
         dentry::Root::try_new(inode)
+    }
+}
+
+#[vtable]
+impl kernel::inode::Operations for RustEzFs {
+    type FileSystem = Self;
+
+    fn lookup(
+        parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<Option<ARef<dentry::DEntry<Self::FileSystem>>>> {
+        let sb = &*parent.super_block();
+        let h = sb.data();
+        let name = dentry.name();
+        let ezfs_dir_inode = parent.data();
+        pr_info!("data_blk_num: {:?}", ezfs_dir_inode.data_blk_num());
+
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let dir_entry = dir_entries.iter().find(|x| {
+            pr_info!(
+                "filename: {:?} = {}\n",
+                x.filename(),
+                core::str::from_utf8(x.filename()).unwrap_or("<invalid utf8>")
+            );
+
+            pr_info!(
+                "dname: {:?} = {}\n",
+                name,
+                core::str::from_utf8(name).unwrap_or("<invalid utf8>")
+            );
+            x.filename() == name && x.is_active()
+        });
+
+        let inode = if let Some(entry) = dir_entry {
+            Some(Self::iget(sb, entry.inode_no().try_into()?)?)
+        } else {
+            None
+        };
+
+        dentry.splice_alias(inode)
+    }
+}
+
+#[vtable]
+impl file::Operations for RustEzFs {
+    type FileSystem = Self;
+
+    fn read_dir(
+        _file: &File<Self>,
+        inode: &Locked<&INode<Self>, kernel::inode::ReadSem>,
+        emitter: &mut file::DirEmitter,
+    ) -> Result {
+        let sb = &*inode.super_block();
+        let h = sb.data();
+
+        let index = {
+            let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
+            pr_info!("emitter position: {:?}", pos);
+
+            if pos % size_of::<EzfsDirEntry>() != 0 {
+                return Err(ENOENT);
+            }
+
+            pos / size_of::<EzfsDirEntry>()
+        };
+
+        pr_info!("emitter index: {:?}", index);
+
+        if index >= EZFS_MAX_CHILDREN {
+            return Ok(());
+        }
+
+        let ezfs_dir_inode = inode.data();
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let active_entries = dir_entries
+            .iter()
+            .skip(index)
+            .filter(|&entry| entry.is_active());
+
+        for entry in active_entries {
+            if !emitter.emit(
+                size_of::<EzfsDirEntry>() as i64,
+                entry.filename(),
+                entry.inode_no(),
+                file::DirEntryType::Unknown,
+            ) {
+                return Ok(());
+            }
+        }
+
+        Ok(())
     }
 }
 
