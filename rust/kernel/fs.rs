@@ -9,7 +9,8 @@ use pin_init::{pin_data, pinned_drop, PinInit, PinnedDrop};
 use crate::{
     bindings, dentry,
     error::{from_result, to_result, Error, Result},
-    inode,
+    inode::{self, INode},
+    mem_cache::MemCache,
     prelude::*,
     sb::{self, SuperBlock},
     str::CStr,
@@ -122,7 +123,8 @@ impl FileSystem for UnspecifiedFS {
 #[pin_data(PinnedDrop)]
 pub struct Registration {
     #[pin]
-    fs: Opaque<bindings::file_system_type>,
+    pub(crate) fs: Opaque<bindings::file_system_type>,
+    pub(crate) inode_cache: Option<MemCache>,
 }
 
 impl Registration {
@@ -132,6 +134,7 @@ impl Registration {
     /// to be made before users can mount it.
     pub fn new<T: FileSystem + ?Sized>(module: &'static ThisModule) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
+            inode_cache: INode::<T>::new_cache()?,
             fs <- Opaque::try_ffi_init(|fs_ptr: *mut bindings::file_system_type| {
                 // SAFETY: `try_ffi_init` guarantees that `fs_ptr` is valid for write.
                 unsafe { fs_ptr.write(bindings::file_system_type::default()) };

@@ -11,13 +11,14 @@ use crate::inode::{EzfsInode, InodeStore};
 use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::dentry;
-use kernel::fs::{file, File, FileSystem, Registration};
+use kernel::fs::{file, File, FileSystem, Offset, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::time::UNIX_EPOCH;
 use kernel::transmute::FromBytes;
 use kernel::types::{ARef, Locked};
+use kernel::uapi::ENAMETOOLONG;
 use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
@@ -140,14 +141,25 @@ impl kernel::inode::Operations for RustEzFs {
     ) -> Result<Option<ARef<dentry::DEntry<Self::FileSystem>>>> {
         let sb = &*parent.super_block();
         let h = sb.data();
+
         let name = dentry.name();
+        pr_info!("looking for file: {:?}", core::str::from_utf8(name));
+
+        if name.len() > EZFS_FILENAME_BUF_SIZE {
+            pr_info!("dentry name to long: {:?}", core::str::from_utf8(name));
+            // return Err(ENAMETOOLONG);
+        }
+
         let ezfs_dir_inode = parent.data();
+        pr_info!("ezfs_dir inode number: {:?}", parent.ino());
+        pr_info!("ezfs dir inode links: {:?}", ezfs_dir_inode.nlink());
         pr_info!("data_blk_num: {:?}", ezfs_dir_inode.data_blk_num());
 
         let offset = ezfs_dir_inode
             .data_blk_num()
             .checked_mul(EZFS_BLOCK_SIZE as u64)
             .ok_or(EIO)?;
+
         let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
         let dir_entries =
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
@@ -168,6 +180,7 @@ impl kernel::inode::Operations for RustEzFs {
         });
 
         let inode = if let Some(entry) = dir_entry {
+            pr_info!("Inode found: {:?}", entry.inode_no());
             Some(Self::iget(sb, entry.inode_no().try_into()?)?)
         } else {
             None
@@ -180,6 +193,14 @@ impl kernel::inode::Operations for RustEzFs {
 #[vtable]
 impl file::Operations for RustEzFs {
     type FileSystem = Self;
+
+    fn seek(file: &File<Self>, offset: Offset, whence: file::Whence) -> Result<Offset> {
+        file::generic_seek(file, offset, whence)
+    }
+
+    fn read(_: &File<Self>, _: &mut kernel::user::Writer, _: &mut Offset) -> Result<usize> {
+        Err(EISDIR)
+    }
 
     fn read_dir(
         _file: &File<Self>,

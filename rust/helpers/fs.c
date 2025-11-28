@@ -31,3 +31,9 @@ void rust_helper_inode_unlock_shared(struct inode *inode)
 {
 	inode_unlock_shared(inode);
 }
+
+void *rust_helper_alloc_inode_sb(struct super_block *sb,
+				 struct kmem_cache *cache, gfp_t gfp)
+{
+	return alloc_inode_sb(sb, cache, gfp);
+}
