@@ -203,22 +203,30 @@ impl file::Operations for RustEzFs {
     }
 
     fn read_dir(
-        _file: &File<Self>,
+        file: &File<Self>,
         inode: &Locked<&INode<Self>, kernel::inode::ReadSem>,
         emitter: &mut file::DirEmitter,
     ) -> Result {
+        let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
+
+        if pos <= 2 {
+            if !emitter.emit_dots(file) {
+                return Ok(());
+            }
+        }
+
         let sb = &*inode.super_block();
         let h = sb.data();
 
         let index = {
-            let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
+            let disk_pos = pos - 2;
             pr_info!("emitter position: {:?}", pos);
 
-            if pos % size_of::<EzfsDirEntry>() != 0 {
+            if disk_pos % size_of::<EzfsDirEntry>() != 0 {
                 return Err(ENOENT);
             }
 
-            pos / size_of::<EzfsDirEntry>()
+            disk_pos / size_of::<EzfsDirEntry>()
         };
 
         pr_info!("emitter index: {:?}", index);
