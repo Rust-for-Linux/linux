@@ -108,6 +108,7 @@ pub mod jump_label;
 pub mod kunit;
 pub mod list;
 pub mod maple_tree;
+pub mod mem_cache;
 pub mod miscdevice;
 pub mod mm;
 #[cfg(CONFIG_NET)]
