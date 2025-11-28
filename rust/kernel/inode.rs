@@ -33,6 +33,18 @@ pub trait Operations {
     /// File system that these operations are compatible with.
     type FileSystem: FileSystem + ?Sized;
 
+    /// Returns the string that represents the name of the file a symbolic link inode points to.
+    ///
+    /// When `dentry` is `None`, `get_link` is called with the RCU read-side lock held, so it may
+    /// not sleep. Implementations must return `Err(ECHILD)` for it to be called again without
+    /// holding the RCU lock.
+    fn get_link<'a>(
+        _dentry: Option<&DEntry<Self::FileSystem>>,
+        _inode: &'a INode<Self::FileSystem>,
+    ) -> Result<CString> {
+        Err(ENOTSUPP)
+    }
+
     /// Returns the inode corresponding to the directory entry with the given name
     fn lookup(
         _parent: &Locked<&INode<Self::FileSystem>, ReadSem>,
