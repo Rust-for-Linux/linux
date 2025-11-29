@@ -283,13 +283,12 @@ impl<T: FileSystem + ?Sized> Tables<T> {
     }
 
     const SUPER_BLOCK: bindings::super_operations = bindings::super_operations {
-        alloc_inode: None,
-        // alloc_inode: if size_of::<T::INodeData>() != 0 {
-        //     Some(INode::<T>::alloc_inode_callback)
-        // } else {
-        //     None
-        // },
-        // destroy_inode: Some(INode::<T>::destroy_inode_callback),
+        alloc_inode: if size_of::<T::INodeData>() != 0 {
+            Some(INode::<T>::alloc_inode_callback)
+        } else {
+            None
+        },
+        destroy_inode: Some(INode::<T>::destroy_inode_callback),
         destroy_inode: None,
         free_inode: None,
         dirty_inode: None,

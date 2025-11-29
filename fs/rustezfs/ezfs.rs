@@ -18,7 +18,6 @@ use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::time::UNIX_EPOCH;
 use kernel::transmute::FromBytes;
 use kernel::types::{ARef, Locked};
-use kernel::uapi::ENAMETOOLONG;
 use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
@@ -147,7 +146,7 @@ impl kernel::inode::Operations for RustEzFs {
 
         if name.len() > EZFS_FILENAME_BUF_SIZE {
             pr_info!("dentry name to long: {:?}", core::str::from_utf8(name));
-            // return Err(ENAMETOOLONG);
+            return Err(ENAMETOOLONG);
         }
 
         let ezfs_dir_inode = parent.data();
@@ -208,8 +207,11 @@ impl file::Operations for RustEzFs {
         emitter: &mut file::DirEmitter,
     ) -> Result {
         let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
+        pr_info!("emitter position: {:?}", pos);
 
-        if pos <= 2 {
+        if pos < 2 {
+            pr_info!("pos < 2: trying to emit dots");
+            pr_info!("file inode: {:?}", file.inode().ino());
             if !emitter.emit_dots(file) {
                 return Ok(());
             }
@@ -219,8 +221,8 @@ impl file::Operations for RustEzFs {
         let h = sb.data();
 
         let index = {
-            let disk_pos = pos - 2;
-            pr_info!("emitter position: {:?}", pos);
+            let disk_pos = pos.checked_sub(2).ok_or(ENOENT)?;
+            pr_info!("disk position: {:?}", disk_pos);
 
             if disk_pos % size_of::<EzfsDirEntry>() != 0 {
                 return Err(ENOENT);
@@ -232,18 +234,24 @@ impl file::Operations for RustEzFs {
         pr_info!("emitter index: {:?}", index);
 
         if index >= EZFS_MAX_CHILDREN {
+            pr_info!("index higher than max children: {:?}", index);
             return Ok(());
         }
 
         let ezfs_dir_inode = inode.data();
+        pr_info!("inode data_blk_num: {:?}", ezfs_dir_inode.data_blk_num());
+
         let offset = ezfs_dir_inode
             .data_blk_num()
             .checked_mul(EZFS_BLOCK_SIZE as u64)
             .ok_or(EIO)?;
 
+        pr_info!("valid offset: {:?}", offset);
+
         let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
         let dir_entries =
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+        pr_info!("found dir_entries");
 
         let active_entries = dir_entries
             .iter()

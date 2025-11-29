@@ -844,7 +844,7 @@ impl DirEmitter {
             }
         }
 
-        if self.0.pos == 0 {
+        if self.0.pos == 1 {
             if !self.emit(1, b"..", file.parent_ino() as u64, DirEntryType::Dir) {
                 return false;
             }
