@@ -253,17 +253,27 @@ impl file::Operations for RustEzFs {
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
         pr_info!("found dir_entries");
 
+        let inode_store = {
+            let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
+            let mapped_inode_store = h.mapper.mapped_folio(offset.try_into()?)?;
+            InodeStore::from_bytes(&mapped_inode_store[..size_of::<InodeStore>()]).ok_or(EIO)?
+        };
+
         let active_entries = dir_entries
             .iter()
             .skip(index)
             .filter(|&entry| entry.is_active());
 
         for entry in active_entries {
+            let ino: usize = entry.inode_no().try_into()?;
+            let entry_inode = inode_store[ino - EZFS_ROOT_INODE_NUMBER];
+            let etype = file::DirEntryType::from_mode(entry_inode.mode());
+
             if !emitter.emit(
                 size_of::<EzfsDirEntry>() as i64,
                 entry.filename(),
                 entry.inode_no(),
-                file::DirEntryType::Unknown,
+                etype,
             ) {
                 return Ok(());
             }
