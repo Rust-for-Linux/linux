@@ -289,7 +289,6 @@ impl<T: FileSystem + ?Sized> Tables<T> {
             None
         },
         destroy_inode: Some(INode::<T>::destroy_inode_callback),
-        destroy_inode: None,
         free_inode: None,
         dirty_inode: None,
         write_inode: None,
