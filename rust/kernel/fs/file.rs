@@ -16,6 +16,7 @@ use crate::{
     fmt,
     fs::{FileSystem, Offset, UnspecifiedFS},
     inode::{self, INode, Ino},
+    kernel::dentry::DEntry,
     sync::aref::{ARef, AlwaysRefCounted},
     types::{Locked, NotThreadSafe, Opaque},
     user,
@@ -349,6 +350,19 @@ impl<T: FileSystem + ?Sized> LocalFile<T> {
     pub fn inode(&self) -> &INode<T> {
         // SAFETY: `f_inode` is an immutable field, so it's safe to read it.
         unsafe { INode::from_raw((*self.inner.get()).f_inode) }
+    }
+
+    /// Returns the dentry associated with the file.
+    pub fn dentry(&self) -> &DEntry<T> {
+        // SAFETY: `f_path` is an immutable field, so it's safe to read it. And will remain safe to
+        // read while the `&self` is valid.
+        unsafe { DEntry::from_raw((*self.inner.get()).__bindgen_anon_1.f_path.dentry) }
+    }
+
+    pub fn parent_ino(&self) -> usize {
+        let dentry = self.dentry().0.get();
+
+        unsafe { bindings::d_parent_ino(dentry) }
     }
 }
 
@@ -821,5 +835,21 @@ impl DirEmitter {
             self.0.pos = new_pos;
         }
         ret
+    }
+
+    pub fn emit_dots<T: FileSystem + ?Sized>(&mut self, file: &File<T>) -> bool {
+        if self.0.pos == 0 {
+            if !self.emit(1, b".", file.inode().ino() as u64, DirEntryType::Dir) {
+                return false;
+            }
+        }
+
+        if self.0.pos == 1 {
+            if !self.emit(1, b"..", file.parent_ino() as u64, DirEntryType::Dir) {
+                return false;
+            }
+        }
+
+        true
     }
 }
