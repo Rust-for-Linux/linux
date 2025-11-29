@@ -99,6 +99,7 @@ pub mod fs;
 pub mod id_pool;
 pub mod init;
 pub mod inode;
+pub mod address_space;
 pub mod io;
 pub mod ioctl;
 pub mod iov;

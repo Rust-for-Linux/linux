@@ -6,6 +6,7 @@ use macros::vtable;
 use crate::dentry::{self, DEntry};
 use crate::error::{from_err_ptr, Result};
 use crate::folio::{self, Folio};
+use crate::address_space;
 use crate::fs::{self, mode, Registration};
 use crate::fs::{file, PageOffset, UnspecifiedFS};
 use crate::mem_cache::MemCache;
@@ -442,6 +443,14 @@ impl<T: FileSystem + ?Sized> New<T> {
         // SAFETY: By the type invariants, it's ok to modify the inode.
         let inode = unsafe { self.0.as_mut() };
         inode.__bindgen_anon_3.i_fop = fops.inner;
+        self
+    }
+
+    /// Sets the address space operations on this new inode.
+    pub fn set_aops(&mut self, aops: address_space::Ops<T>) -> &mut Self {
+        // SAFETY: By the type invariants, it's ok to modify the inode.
+        let inode = unsafe { self.0.as_mut() };
+        inode.i_data.a_ops = aops.0;
         self
     }
 }
