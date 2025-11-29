@@ -750,6 +750,13 @@ pub enum DirEntryType {
     Wht = bindings::DT_WHT,
 }
 
+impl DirEntryType {
+    pub fn from_mode(mode: u32) -> Self {
+        let dt_value = (mode & bindings::S_IFMT) >> bindings::S_DT_SHIFT;
+        Self::try_from(dt_value).unwrap_or(Self::Unknown)
+    }
+}
+
 impl From<&inode::Type> for DirEntryType {
     fn from(value: &inode::Type) -> Self {
         match value {
