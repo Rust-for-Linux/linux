@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include "linux/pagemap.h"
 #include <linux/gfp.h>
 #include <linux/highmem.h>
 #include <linux/mm.h>
@@ -38,6 +39,16 @@ struct page *rust_helper_folio_page(struct folio *folio, size_t n)
 bool rust_helper_folio_test_highmem(struct folio *folio)
 {
 	return folio_test_highmem(folio);
+}
+
+void rust_helper_folio_lock(struct folio *folio)
+{
+	return folio_lock(folio);
+}
+
+void rust_helper_folio_unlock(struct folio *folio)
+{
+	return folio_unlock(folio);
 }
 
 #ifndef NODE_NOT_IN_PAGE_FLAGS
