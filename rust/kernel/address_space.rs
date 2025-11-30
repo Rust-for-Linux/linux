@@ -1,6 +1,19 @@
-use crate::{error::{from_result, Result}, fs::file::File, fs::FileSystem, folio::Folio, folio::PageCache, types::Locked};
+//! File system address spaces.
+//!
+//! This module allows Rust code implement address space operations.
+//!
+//! C headers: [`include/linux/fs.h`](srctree/include/linux/fs.h)
+
+use crate::pr_info;
+use crate::{
+    error::{from_result, Result},
+    folio::Folio,
+    folio::PageCache,
+    fs::file::File,
+    fs::FileSystem,
+    types::Locked,
+};
 use core::marker::PhantomData;
-use crate::prelude::EIO;
 use macros::vtable;
 
 /// Operations implemented by address space
@@ -11,8 +24,7 @@ pub trait Operations {
 
     fn read_folio(
         file: Option<&File<Self::FileSystem>>,
-        // folio: Locked<&Folio<PageCache<Self::FileSystem>>>,
-        folio: &Folio<PageCache<Self::FileSystem>>,
+        folio: Locked<&Folio<PageCache<Self::FileSystem>>>,
     ) -> Result;
 }
 
@@ -22,15 +34,16 @@ pub struct Ops<T: FileSystem + ?Sized>(
     pub(crate) PhantomData<T>,
 );
 
-
-impl <T: FileSystem + ?Sized> Ops<T> {
-
+impl<T: FileSystem + ?Sized> Ops<T> {
     pub const fn new<U: Operations<FileSystem = T> + ?Sized>() -> Self {
         struct Table<T: Operations + ?Sized>(PhantomData<T>);
         impl<T: Operations + ?Sized> Table<T> {
-
             const TABLE: bindings::address_space_operations = bindings::address_space_operations {
-                read_folio: Some(Self::read_folio_callback),
+                read_folio: if T::HAS_READ_FOLIO {
+                    Some(Self::read_folio_callback)
+                } else {
+                    None
+                },
                 writepages: None,
                 dirty_folio: None,
                 readahead: None,
@@ -56,7 +69,22 @@ impl <T: FileSystem + ?Sized> Ops<T> {
                 folio_ptr: *mut bindings::folio,
             ) -> i32 {
                 from_result(|| {
-                    Err(EIO)
+                    pr_info!("RUSTEZFS: in read_folio_callback\n");
+
+                    let file = if file_ptr.is_null() {
+                        None
+                    } else {
+                        // SAFETY: The C API guarantees that `file_ptr` is a valid file if non-null.
+                        Some(unsafe { File::from_raw_file(file_ptr) })
+                    };
+
+                    // SAFETY: The C API guarantees that `folio_ptr` is a valid folio.
+                    let folio = unsafe { Folio::from_raw(folio_ptr) };
+
+                    // SAFETY: The C contract guarantees that the folio is valid and locked, with
+                    // ownership of the lock transferred to the callee (this function).
+                    T::read_folio(file, unsafe { Locked::new(folio) })?;
+                    Ok(0)
                 })
             }
         }
