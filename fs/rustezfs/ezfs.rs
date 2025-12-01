@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! Log-based filesystem written in Rust
+#![allow(unused)]
 
 mod defs;
 mod dir;
@@ -10,14 +11,19 @@ use crate::dir::{DirEntryStore, EzfsDirEntry};
 use crate::inode::{EzfsInode, InodeStore};
 use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
+use kernel::bindings;
 use kernel::dentry;
+use kernel::folio::{Folio, PageCache};
+use kernel::fs::Kiocb;
 use kernel::fs::{file, File, FileSystem, Offset, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
+use kernel::iov::IovIterDest;
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::time::UNIX_EPOCH;
 use kernel::transmute::FromBytes;
-use kernel::types::{ARef, Locked};
+use kernel::types::{ARef, Lockable, Locked};
+use kernel::{address_space, iomap};
 use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
@@ -45,8 +51,10 @@ impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
 impl RustEzFs {
     const DIR_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
     const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
+    const AOPS: kernel::address_space::Ops<RustEzFs> = kernel::iomap::aops::<RustEzFs>();
 
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
+        pr_info!("iget(ino={ino})\n");
         let mut inode = match sb.get_or_create_inode(ino)? {
             INodeState::Existing(inode) => return Ok(inode),
             INodeState::Uninitilized(new_inode) => new_inode,
@@ -66,12 +74,16 @@ impl RustEzFs {
             fs::mode::S_IFREG => {
                 inode
                     .set_iops(Self::DIR_IOPS)
-                    .set_fops(file::Ops::generic_ro_file());
-                // .set_aops(FILE_AOPS);
+                    // .set_fops(file::Ops::generic_ro_file())
+                    .set_fops(Self::DIR_FOPS)
+                    .set_aops(Self::AOPS);
                 Type::Reg
             }
             fs::mode::S_IFDIR => {
-                inode.set_iops(Self::DIR_IOPS).set_fops(Self::DIR_FOPS);
+                inode
+                    .set_iops(Self::DIR_IOPS)
+                    .set_fops(Self::DIR_FOPS)
+                    .set_aops(Self::AOPS);
                 Type::Dir
             }
             _ => return Err(ENOENT),
@@ -81,7 +93,7 @@ impl RustEzFs {
             typ,
             mode: ezfs_inode.mode().try_into()?,
             size: ezfs_inode.file_size().try_into()?,
-            blocks: ezfs_inode.nblocks(),
+            blocks: ezfs_inode.nblocks() * 8,
             nlink: ezfs_inode.nlink(),
             uid: ezfs_inode.uid(),
             gid: ezfs_inode.gid(),
@@ -103,6 +115,7 @@ impl FileSystem for RustEzFs {
         sb: &mut SuperBlock<Self, New>,
         mapper: Option<Mapper<Self>>,
     ) -> Result<Self::Data> {
+        pr_info!("fill_super()\n");
         let Some(mapper) = mapper else {
             return Err(EINVAL);
         };
@@ -117,7 +130,7 @@ impl FileSystem for RustEzFs {
             return Err(EINVAL);
         }
 
-        let ezfs_sb = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
+        let ezfs_sb: Self::Data = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
 
         sb.set_magic(EZFS_MAGIC_NUMBER);
 
@@ -125,6 +138,7 @@ impl FileSystem for RustEzFs {
     }
 
     fn init_root(sb: &SuperBlock<Self>) -> Result<dentry::Root<Self>> {
+        pr_info!("init_root()\n");
         let inode = Self::iget(sb, EZFS_ROOT_INODE_NUMBER)?;
         dentry::Root::try_new(inode)
     }
@@ -194,11 +208,21 @@ impl file::Operations for RustEzFs {
     type FileSystem = Self;
 
     fn seek(file: &File<Self>, offset: Offset, whence: file::Whence) -> Result<Offset> {
+        pr_info!("seek()\n");
         file::generic_seek(file, offset, whence)
     }
 
-    fn read(_: &File<Self>, _: &mut kernel::user::Writer, _: &mut Offset) -> Result<usize> {
-        Err(EISDIR)
+    fn read_iter(
+        _kiocb: Kiocb<'_, <Self as FileSystem>::Data>,
+        _iov: &mut IovIterDest<'_>,
+    ) -> Result<usize> {
+        pr_info!("read_iter()\n");
+
+        // from_result(|| {
+        //     let res = unsafe { bindings::generic_file_read_iter() };
+        // })
+
+        Err(EINVAL)
     }
 
     fn read_dir(
@@ -269,6 +293,84 @@ impl file::Operations for RustEzFs {
             }
         }
 
+        Ok(())
+    }
+}
+
+impl iomap::Operations for RustEzFs {
+    type FileSystem = Self;
+
+    fn begin<'a>(
+        inode: &'a INode<Self::FileSystem>,
+        pos: Offset,
+        length: Offset,
+        flags: u32,
+        map: &mut iomap::Map<'a>,
+        srcmap: &mut iomap::Map<'a>,
+    ) -> Result {
+        pr_info!("iomap_begin()\n");
+
+        let sb = inode.super_block();
+        let ezfs_sb: Pin<&EzfsSuperblock> = sb.data();
+        let ezfs_inode = inode.data();
+
+        let start_block = (pos >> sb.blocksize_bits()) as u64;
+        let end_block = ((pos + length - 1) >> sb.blocksize_bits()) as u64;
+
+        let ez_blk_num = ezfs_inode.data_blk_num();
+        let ez_blk_count = inode.blocks() / 8;
+
+        let phys = if ez_blk_num > 0 {
+            ez_blk_num + start_block
+        } else {
+            0
+        };
+
+        let phys_sidx: i64 = if ez_blk_num > 0 {
+            // SAFETY: phys should always be >= root datablock number
+            (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64)
+                .try_into()
+                .unwrap()
+        } else {
+            -1i64
+        };
+
+        // pr_info!("pos={pos}, length={length}\n");
+        // pr_info!("block: {start_block}-{end_block}\n");
+        // pr_info!("ez_blk_num={ez_blk_num}, start_block={start_block}, ez_blk_count={ez_blk_count}");
+        // pr_info!("phys={phys}, (sidx={phys_sidx})\n");
+
+        map.set_bdev(Some(sb.bdev()))
+            .set_offset(pos)
+            .set_length(length as u64);
+
+        if (flags & iomap::flags::WRITE == 0) {
+            pr_info!("READING\n");
+
+            if ez_blk_num == 0 || start_block >= ez_blk_count {
+                map.set_type(iomap::Type::Hole)
+                    .set_addr(bindings::IOMAP_NULL_ADDR as u64);
+                return Ok(());
+            }
+            map.set_type(iomap::Type::Mapped)
+                .set_addr(phys << sb.blocksize_bits());
+            return Ok(());
+        };
+
+        pr_info!("WRITING\n");
+
+        Err(EIO)
+    }
+
+    fn end<'a>(
+        _inode: &'a INode<Self::FileSystem>,
+        _pos: Offset,
+        _length: Offset,
+        _written: isize,
+        _flags: u32,
+        _map: &iomap::Map<'a>,
+    ) -> Result {
+        pr_info!("iomap_end()\n");
         Ok(())
     }
 }
