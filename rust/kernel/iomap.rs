@@ -15,6 +15,7 @@ use crate::{
     fs::Offset,
     fs::FileSystem,
     types::Locked,
+    block,
 };
 
 use crate::inode::INode;
@@ -23,54 +24,142 @@ use core::mem;
 use macros::vtable;
 use uapi::writeback_control;
 
+/// The type of mapping.
+///
+/// This is used in [`Map`].
+#[repr(u16)]
+pub enum Type {
+    /// No blocks allocated, need allocation.
+    Hole = bindings::IOMAP_HOLE as u16,
+
+    /// Delayed allocation blocks.
+    DelAlloc = bindings::IOMAP_DELALLOC as u16,
+
+    /// Blocks allocated at the given address.
+    Mapped = bindings::IOMAP_MAPPED as u16,
+
+    /// Blocks allocated at the given address in unwritten state.
+    Unwritten = bindings::IOMAP_UNWRITTEN as u16,
+
+    /// Data inline in the inode.
+    Inline = bindings::IOMAP_INLINE as u16,
+}
+
+
+/// Flags usable in [`Map`], in [`Map::set_flags`] in particular.
+pub mod map_flags {
+    /// Indicates that the blocks have been newly allocated and need zeroing for areas that no data
+    /// is copied to.
+    pub const NEW: u16 = bindings::IOMAP_F_NEW as u16;
+
+    /// Indicates that the inode has uncommitted metadata needed to access written data and
+    /// requires fdatasync to commit them to persistent storage. This needs to take into account
+    /// metadata changes that *may* be made at IO completion, such as file size updates from direct
+    /// IO.
+    pub const DIRTY: u16 = bindings::IOMAP_F_DIRTY as u16;
+
+    /// Indicates that the blocks are shared, and will need to be unshared as part a write.
+    pub const SHARED: u16 = bindings::IOMAP_F_SHARED as u16;
+
+    /// Indicates that the iomap contains the merge of multiple block mappings.
+    pub const MERGED: u16 = bindings::IOMAP_F_MERGED as u16;
+
+    /// Indicates that the file system requires the use of buffer heads for this mapping.
+    pub const BUFFER_HEAD: u16 = bindings::IOMAP_F_BUFFER_HEAD as u16;
+
+    /// Indicates that the iomap is for an extended attribute extent rather than a file data
+    /// extent.
+    pub const XATTR: u16 = bindings::IOMAP_F_XATTR as u16;
+
+    /// Indicates to the iomap_end method that the file size has changed as the result of this
+    /// write operation.
+    pub const SIZE_CHANGED: u16 = bindings::IOMAP_F_SIZE_CHANGED as u16;
+
+    /// Indicates that the iomap is not valid any longer and the file range it covers needs to be
+    /// remapped by the high level before the operation can proceed.
+    pub const STALE: u16 = bindings::IOMAP_F_STALE as u16;
+
+    /// Flags from 0x1000 up are for file system specific usage.
+    pub const PRIVATE: u16 = bindings::IOMAP_F_PRIVATE as u16;
+}
 
 /// A map from address space to block device.
 #[repr(transparent)]
 pub struct Map<'a>(pub bindings::iomap, PhantomData<&'a ()>);
 
 impl<'a> Map<'a> {
-    // /// Sets the map type.
-    // pub fn set_type(&mut self, t: Type) -> &mut Self {
-    //     self.0.type_ = t as u16;
-    //     self
-    // }
-    //
-    // /// Sets the file offset, in bytes.
-    // pub fn set_offset(&mut self, v: Offset) -> &mut Self {
-    //     self.0.offset = v;
-    //     self
-    // }
-    //
-    // /// Sets the length of the mapping, in bytes.
-    // pub fn set_length(&mut self, len: u64) -> &mut Self {
-    //     self.0.length = len;
-    //     self
-    // }
-    //
-    // /// Sets the mapping flags.
-    // ///
-    // /// Values come from the [`map_flags`] module.
-    // pub fn set_flags(&mut self, flags: u16) -> &mut Self {
-    //     self.0.flags = flags;
-    //     self
-    // }
-    //
-    // /// Sets the disk offset of the mapping, in bytes.
-    // pub fn set_addr(&mut self, addr: u64) -> &mut Self {
-    //     self.0.addr = addr;
-    //     self
-    // }
-    //
-    // /// Sets the block device of the mapping.
-    // pub fn set_bdev(&mut self, bdev: Option<&'a block::Device>) -> &mut Self {
-    //     self.0.bdev = if let Some(b) = bdev {
-    //         b.0.get()
-    //     } else {
-    //         core::ptr::null_mut()
-    //     };
-    //     self
-    // }
+    /// Sets the map type.
+    pub fn set_type(&mut self, t: Type) -> &mut Self {
+        self.0.type_ = t as u16;
+        self
+    }
+
+    /// Sets the file offset, in bytes.
+    pub fn set_offset(&mut self, v: Offset) -> &mut Self {
+        self.0.offset = v;
+        self
+    }
+
+    /// Sets the length of the mapping, in bytes.
+    pub fn set_length(&mut self, len: u64) -> &mut Self {
+        self.0.length = len;
+        self
+    }
+
+    /// Sets the mapping flags.
+    ///
+    /// Values come from the [`map_flags`] module.
+    pub fn set_flags(&mut self, flags: u16) -> &mut Self {
+        self.0.flags = flags;
+        self
+    }
+
+    /// Sets the disk offset of the mapping, in bytes.
+    pub fn set_addr(&mut self, addr: u64) -> &mut Self {
+        self.0.addr = addr;
+        self
+    }
+
+    /// Sets the block device of the mapping.
+    pub fn set_bdev(&mut self, bdev: Option<&'a block::Device>) -> &mut Self {
+        self.0.bdev = if let Some(b) = bdev {
+            b.0.get()
+        } else {
+            core::ptr::null_mut()
+        };
+        self
+    }
 }
+/// Flags passed to [`Operations::begin`] and [`Operations::end`].
+pub mod flags {
+    /// Writing, must allocate block.
+    pub const WRITE: u32 = bindings::IOMAP_WRITE;
+
+    /// Zeroing operation, may skip holes.
+    pub const ZERO: u32 = bindings::IOMAP_ZERO;
+
+    /// Report extent status, e.g. FIEMAP.
+    pub const REPORT: u32 = bindings::IOMAP_REPORT;
+
+    /// Mapping for page fault.
+    pub const FAULT: u32 = bindings::IOMAP_FAULT;
+
+    /// Direct I/O.
+    pub const DIRECT: u32 = bindings::IOMAP_DIRECT;
+
+    /// Do not block.
+    pub const NOWAIT: u32 = bindings::IOMAP_NOWAIT;
+
+    /// Only pure overwrites allowed.
+    pub const OVERWRITE_ONLY: u32 = bindings::IOMAP_OVERWRITE_ONLY;
+
+    /// `unshare_file_range`.
+    pub const UNSHARE: u32 = bindings::IOMAP_UNSHARE;
+
+    /// DAX mapping.
+    pub const DAX: u32 = bindings::IOMAP_DAX;
+}
+
 
 /// Operations implemented by iomap users.
 pub trait Operations {
