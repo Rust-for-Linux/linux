@@ -126,7 +126,7 @@ impl FileSystem for RustEzFs {
             return Err(EINVAL);
         }
 
-        let ezfs_sb: Self::Data = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
+        let ezfs_sb = KBox::pin_init(EzfsSuperblock::new(disk_sb, mapper), GFP_KERNEL)?;
 
         sb.set_magic(EZFS_MAGIC_NUMBER);
 
@@ -280,6 +280,7 @@ impl file::Operations for RustEzFs {
 impl iomap::Operations for RustEzFs {
     type FileSystem = Self;
 
+    // Equivalent to c's iomap_begin()
     fn begin<'a>(
         inode: &'a INode<Self::FileSystem>,
         pos: Offset,
@@ -294,8 +295,8 @@ impl iomap::Operations for RustEzFs {
         let ezfs_sb: Pin<&EzfsSuperblock> = sb.data();
         let ezfs_inode = inode.data();
 
-        let start_block = (pos >> sb.blocksize_bits()) as u64;
-        let end_block = ((pos + length - 1) >> sb.blocksize_bits()) as u64;
+        let start_block: u64 = (pos >> sb.blocksize_bits()).try_into()?;
+        let end_block: u64 = ((pos + length - 1) >> sb.blocksize_bits()).try_into()?;
 
         let ez_blk_num = ezfs_inode.data_blk_num();
         let ez_blk_count = inode.blocks() / 8;

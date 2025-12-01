@@ -8,14 +8,14 @@ use super::address_space;
 use crate::pr_info;
 use crate::prelude::EIO;
 use crate::{
+    block,
     error::{from_result, Result},
     folio::Folio,
     folio::PageCache,
     fs::file::File,
-    fs::Offset,
     fs::FileSystem,
+    fs::Offset,
     types::Locked,
-    block,
 };
 
 use crate::inode::INode;
@@ -45,6 +45,12 @@ pub enum Type {
     Inline = bindings::IOMAP_INLINE as u16,
 }
 
+impl From<Type> for u16 {
+    fn from(t: Type) -> Self {
+        // This is ok as Type values are is represented as u16
+        t as u16
+    }
+}
 
 /// Flags usable in [`Map`], in [`Map::set_flags`] in particular.
 pub mod map_flags {
@@ -90,7 +96,7 @@ pub struct Map<'a>(pub bindings::iomap, PhantomData<&'a ()>);
 impl<'a> Map<'a> {
     /// Sets the map type.
     pub fn set_type(&mut self, t: Type) -> &mut Self {
-        self.0.type_ = t as u16;
+        self.0.type_ = t.into();
         self
     }
 
@@ -160,7 +166,6 @@ pub mod flags {
     pub const DAX: u32 = bindings::IOMAP_DAX;
 }
 
-
 /// Operations implemented by iomap users.
 pub trait Operations {
     /// File system that these operations are compatible with.
@@ -196,7 +201,6 @@ pub trait Operations {
         Ok(())
     }
 }
-
 
 /// Returns address space oprerations backed by iomaps.
 pub const fn aops<T: Operations + ?Sized>() -> address_space::Ops<T::FileSystem> {
@@ -289,15 +293,23 @@ pub const fn aops<T: Operations + ?Sized>() -> address_space::Ops<T::FileSystem>
             unsafe { bindings::iomap_read_folio(folio, &Self::MAP_TABLE) }
         }
 
-
-        extern "C" fn writepages_callback(_mapping: *mut bindings::address_space, _wbc: *mut bindings::writeback_control) -> i32 {
+        extern "C" fn writepages_callback(
+            _mapping: *mut bindings::address_space,
+            _wbc: *mut bindings::writeback_control,
+        ) -> i32 {
             // Safety: iomap docs say wpc must be zero-initialized.
-            let mut wpc: bindings::iomap_writepage_ctx = unsafe {mem::zeroed()};
-            wpc.inode = unsafe { (*_mapping).host };   // struct inode *host
-            wpc.wbc   = _wbc;
-            wpc.ops   = &Self::WRITEBACK_TABLE;
+            let mut wpc: bindings::iomap_writepage_ctx = unsafe { mem::zeroed() };
 
-            unsafe {bindings::iomap_writepages(&mut wpc)}
+            // SAFETY: `_mapping` is guaranteed by the VFS to be a valid `struct address_space *`.
+            // Its `host` field is a valid `struct inode *`.
+            wpc.inode = unsafe { (*_mapping).host };
+            wpc.wbc = _wbc;
+            wpc.ops = &Self::WRITEBACK_TABLE;
+
+            // SAFETY: We just created `wpc` to be stack-allocated & zero-initialised.
+            // The VFS guarantees that `.inode` + `.wbc` are valid while `.ops` is static.
+            // We pass a unique mutable pointer to `wpc`.
+            unsafe { bindings::iomap_writepages(&mut wpc) }
         }
 
         extern "C" fn readahead_callback(rac: *mut bindings::readahead_control) {
