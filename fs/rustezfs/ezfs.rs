@@ -196,18 +196,21 @@ impl file::Operations for RustEzFs {
         file::generic_seek(file, offset, whence)
     }
 
-    fn read_iter(
-        _kiocb: Kiocb<'_, <Self as FileSystem>::Data>,
-        _iov: &mut IovIterDest<'_>,
-    ) -> Result<usize> {
-        pr_info!("read_iter()\n");
-
-        // from_result(|| {
-        //     let res = unsafe { bindings::generic_file_read_iter() };
-        // })
-
-        Err(EINVAL)
-    }
+    // TODO: file::Operations currently just calls generic_file_read_iter directly
+    // we might want to move it here but that requires us being able to have both
+    // Kiocb and IovIterDest implement ::to_ptr(); Let's do that later
+    // fn read_iter(
+    //     _kiocb: Kiocb<'_, <Self as FileSystem>::Data>,
+    //     _iov: &mut IovIterDest<'_>,
+    // ) -> Result<usize> {
+    //     pr_info!("read_iter()\n");
+    //
+    //     // from_result(|| {
+    //     //     let res = unsafe { bindings::generic_file_read_iter() };
+    //     // })
+    //
+    //     Err(EINVAL)
+    // }
 
     fn read_dir(
         file: &File<Self>,
