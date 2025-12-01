@@ -49,7 +49,7 @@ impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
 }
 
 impl RustEzFs {
-    const DIR_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
+    const FILE_FOPS: file::Ops<RustEzFs> = file::Ops::new::<RustEzFs>();
     const DIR_IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
     const AOPS: kernel::address_space::Ops<RustEzFs> = kernel::iomap::aops::<RustEzFs>();
 
@@ -74,15 +74,14 @@ impl RustEzFs {
             fs::mode::S_IFREG => {
                 inode
                     .set_iops(Self::DIR_IOPS)
-                    // .set_fops(file::Ops::generic_ro_file())
-                    .set_fops(Self::DIR_FOPS)
+                    .set_fops(Self::FILE_FOPS)
                     .set_aops(Self::AOPS);
                 Type::Reg
             }
             fs::mode::S_IFDIR => {
                 inode
                     .set_iops(Self::DIR_IOPS)
-                    .set_fops(Self::DIR_FOPS)
+                    .set_fops(Self::FILE_FOPS) // TODO: Change this
                     .set_aops(Self::AOPS);
                 Type::Dir
             }
