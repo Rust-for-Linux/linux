@@ -12,7 +12,7 @@ use macros::vtable;
 use crate::{
     bindings,
     cred::Credential,
-    error::{Error, Result, code::*, from_result, to_result},
+    error::{code::*, from_result, to_result, Error, Result},
     fmt,
     fs::{FileSystem, Kiocb, Offset, UnspecifiedFS},
     inode::{self, INode, Ino},
@@ -560,8 +560,10 @@ pub trait Operations {
         Err(EINVAL)
     }
 
-
-    fn read_iter(_kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>, _iov: &mut IovIterDest<'_>) -> Result<usize> {
+    fn read_iter(
+        _kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
+        _iov: &mut IovIterDest<'_>,
+    ) -> Result<usize> {
         Err(EINVAL)
     }
 
@@ -598,7 +600,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
         }
     }
     /// Creates file operations from a type that implements the [`Operations`] trait.
-    pub const fn new<U: Operations<FileSystem = T> + ?Sized>() -> Self {
+    pub const fn new_file<U: Operations<FileSystem = T> + ?Sized>() -> Self {
         struct Table<T: Operations + ?Sized>(PhantomData<T>);
         impl<T: Operations + ?Sized> Table<T> {
             const TABLE: bindings::file_operations = bindings::file_operations {
@@ -618,11 +620,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 // read_iter: Some(unsafe {bindings::generic_file_read_iter}),
                 write_iter: None,
                 iopoll: None,
-                iterate_shared: if T::HAS_READ_DIR {
-                    Some(Self::read_dir_callback)
-                } else {
-                    None
-                },
+                iterate_shared: None,
                 poll: None,
                 unlocked_ioctl: None,
                 fop_flags: 0,
@@ -713,8 +711,59 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 iter: *mut bindings::iov_iter,
             ) -> isize {
                 pr_info!("read_iter_callback\n");
-                return unsafe {bindings::generic_file_read_iter(kiocb, iter)};
+                return unsafe { bindings::generic_file_read_iter(kiocb, iter) };
             }
+        }
+        Self {
+            inner: &Table::<U>::TABLE,
+            _p: PhantomData,
+        }
+    }
+
+    /// Creates file operations from a type that implements the [`Operations`] trait.
+    pub const fn new_dir<U: Operations<FileSystem = T> + ?Sized>() -> Self {
+        struct Table<T: Operations + ?Sized>(PhantomData<T>);
+        impl<T: Operations + ?Sized> Table<T> {
+            const TABLE: bindings::file_operations = bindings::file_operations {
+                owner: ptr::null_mut(),
+                llseek: None,
+                read: None,
+                write: None,
+                read_iter: None,
+                write_iter: None,
+                iopoll: None,
+                iterate_shared: if T::HAS_READ_DIR {
+                    Some(Self::read_dir_callback)
+                } else {
+                    None
+                },
+                poll: None,
+                unlocked_ioctl: None,
+                fop_flags: 0,
+                compat_ioctl: None,
+                mmap: None,
+                mmap_prepare: None,
+                open: None,
+                flush: None,
+                release: None,
+                fsync: None,
+                fasync: None,
+                lock: None,
+                get_unmapped_area: None,
+                check_flags: None,
+                flock: None,
+                splice_write: None,
+                splice_read: None,
+                splice_eof: None,
+                setlease: None,
+                fallocate: None,
+                show_fdinfo: None,
+                copy_file_range: None,
+                remap_file_range: None,
+                fadvise: None,
+                uring_cmd: None,
+                uring_cmd_iopoll: None,
+            };
 
             unsafe extern "C" fn read_dir_callback(
                 file_ptr: *mut bindings::file,
