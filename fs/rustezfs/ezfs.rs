@@ -307,13 +307,7 @@ impl iomap::Operations for RustEzFs {
             0
         };
 
-        let phys_sidx: i64 = if ez_blk_num > 0 {
-            // phys should always be >= root datablock number
-            (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?
-        } else {
-            -1i64
-        };
-
+        // For all cases, the bdev, offset and length are as such
         map.set_bdev(Some(sb.bdev()))
             .set_offset(pos)
             .set_length(length as u64);
@@ -321,17 +315,27 @@ impl iomap::Operations for RustEzFs {
         if (flags & iomap::flags::WRITE == 0) {
             pr_info!("READING\n");
 
+            // Invalid read, block does not belong to inode
             if ez_blk_num == 0 || start_block >= ez_blk_count {
                 map.set_type(iomap::Type::Hole)
                     .set_addr(bindings::IOMAP_NULL_ADDR as u64);
                 return Ok(());
             }
+            // Valid read, set target address accordingly
             map.set_type(iomap::Type::Mapped)
                 .set_addr(phys << sb.blocksize_bits());
             return Ok(());
         };
 
         pr_info!("WRITING\n");
+
+        // // Shifted physical index
+        // let phys_sidx: i64 = if ez_blk_num > 0 {
+        //     // phys should always be >= root datablock number
+        //     (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?
+        // } else {
+        //     -1i64
+        // };
 
         Err(EIO)
     }
