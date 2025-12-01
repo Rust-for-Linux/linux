@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Log-based filesystem written in Rust
+//! Easy filesystem written in Rust
 #![allow(unused)]
 
 mod defs;
@@ -154,10 +154,7 @@ impl kernel::inode::Operations for RustEzFs {
         let name = dentry.name();
         pr_info!("lookup(name={:?})\n", core::str::from_utf8(name));
 
-        // pr_info!("looking for file: {:?}", core::str::from_utf8(name));
-
         if name.len() > EZFS_FILENAME_BUF_SIZE {
-            // pr_info!("dentry name to long: {:?}", core::str::from_utf8(name));
             return Err(ENAMETOOLONG);
         }
 
@@ -175,20 +172,9 @@ impl kernel::inode::Operations for RustEzFs {
         let dir_entries =
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
 
-        let dir_entry = dir_entries.iter().find(|x| {
-            // pr_info!(
-            //     "filename: {:?} = {}\n",
-            //     x.filename(),
-            //     core::str::from_utf8(x.filename()).unwrap_or("<invalid utf8>")
-            // );
-            //
-            // pr_info!(
-            //     "dname: {:?} = {}\n",
-            //     name,
-            //     core::str::from_utf8(name).unwrap_or("<invalid utf8>")
-            // );
-            x.filename() == name && x.is_active()
-        });
+        let dir_entry = dir_entries
+            .iter()
+            .find(|x| x.is_active() && x.filename() == name);
 
         let inode = if let Some(entry) = dir_entry {
             pr_info!("Inode found: {:?}\n", entry.inode_no());
@@ -230,11 +216,8 @@ impl file::Operations for RustEzFs {
     ) -> Result {
         pr_info!("read_dir()\n");
         let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
-        // pr_info!("emitter position: {:?}", pos);
 
         if pos < 2 {
-            // pr_info!("pos < 2: trying to emit dots");
-            // pr_info!("file inode: {:?}", file.inode().ino());
             if !emitter.emit_dots(file) {
                 return Ok(());
             }
@@ -245,7 +228,6 @@ impl file::Operations for RustEzFs {
 
         let index = {
             let disk_pos = pos.checked_sub(2).ok_or(ENOENT)?;
-            // pr_info!("disk position: {:?}", disk_pos);
 
             if disk_pos % size_of::<EzfsDirEntry>() != 0 {
                 return Err(ENOENT);
@@ -257,7 +239,6 @@ impl file::Operations for RustEzFs {
         // pr_info!("emitter index: {:?}", index);
 
         if index >= EZFS_MAX_CHILDREN {
-            // pr_info!("index higher than max children: {:?}", index);
             return Ok(());
         }
 
@@ -266,15 +247,12 @@ impl file::Operations for RustEzFs {
 
         let offset = ezfs_dir_inode
             .data_blk_num()
-            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .checked_mul(EZFS_BLOCK_SIZE as u64) // TODO: better check?
             .ok_or(EIO)?;
-
-        // pr_info!("valid offset: {:?}", offset);
 
         let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
         let dir_entries =
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
-        // pr_info!("found dir_entries");
 
         let active_entries = dir_entries
             .iter()
@@ -326,18 +304,11 @@ impl iomap::Operations for RustEzFs {
         };
 
         let phys_sidx: i64 = if ez_blk_num > 0 {
-            // SAFETY: phys should always be >= root datablock number
-            (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64)
-                .try_into()
-                .unwrap()
+            // phys should always be >= root datablock number
+            (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?;
         } else {
             -1i64
         };
-
-        // pr_info!("pos={pos}, length={length}\n");
-        // pr_info!("block: {start_block}-{end_block}\n");
-        // pr_info!("ez_blk_num={ez_blk_num}, start_block={start_block}, ez_blk_count={ez_blk_count}");
-        // pr_info!("phys={phys}, (sidx={phys_sidx})\n");
 
         map.set_bdev(Some(sb.bdev()))
             .set_offset(pos)
