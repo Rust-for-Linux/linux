@@ -14,13 +14,16 @@ use crate::{
     cred::Credential,
     error::{code::*, from_result, to_result, Error, Result},
     fmt,
-    fs::{FileSystem, Offset, UnspecifiedFS},
+    fs::{FileSystem, Kiocb, Offset, UnspecifiedFS},
     inode::{self, INode, Ino},
+    iov::IovIterDest,
     kernel::dentry::DEntry,
     sync::aref::{ARef, AlwaysRefCounted},
-    types::{Locked, NotThreadSafe, Opaque},
+    types::{ForeignOwnable, Locked, NotThreadSafe, Opaque},
     user,
 };
+
+use crate::pr_info;
 use core::{marker::PhantomData, mem::ManuallyDrop, ptr};
 
 /// Flags associated with a [`File`].
@@ -557,6 +560,13 @@ pub trait Operations {
         Err(EINVAL)
     }
 
+    fn read_iter(
+        _kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
+        _iov: &mut IovIterDest<'_>,
+    ) -> Result<usize> {
+        Err(EINVAL)
+    }
+
     /// Seeks the file to the given offset.
     fn seek(_file: &File<Self::FileSystem>, _offset: Offset, _whence: Whence) -> Result<Offset> {
         Err(EINVAL)
@@ -590,7 +600,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
         }
     }
     /// Creates file operations from a type that implements the [`Operations`] trait.
-    pub const fn new<U: Operations<FileSystem = T> + ?Sized>() -> Self {
+    pub const fn new_file<U: Operations<FileSystem = T> + ?Sized>() -> Self {
         struct Table<T: Operations + ?Sized>(PhantomData<T>);
         impl<T: Operations + ?Sized> Table<T> {
             const TABLE: bindings::file_operations = bindings::file_operations {
@@ -606,19 +616,16 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     None
                 },
                 write: None,
-                read_iter: None,
+                read_iter: Some(Self::read_iter_callback),
+                // read_iter: Some(unsafe {bindings::generic_file_read_iter}),
                 write_iter: None,
                 iopoll: None,
-                iterate_shared: if T::HAS_READ_DIR {
-                    Some(Self::read_dir_callback)
-                } else {
-                    None
-                },
+                iterate_shared: None,
                 poll: None,
                 unlocked_ioctl: None,
                 fop_flags: 0,
                 compat_ioctl: None,
-                mmap: None,
+                mmap: Some(bindings::generic_file_mmap),
                 mmap_prepare: None,
                 open: None,
                 flush: None,
@@ -630,7 +637,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 check_flags: None,
                 flock: None,
                 splice_write: None,
-                splice_read: None,
+                splice_read: Some(bindings::filemap_splice_read),
                 splice_eof: None,
                 setlease: None,
                 fallocate: None,
@@ -674,6 +681,89 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     Ok(isize::try_from(read)?)
                 })
             }
+
+            // /// # Safety
+            // ///
+            // /// `kiocb` must be correspond to a valid file that is associated with a
+            // /// `T`. `iter` must be a valid `struct iov_iter` for writing.
+            // unsafe extern "C" fn read_iter_callback(
+            //     kiocb: *mut bindings::kiocb,
+            //     iter: *mut bindings::iov_iter,
+            // ) -> isize {
+            //     // SAFETY: The caller provides a valid `struct kiocb` associated with a
+            //     // `MiscDeviceRegistration<T>` file.
+            //     let kiocb = unsafe { Kiocb::from_raw(kiocb) };
+            //     // SAFETY: This is a valid `struct iov_iter` for writing.
+            //     let iov = unsafe { IovIterDest::from_raw(iter) };
+            //
+            //     match T::read_iter(kiocb, iov) {
+            //         Ok(res) => res as isize,
+            //         Err(err) => err.to_errno() as isize,
+            //     }
+            // }
+
+            /// # Safety
+            ///
+            /// `kiocb` must be correspond to a valid file that is associated with a
+            /// `T`. `iter` must be a valid `struct iov_iter` for writing.
+            unsafe extern "C" fn read_iter_callback(
+                kiocb: *mut bindings::kiocb,
+                iter: *mut bindings::iov_iter,
+            ) -> isize {
+                pr_info!("read_iter_callback\n");
+                return unsafe { bindings::generic_file_read_iter(kiocb, iter) };
+            }
+        }
+        Self {
+            inner: &Table::<U>::TABLE,
+            _p: PhantomData,
+        }
+    }
+
+    /// Creates file operations from a type that implements the [`Operations`] trait.
+    pub const fn new_dir<U: Operations<FileSystem = T> + ?Sized>() -> Self {
+        struct Table<T: Operations + ?Sized>(PhantomData<T>);
+        impl<T: Operations + ?Sized> Table<T> {
+            const TABLE: bindings::file_operations = bindings::file_operations {
+                owner: ptr::null_mut(),
+                llseek: None,
+                read: None,
+                write: None,
+                read_iter: None,
+                write_iter: None,
+                iopoll: None,
+                iterate_shared: if T::HAS_READ_DIR {
+                    Some(Self::read_dir_callback)
+                } else {
+                    None
+                },
+                poll: None,
+                unlocked_ioctl: None,
+                fop_flags: 0,
+                compat_ioctl: None,
+                mmap: None,
+                mmap_prepare: None,
+                open: None,
+                flush: None,
+                release: None,
+                fsync: None,
+                fasync: None,
+                lock: None,
+                get_unmapped_area: None,
+                check_flags: None,
+                flock: None,
+                splice_write: None,
+                splice_read: None,
+                splice_eof: None,
+                setlease: None,
+                fallocate: None,
+                show_fdinfo: None,
+                copy_file_range: None,
+                remap_file_range: None,
+                fadvise: None,
+                uring_cmd: None,
+                uring_cmd_iopoll: None,
+            };
 
             unsafe extern "C" fn read_dir_callback(
                 file_ptr: *mut bindings::file,

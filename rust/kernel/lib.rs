@@ -12,6 +12,8 @@
 //! do so first instead of bypassing this crate.
 
 #![no_std]
+#![allow(missing_docs)]
+#![allow(unused)]
 //
 // Please see https://github.com/Rust-for-Linux/linux/issues/2 for details on
 // the unstable features in use.
@@ -99,6 +101,8 @@ pub mod fs;
 pub mod id_pool;
 pub mod init;
 pub mod inode;
+pub mod iomap;
+pub mod address_space;
 pub mod io;
 pub mod ioctl;
 pub mod iov;

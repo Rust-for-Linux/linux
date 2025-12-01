@@ -3,6 +3,7 @@ use core::mem::{ManuallyDrop, MaybeUninit};
 
 use macros::vtable;
 
+use crate::address_space;
 use crate::dentry::{self, DEntry};
 use crate::error::{from_err_ptr, Result};
 use crate::folio::{self, Folio};
@@ -94,6 +95,11 @@ impl<T: FileSystem + ?Sized> INode<T> {
         // SAFETY: `i_sb` is immutable, and `self` is guaranteed to be valid by the existence of a
         // shared reference (&self) to it.
         unsafe { SuperBlock::from_raw((*self.0.get()).i_sb) }
+    }
+
+    pub fn blocks(&self) -> u64 {
+        // SAFETY: this is ok
+        unsafe { (*self.0.get()).i_blocks }
     }
 
     /// Returns the data associated with the inode.
@@ -442,6 +448,14 @@ impl<T: FileSystem + ?Sized> New<T> {
         // SAFETY: By the type invariants, it's ok to modify the inode.
         let inode = unsafe { self.0.as_mut() };
         inode.__bindgen_anon_3.i_fop = fops.inner;
+        self
+    }
+
+    /// Sets the address space operations on this new inode.
+    pub fn set_aops(&mut self, aops: address_space::Ops<T>) -> &mut Self {
+        // SAFETY: By the type invariants, it's ok to modify the inode.
+        let inode = unsafe { self.0.as_mut() };
+        inode.i_data.a_ops = aops.0;
         self
     }
 }

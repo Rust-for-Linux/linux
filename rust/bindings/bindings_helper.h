@@ -58,6 +58,7 @@
 #include <linux/firmware.h>
 #include <linux/interrupt.h>
 #include <linux/fs.h>
+#include <linux/iomap.h>
 #include <linux/fs_context.h>
 #include <linux/ioport.h>
 #include <linux/jiffies.h>

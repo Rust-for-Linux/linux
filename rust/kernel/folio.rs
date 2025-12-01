@@ -4,7 +4,7 @@ use crate::{
     error::Result,
     fs::FileSystem,
     prelude::EDOM,
-    types::{ARef, AlwaysRefCounted, Opaque},
+    types::{Lockable, Locked, ARef, AlwaysRefCounted, Opaque},
 };
 
 /// The type of a [`Folio`] is unspecified.
@@ -183,5 +183,18 @@ impl Drop for MapGuard<'_> {
         // SAFETY: A `MapGuard` instance is only created when `kmap` succeeds, so it's ok to unmap
         // it when the guard is dropped.
         unsafe { bindings::kunmap(self.page) };
+    }
+}
+
+// SAFETY: `raw_lock` calls folio_lock, which actually locks the folio.
+unsafe impl<S> Lockable for Folio<S> {
+    fn raw_lock(&self) {
+        // SAFETY: The folio is valid because the shared reference implies a non-zero refcount.
+        unsafe { bindings::folio_lock(self.0.get()) }
+    }
+
+    unsafe fn unlock(&self) {
+        // SAFETY: The safety requirements guarantee that the folio is locked.
+        unsafe { bindings::folio_unlock(self.0.get()) }
     }
 }

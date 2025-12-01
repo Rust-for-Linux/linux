@@ -27,7 +27,7 @@ pub(crate) struct EzfsSuperblockDisk {
 }
 
 impl EzfsSuperblockDisk {
-    pub fn magic(&self) -> u64 {
+    pub(crate) fn magic(&self) -> u64 {
         self.data.magic
     }
 }
