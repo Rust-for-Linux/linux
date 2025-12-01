@@ -16,7 +16,7 @@ use crate::{
     fmt,
     fs::{FileSystem, Kiocb, Offset, UnspecifiedFS},
     inode::{self, INode, Ino},
-    iov::IovIterDest,
+    iov::{IovIterDest, IovIterSource},
     kernel::dentry::DEntry,
     sync::aref::{ARef, AlwaysRefCounted},
     types::{ForeignOwnable, Locked, NotThreadSafe, Opaque},
@@ -582,6 +582,26 @@ pub trait Operations {
     ) -> Result {
         Err(EINVAL)
     }
+
+    // /// Writes data from the caller's buffer to this file.
+    // ///
+    // /// Corresponds to the `write_iter` function pointer in `struct file_operations`.
+    // fn write(
+    //     _data: <Self::Data as ForeignOwnable>::Borrowed<'_>,
+    //     _file: &File<Self::FileSystem>,
+    //     _reader: &mut impl IoBufferReader,
+    //     _offset: u64,
+    // ) -> Result<usize> {
+    //     Err(EINVAL)
+    // }
+
+    /// Write to this miscdevice.
+    fn write_iter(
+        _kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
+        _iov: &mut IovIterSource<'_>,
+    ) -> Result<usize> {
+        Err(EINVAL)
+    }
 }
 
 /// Represents file operations
@@ -617,8 +637,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 },
                 write: None,
                 read_iter: Some(Self::read_iter_callback),
-                // read_iter: Some(unsafe {bindings::generic_file_read_iter}),
-                write_iter: None,
+                write_iter: if T::HAS_WRITE_ITER {
+                    Some(Self::write_iter_callback)
+                } else {
+                    None
+                },
                 iopoll: None,
                 iterate_shared: None,
                 poll: None,
@@ -712,6 +735,27 @@ impl<T: FileSystem + ?Sized> Ops<T> {
             ) -> isize {
                 pr_info!("read_iter_callback\n");
                 return unsafe { bindings::generic_file_read_iter(kiocb, iter) };
+            }
+
+            /// # Safety
+            ///
+            /// `kiocb` must be correspond to a valid file that is associated with a
+            /// `MiscDeviceRegistration<T>`. `iter` must be a valid `struct iov_iter` for writing.
+            unsafe extern "C" fn write_iter_callback(
+                kiocb: *mut bindings::kiocb,
+                iter: *mut bindings::iov_iter,
+            ) -> isize {
+                pr_info!("write_iter_callback\n");
+                // SAFETY: The caller provides a valid `struct kiocb` associated with a
+                // `MiscDeviceRegistration<T>` file.
+                let kiocb = unsafe { Kiocb::from_raw(kiocb) };
+                // SAFETY: This is a valid `struct iov_iter` for reading.
+                let iov = unsafe { IovIterSource::from_raw(iter) };
+
+                match T::write_iter(kiocb, iov) {
+                    Ok(res) => res as isize,
+                    Err(err) => err.to_errno() as isize,
+                }
             }
         }
         Self {
