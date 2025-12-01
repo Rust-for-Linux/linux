@@ -305,7 +305,7 @@ impl iomap::Operations for RustEzFs {
 
         let phys_sidx: i64 = if ez_blk_num > 0 {
             // phys should always be >= root datablock number
-            (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?;
+            (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?
         } else {
             -1i64
         };
