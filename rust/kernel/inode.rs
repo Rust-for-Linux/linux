@@ -3,10 +3,10 @@ use core::mem::{ManuallyDrop, MaybeUninit};
 
 use macros::vtable;
 
+use crate::address_space;
 use crate::dentry::{self, DEntry};
 use crate::error::{from_err_ptr, Result};
 use crate::folio::{self, Folio};
-use crate::address_space;
 use crate::fs::{self, mode, Registration};
 use crate::fs::{file, PageOffset, UnspecifiedFS};
 use crate::mem_cache::MemCache;
@@ -95,6 +95,11 @@ impl<T: FileSystem + ?Sized> INode<T> {
         // SAFETY: `i_sb` is immutable, and `self` is guaranteed to be valid by the existence of a
         // shared reference (&self) to it.
         unsafe { SuperBlock::from_raw((*self.0.get()).i_sb) }
+    }
+
+    pub fn blocks(&self) -> u64 {
+        // SAFETY: this is ok
+        unsafe { (*self.0.get()).i_blocks }
     }
 
     /// Returns the data associated with the inode.

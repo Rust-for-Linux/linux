@@ -83,6 +83,11 @@ impl<T: FileSystem + ?Sized, S> SuperBlock<T, S> {
         // valid `s_bdev` that remains valid while the superblock (`self`) is valid.
         unsafe { block::Device::from_raw((*self.0.get()).s_bdev) }
     }
+
+    pub fn blocksize_bits(&self) -> u8 {
+        // SAFETY: This should be fine??
+        unsafe {(*self.0.get()).s_blocksize_bits}
+    }
 }
 
 impl<T: FileSystem + ?Sized> SuperBlock<T, New> {
