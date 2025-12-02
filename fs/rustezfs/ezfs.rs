@@ -17,7 +17,7 @@ use kernel::folio::{Folio, PageCache};
 use kernel::fs::Kiocb;
 use kernel::fs::{file, File, FileSystem, Offset, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
-use kernel::iov::IovIterDest;
+use kernel::iov::{IovIterDest, IovIterSource};
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::time::UNIX_EPOCH;
@@ -28,6 +28,7 @@ use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
 use core::mem::size_of;
+use core::ptr;
 use pin_init::{pin_data, PinInit, PinnedDrop};
 
 struct RustEzFs;
@@ -283,6 +284,48 @@ impl file::Operations for RustEzFs {
         }
 
         Ok(())
+    }
+
+    fn write_iter(
+        _kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
+        _iov: &mut IovIterSource<'_>,
+    ) -> Result<usize> {
+        pr_info!("write_iter\n");
+
+        let kiocb = _kiocb.as_raw();
+        let iter = _iov.as_raw();
+        let iomap_ops = iomap::map_table::<RustEzFs>();
+
+        // SAFETY: VFS guarantees kiocb is never null and can be dereferenced
+        // Theerefore, both operations below are valid
+        let flags = unsafe { (*kiocb).ki_flags as u32 }; // casting a bitmask to u32 is always ok
+        let file_ptr = unsafe { (*kiocb).ki_filp };
+
+        if flags & bindings::IOCB_DIRECT != 0 {
+            return Err(EINVAL); // We don't support direct I/O
+        }
+
+        // SAFETY: VFS will always provide a valid file pointer
+        let file_flags = unsafe { (*file_ptr).f_flags };
+
+        if (file_flags & bindings::O_APPEND) != 0 {
+            unsafe { (*kiocb).ki_pos = bindings::i_size_read((*(*file_ptr).f_mapping).host) };
+        }
+
+        // SAFETY: We've got a valid kiocb and iov iter from our VFS and our iomap_ops is static
+        // The function treats null pointers as valid inputs for the last two params
+        let ret: usize = unsafe {
+            bindings::iomap_file_buffered_write(
+                kiocb,
+                iter,
+                iomap_ops,
+                ptr::null(),
+                ptr::null_mut(),
+            )
+        }
+        .try_into()?;
+
+        Ok(ret)
     }
 }
 
