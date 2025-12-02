@@ -205,14 +205,34 @@ pub trait Operations {
 struct Table<T: Operations + ?Sized>(PhantomData<T>);
 
 impl<T: Operations + ?Sized> Table<T> {
+    const WRITEBACK_TABLE: bindings::iomap_writeback_ops = bindings::iomap_writeback_ops {
+        writeback_range: Some(Self::writeback_range_callback),
+        writeback_submit: Some(Self::writeback_submit),
+    };
+
+    extern "C" fn writeback_range_callback(
+        _wpc: *mut bindings::iomap_writepage_ctx,
+        _folio: *mut bindings::folio,
+        pos: u64,
+        len: u32,
+        end_pos: u64,
+    ) -> isize {
+        from_result(|| {
+            pr_info!("writeback_range()\n");
+            Ok(len.try_into()?)
+        })
+    }
+
+    extern "C" fn writeback_submit(_wpc: *mut bindings::iomap_writepage_ctx, _error: i32) -> i32 {
+        from_result(|| {
+            pr_info!("writeback_submit()\n");
+            Ok(0)
+        })
+    }
+
     const MAP_TABLE: bindings::iomap_ops = bindings::iomap_ops {
         iomap_begin: Some(Self::iomap_begin_callback),
         iomap_end: Some(Self::iomap_end_callback),
-    };
-
-    const WRITEBACK_TABLE: bindings::iomap_writeback_ops = bindings::iomap_writeback_ops {
-        writeback_range: None,
-        writeback_submit: None,
     };
 
     extern "C" fn iomap_begin_callback(
