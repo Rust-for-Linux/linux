@@ -381,6 +381,9 @@ impl iomap::Operations for RustEzFs {
 
         pr_info!("WRITING\n");
 
+        let blocks_needed = end_block + 1;
+        let blocks_to_add = blocks_needed - ez_blk_count;
+
         // // Shifted physical index
         // let phys_sidx: i64 = if ez_blk_num > 0 {
         //     // phys should always be >= root datablock number
@@ -388,6 +391,50 @@ impl iomap::Operations for RustEzFs {
         // } else {
         //     -1i64
         // };
+        //
+        pr_info!(
+            "blocks: needed={blocks_needed}, to_add={blocks_to_add}, ez_blk_num: {ez_blk_num}\n"
+        );
+        pr_info!("CASE\n");
+
+        enum WriteCase {
+            NEW,    // Write to an empty file without any allocated blocks
+            WITHIN, // File can fit written contents within allocated, unused block
+            EXTEND, // File has adjacent, free block to extend to
+            MOVE,   // File has no adjacent, free block and must be moved
+        }
+
+        let case_type = if ez_blk_num == 0 {
+            pr_info!("file has no blocks\n");
+            WriteCase::NEW
+        } else {
+            let ez_blk_sidx = ez_blk_num - TryInto::<u64>::try_into(EZFS_ROOT_DATABLOCK_NUMBER)?;
+
+            if blocks_to_add <= 0 {
+                pr_info!("inside: don't need additional blocks to perform write\n");
+                WriteCase::WITHIN
+            } else {
+                pr_info!("extend: we need to allocate blocks\n");
+                WriteCase::MOVE
+            }
+        };
+
+        match case_type {
+            WriteCase::NEW => {
+                pr_info!("creating a file\n");
+            }
+            WriteCase::WITHIN => {
+                pr_info!("easiest write\n");
+
+                return Ok(());
+            }
+            WriteCase::EXTEND => {
+                pr_info!("semi easy writ\n");
+            }
+            WriteCase::MOVE => {
+                pr_info!("Hardest write\n");
+            }
+        }
 
         Err(EIO)
     }
