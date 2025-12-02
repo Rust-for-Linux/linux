@@ -422,21 +422,25 @@ impl iomap::Operations for RustEzFs {
         match case_type {
             WriteCase::NEW => {
                 pr_info!("creating a file\n");
+                return Err(EIO);
             }
             WriteCase::WITHIN => {
                 pr_info!("easiest write\n");
-
-                return Ok(());
             }
             WriteCase::EXTEND => {
                 pr_info!("semi easy writ\n");
+                return Err(EIO);
             }
             WriteCase::MOVE => {
                 pr_info!("Hardest write\n");
+                return Err(EIO);
             }
         }
 
-        Err(EIO)
+        map.set_type(iomap::Type::Mapped)
+            .set_addr(phys << sb.blocksize_bits());
+
+        Ok(())
     }
 
     fn end<'a>(
