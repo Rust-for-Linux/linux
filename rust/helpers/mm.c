@@ -63,3 +63,8 @@ size_t rust_helper_folio_size(struct folio *folio)
 {
 	return folio_size(folio);
 }
+
+void rust_helper_put_page(struct page *page)
+{
+	return put_page(page);
+}
