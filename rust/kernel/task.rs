@@ -15,7 +15,7 @@ use crate::{
 use core::{
     cmp::{Eq, PartialEq},
     ops::Deref,
-    ptr,
+    ptr::{self, addr_of_mut},
 };
 
 /// A sentinel value used for infinite timeouts.
@@ -152,6 +152,12 @@ pub type Pid = bindings::pid_t;
 #[derive(Copy, Clone)]
 pub struct Kuid {
     kuid: bindings::kuid_t,
+}
+
+/// The type of user identifiers (UIDs).
+#[derive(Copy, Clone)]
+pub struct Kgid {
+    kgid: bindings::kgid_t,
 }
 
 impl Task {
@@ -390,6 +396,12 @@ impl Kuid {
         // SAFETY: Just an FFI call.
         unsafe { bindings::from_kuid(bindings::current_user_ns(), self.kuid) }
     }
+
+    #[inline]
+    pub fn into_uid_in_init_ns(self) -> bindings::uid_t {
+        // SAFETY: Just an FFI call.
+        unsafe { bindings::from_kuid(addr_of_mut!(bindings::init_user_ns), self.kuid) }
+    }
 }
 
 impl PartialEq for Kuid {
@@ -401,6 +413,30 @@ impl PartialEq for Kuid {
 }
 
 impl Eq for Kuid {}
+
+impl Kgid {
+    /// Create a `Kuid` given the raw C type.
+    #[inline]
+    pub fn from_raw(kgid: bindings::kgid_t) -> Self {
+        Self { kgid }
+    }
+
+    #[inline]
+    pub fn into_gid_in_init_ns(self) -> bindings::gid_t {
+        // SAFETY: Just an FFI call.
+        unsafe { bindings::from_kgid(addr_of_mut!(bindings::init_user_ns), self.kgid) }
+    }
+}
+
+impl PartialEq for Kgid {
+    #[inline]
+    fn eq(&self, other: &Kgid) -> bool {
+        // SAFETY: Just an FFI call.
+        unsafe { bindings::gid_eq(self.kgid, other.kgid) }
+    }
+}
+
+impl Eq for Kgid {}
 
 /// Annotation for functions that can sleep.
 ///

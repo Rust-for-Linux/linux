@@ -37,3 +37,8 @@ void *rust_helper_alloc_inode_sb(struct super_block *sb,
 {
 	return alloc_inode_sb(sb, cache, gfp);
 }
+
+void rust_helper_mark_inode_dirty(struct inode *inode)
+{
+	mark_inode_dirty(inode);
+}

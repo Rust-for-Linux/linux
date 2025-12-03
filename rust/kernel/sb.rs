@@ -86,7 +86,7 @@ impl<T: FileSystem + ?Sized, S> SuperBlock<T, S> {
 
     pub fn blocksize_bits(&self) -> u8 {
         // SAFETY: This should be fine??
-        unsafe {(*self.0.get()).s_blocksize_bits}
+        unsafe { (*self.0.get()).s_blocksize_bits }
     }
 }
 
@@ -149,5 +149,13 @@ impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
             // `inode::New`.
             Ok(INodeState::Uninitilized(inode::New(inode, PhantomData)))
         }
+    }
+
+    pub fn new_inode(&self) -> Result<inode::New<T>> {
+        let sb_ptr = self.0.get();
+        // SAFETY: sb is guaranteed to be valid because of TypeState
+        let new_inode = ptr::NonNull::new(unsafe { bindings::new_inode(sb_ptr) }).ok_or(ENOMEM)?;
+
+        Ok(inode::New(new_inode, PhantomData))
     }
 }
