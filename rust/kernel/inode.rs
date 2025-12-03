@@ -559,8 +559,7 @@ impl<T: FileSystem + ?Sized> New<T> {
         }
 
         let manual = ManuallyDrop::new(self);
-        // SAFETY: We transferred ownership of the refcount to `ARef` by preventing `drop` from
-        // being called with the `ManuallyDrop` instance created above.
+
         Ok(Ready(manual.0, PhantomData))
     }
 
