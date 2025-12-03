@@ -198,7 +198,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
     pub fn mark_dirty(&self) {
         // SAFETY: This is safe since it is guaranteed by the typestate
         // that the inode has been inserted into the hash
-        let inode = unsafe { self.0.get() };
+        let inode = self.0.get();
         unsafe { bindings::mark_inode_dirty(inode) };
     }
 
@@ -636,8 +636,8 @@ impl<T: FileSystem + ?Sized> Ready<T> {
     }
 
     pub fn instantiate_dentry(self, dentry: &dentry::Unhashed<'_, T>) {
-        let inode_ptr = unsafe { self.0.as_ptr() };
-        let dentry_ptr = unsafe { dentry.0 .0.get() };
+        let inode_ptr = self.0.as_ptr();
+        let dentry_ptr = dentry.0 .0.get();
 
         // SAFETY: instantiates dentry and unlocks inode
         // transfer ownership to C
