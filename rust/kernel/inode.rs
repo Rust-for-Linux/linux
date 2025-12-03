@@ -365,6 +365,7 @@ pub struct New<T: FileSystem + ?Sized>(
 impl<T: FileSystem + ?Sized> New<T> {
     /// Initialises the new inode with the given parameters.
     pub fn init_from_disk(self, params: Params<T::INodeData>) -> Result<ARef<INode<T>>> {
+        // SAFETY: WithData has been allocated by VFS (allocate_inode_callback)
         let outerp = unsafe { container_of!(self.0.as_ptr(), WithData<T::INodeData>, inode) };
 
         // SAFETY: This is a newly-created inode. No other references to it exist, so it is
@@ -462,6 +463,7 @@ impl<T: FileSystem + ?Sized> New<T> {
 
     // Instantiated new inode with data but keep it locked
     pub fn init_new(self, params: Params<T::INodeData>) -> Result<Ready<T>> {
+        // SAFETY: WithData has been allocated by VFS (allocate_inode_callback)
         let outerp = unsafe { container_of!(self.0.as_ptr(), WithData<T::INodeData>, inode) };
 
         // SAFETY: This is a newly-created inode. No other references to it exist, so it is
