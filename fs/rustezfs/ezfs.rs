@@ -274,6 +274,9 @@ impl kernel::inode::Operations for RustEzFs {
         pr_info!("Calling create from rustezfs\n");
 
         let new_inode = Self::new_inode(parent, mode.into())?;
+
+        // TODO: Write DirEntry to memory
+
         new_inode.instantiate_dentry(&dentry);
 
         Ok(0)
