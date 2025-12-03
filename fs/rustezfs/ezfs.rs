@@ -378,12 +378,12 @@ impl iomap::Operations for RustEzFs {
         let start_block: u64 = (pos >> sb.blocksize_bits()).try_into()?;
         let end_block: u64 = ((pos + length - 1) >> sb.blocksize_bits()).try_into()?;
 
-        pr_info!("start_block: {start_block}, end_block: {end_block}\n");
+        // pr_info!("start_block: {start_block}, end_block: {end_block}\n");
 
         let ez_blk_num = ezfs_inode.data_blk_num();
         let ez_blk_count = inode.blocks() / 8;
 
-        pr_info!("blk_num: {ez_blk_num}, ez_blk_count: {ez_blk_count}\n");
+        // pr_info!("blk_num: {ez_blk_num}, ez_blk_count: {ez_blk_count}\n");
 
         let mut phys = if ez_blk_num > 0 {
             ez_blk_num + start_block
@@ -396,9 +396,8 @@ impl iomap::Operations for RustEzFs {
             .set_offset(pos)
             .set_length(length as u64);
 
+        // We're reading
         if (flags & iomap::flags::WRITE == 0) {
-            pr_info!("READING\n");
-
             // Invalid read, block does not belong to inode
             if ez_blk_num == 0 || start_block >= ez_blk_count {
                 map.set_type(iomap::Type::Hole)
@@ -411,8 +410,7 @@ impl iomap::Operations for RustEzFs {
             return Ok(());
         };
 
-        pr_info!("WRITING\n");
-
+        // We're writing
         // As we'll modify the file system below, we must acquire a lock
         ezfs_sb.lock();
 
@@ -447,14 +445,7 @@ impl iomap::Operations for RustEzFs {
                 return Err(ENOSPC);
             }
 
-            pr_info!("start={start} - end={end}\n");
-
-            // REMOVE, just for debugging
-            for s in start..end {
-                if free_data_blocks.is_set(s) {
-                    pr_info!("s={s} is_set, we can't expand\n");
-                }
-            }
+            // pr_info!("start={start} - end={end}\n");
 
             if (start..end).any(|bit| free_data_blocks.is_set(bit)) {
                 WriteCase::MOVE
@@ -465,25 +456,19 @@ impl iomap::Operations for RustEzFs {
 
         match case_type {
             WriteCase::NEW => {
-                pr_info!("creating a file\n");
+                pr_info!("adding to an empty file\n");
                 return Err(EIO);
             }
-            WriteCase::WITHIN => {
-                pr_info!("easiest write\n");
-            }
+            WriteCase::WITHIN => {}
             WriteCase::EXTEND => {
-                pr_info!("semi easy write\n");
                 for i in ez_blk_count..blocks_needed {
                     let bit = ez_blk_sidx + i;
-                    pr_info!("setting bit: {bit}\n");
                     free_data_blocks.set_bit(bit);
                 }
 
                 map.set_flags(iomap::map_flags::NEW);
             }
             WriteCase::MOVE => {
-                pr_info!("Hardest write\n");
-
                 // Let's try to find a region of sequential free blocks
                 // of size `blocks_needed` to move our file to
                 let mut curr_block = 0;
@@ -510,8 +495,6 @@ impl iomap::Operations for RustEzFs {
                     for j in 0..ez_blk_count {
                         let old = ez_blk_sidx + j;
                         let new = new_block_start + j;
-
-                        pr_info!("move: {old} -> {new}\n");
 
                         ezfs_move_block(old, new, sb);
 
