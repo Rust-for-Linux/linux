@@ -100,7 +100,26 @@ impl RustEzFs {
             atime: ezfs_inode.atime()?,
             value: ezfs_inode,
         })
-        // TODO: move unlock_new_inode from instantiate
+    }
+
+    fn allocate_inode(sb: &SuperBlock<Self>) -> Result<usize> {
+        let ezfs_sb = sb.data();
+        let mut free_inodes = ezfs_sb.free_inodes.lock();
+
+        for (word_idx, &word) in free_inodes.iter().enumerate() {
+            if word != !0u32 {
+                // Find first ZERO bit by inverting first
+                let bit_idx: u32 = (!word).leading_zeros();
+                let inode_num: usize = (word_idx as usize * 32) + bit_idx as usize;
+
+                if inode_num < EZFS_MAX_INODES {
+                    free_inodes[word_idx] |= 1 << bit_idx;
+                    return Ok(inode_num);
+                }
+            }
+        }
+
+        Err(ENOSPC)
     }
 
     fn new_inode(
@@ -110,7 +129,7 @@ impl RustEzFs {
         let sb = dir.super_block();
         let mut new_inode = sb.new_inode()?;
 
-        let ino = 0; // TODO
+        let ino = Self::allocate_inode(sb)?;
 
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
