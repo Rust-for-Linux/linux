@@ -1,16 +1,17 @@
 use core::marker::PhantomData;
 use core::mem::{ManuallyDrop, MaybeUninit};
 
+use bindings::{init_user_ns, kgid_t, kuid_t};
 use macros::vtable;
 
 use crate::address_space;
 use crate::dentry::{self, DEntry};
-use crate::error::{from_err_ptr, Result};
+use crate::error::{from_err_ptr, from_result, Result};
 use crate::folio::{self, Folio};
 use crate::fs::{self, mode, Registration};
 use crate::fs::{file, PageOffset, UnspecifiedFS};
 use crate::mem_cache::MemCache;
-use crate::prelude::{EIO, ENOTSUPP, ERANGE, GFP_KERNEL};
+use crate::prelude::{EINVAL, EIO, ENOTSUPP, ERANGE, GFP_KERNEL};
 use crate::sb::SuperBlock;
 use crate::str::CString;
 use crate::time::Timespec;
@@ -55,6 +56,15 @@ pub trait Operations {
     ) -> Result<Option<ARef<DEntry<Self::FileSystem>>>> {
         Err(ENOTSUPP)
     }
+
+    fn create(
+        _parent: &Locked<&INode<Self::FileSystem>, ReadSem>,
+        _dentry: dentry::Unhashed<'_, Self::FileSystem>,
+        _mode: u16,
+        _excl: bool,
+    ) -> Result<usize> {
+        Err(ENOTSUPP)
+    }
 }
 
 /// A node (inode) in the file index.
@@ -65,9 +75,11 @@ pub trait Operations {
 ///
 /// Instances of this type are always ref-counted, that is, a call to `ihold` ensures that the
 /// allocation remains valid at least until the matching call to `iput`.
-// TODO: should be default UnspecifiedFS
 #[repr(transparent)]
-pub struct INode<T: FileSystem + ?Sized>(pub(crate) Opaque<bindings::inode>, PhantomData<T>);
+pub struct INode<T: FileSystem + ?Sized = UnspecifiedFS>(
+    pub(crate) Opaque<bindings::inode>,
+    PhantomData<T>,
+);
 
 impl<T: FileSystem + ?Sized> INode<T> {
     /// Creates a new inode reference from the given raw pointer.
@@ -81,6 +93,10 @@ impl<T: FileSystem + ?Sized> INode<T> {
     pub(crate) unsafe fn from_raw<'a>(ptr: *mut bindings::inode) -> &'a Self {
         // SAFETY: The safety requirements guarantee that the cast below is ok.
         unsafe { &*ptr.cast::<Self>() }
+    }
+
+    pub(crate) const fn as_raw(&self) -> *const bindings::inode {
+        unsafe { self.0.get() as *const bindings::inode }
     }
 
     /// Returns the number of the inode.
@@ -177,6 +193,13 @@ impl<T: FileSystem + ?Sized> INode<T> {
                 Some(Self::inode_init_once_callback),
             )?)
         })
+    }
+
+    pub fn mark_dirty(&self) {
+        // SAFETY: This is safe since it is guaranteed by the typestate
+        // that the inode has been inserted into the hash
+        let inode = unsafe { self.0.get() };
+        unsafe { bindings::mark_inode_dirty(inode) };
     }
 
     unsafe extern "C" fn inode_init_once_callback(outer_inode: *mut core::ffi::c_void) {
@@ -341,7 +364,7 @@ pub struct New<T: FileSystem + ?Sized>(
 
 impl<T: FileSystem + ?Sized> New<T> {
     /// Initialises the new inode with the given parameters.
-    pub fn init(self, params: Params<T::INodeData>) -> Result<ARef<INode<T>>> {
+    pub fn init_from_disk(self, params: Params<T::INodeData>) -> Result<ARef<INode<T>>> {
         let outerp = unsafe { container_of!(self.0.as_ptr(), WithData<T::INodeData>, inode) };
 
         // SAFETY: This is a newly-created inode. No other references to it exist, so it is
@@ -437,6 +460,108 @@ impl<T: FileSystem + ?Sized> New<T> {
         Ok(unsafe { ARef::from_raw(manual.0.cast::<INode<T>>()) })
     }
 
+    // Instantiated new inode with data but keep it locked
+    pub fn init_new(self, params: Params<T::INodeData>) -> Result<Ready<T>> {
+        let outerp = unsafe { container_of!(self.0.as_ptr(), WithData<T::INodeData>, inode) };
+
+        // SAFETY: This is a newly-created inode. No other references to it exist, so it is
+        // safe to mutably dereference it.
+        let outer = unsafe { &mut *outerp };
+
+        // N.B. We must always write this to a newly allocated inode because the free callback
+        // expects the data to be initialised and drops it.
+        outer.data.write(params.value);
+
+        let inode = &mut outer.inode;
+        let mode = match params.typ {
+            Type::Dir => bindings::S_IFDIR,
+            Type::Reg => {
+                // SAFETY: The `i_mapping` pointer doesn't change and is valid.
+                unsafe { bindings::mapping_set_large_folios(inode.i_mapping) };
+                bindings::S_IFREG
+            }
+            Type::Lnk(str) => {
+                // If we are using `page_get_link`, we need to prevent the use of high mem.
+                if !inode.i_op.is_null() {
+                    // SAFETY: We just checked that `i_op` is non-null, and we always just set it
+                    // to valid values.
+                    if unsafe {
+                        (*inode.i_op).get_link == bindings::page_symlink_inode_operations.get_link
+                    } {
+                        // SAFETY: `inode` is valid for write as it's a new inode.
+                        unsafe { bindings::inode_nohighmem(inode) };
+                    }
+                }
+                // TODO: Look into this
+                // if let Some(s) = str {
+                //     inode.__bindgen_anon_5.i_link = s.into_foreign().cast::<i8>().cast_mut();
+                // }
+                bindings::S_IFLNK
+            }
+            Type::Fifo => {
+                // SAFETY: `inode` is valid for write as it's a new inode.
+                unsafe { bindings::init_special_inode(inode, bindings::S_IFIFO as _, 0) };
+                bindings::S_IFIFO
+            }
+            Type::Sock => {
+                // SAFETY: `inode` is valid for write as it's a new inode.
+                unsafe { bindings::init_special_inode(inode, bindings::S_IFSOCK as _, 0) };
+                bindings::S_IFSOCK
+            }
+            Type::Chr(major, minor) => {
+                // SAFETY: `inode` is valid for write as it's a new inode.
+                unsafe {
+                    bindings::init_special_inode(
+                        inode,
+                        bindings::S_IFCHR as _,
+                        bindings::MKDEV(major, minor & bindings::MINORMASK),
+                    )
+                };
+                bindings::S_IFCHR
+            }
+            Type::Blk(major, minor) => {
+                // SAFETY: `inode` is valid for write as it's a new inode.
+                unsafe {
+                    bindings::init_special_inode(
+                        inode,
+                        bindings::S_IFBLK as _,
+                        bindings::MKDEV(major, minor & bindings::MINORMASK),
+                    )
+                };
+                bindings::S_IFBLK
+            }
+        };
+
+        inode.i_mode = (params.mode & 0o777) | u16::try_from(mode)?;
+        inode.i_size = params.size;
+        inode.i_blocks = params.blocks;
+
+        inode.i_ctime_sec = params.ctime.tv_sec();
+        inode.i_ctime_nsec = params.ctime.tv_nsec()?;
+        inode.i_mtime_sec = params.mtime.tv_sec();
+        inode.i_mtime_nsec = params.mtime.tv_nsec()?;
+        inode.i_atime_sec = params.atime.tv_sec();
+        inode.i_atime_nsec = params.atime.tv_nsec()?;
+
+        // SAFETY: inode is a new inode, so it is valid for write.
+        unsafe {
+            bindings::set_nlink(inode, params.nlink);
+            bindings::i_uid_write(inode, params.uid);
+            bindings::i_gid_write(inode, params.gid);
+        }
+
+        // SAFETY: inode is new and I_NEW is set, insert into hash
+        let ret = unsafe { bindings::insert_inode_locked(inode) };
+        if ret != 0 {
+            return Err(EINVAL);
+        }
+
+        let manual = ManuallyDrop::new(self);
+        // SAFETY: We transferred ownership of the refcount to `ARef` by preventing `drop` from
+        // being called with the `ManuallyDrop` instance created above.
+        Ok(Ready(manual.0, PhantomData))
+    }
+
     pub fn set_iops(&mut self, iops: Ops<T>) -> &mut Self {
         let inode = unsafe { self.0.as_mut() };
         inode.i_op = iops.0;
@@ -458,6 +583,29 @@ impl<T: FileSystem + ?Sized> New<T> {
         inode.i_data.a_ops = aops.0;
         self
     }
+
+    pub fn set_ino(&mut self, ino: Ino) -> &mut Self {
+        // SAFETY: By the type invariants, it's ok to modify the inode.
+        let inode = unsafe { self.0.as_mut() };
+        inode.i_ino = ino;
+        self
+    }
+
+    // Initilize uid and gid of a new inode and return (assoicated with a new file)
+    pub fn init_owner(
+        &mut self,
+        parent: &Locked<&INode<T>, kernel::inode::ReadSem>,
+        mode: u16,
+    ) -> (kuid_t, kgid_t) {
+        let inode = unsafe { self.0.as_mut() };
+        let parent = unsafe { parent.as_raw() };
+
+        unsafe {
+            bindings::inode_init_owner(&raw mut bindings::nop_mnt_idmap, inode, parent, mode);
+        }
+
+        (inode.i_uid, inode.i_gid)
+    }
 }
 
 impl<T: FileSystem + ?Sized> Drop for New<T> {
@@ -465,6 +613,38 @@ impl<T: FileSystem + ?Sized> Drop for New<T> {
         // SAFETY: The new inode failed to be turned into an initialised inode, so it's safe (and
         // in fact required) to call `iget_failed` on it.
         unsafe { bindings::iget_failed(self.0.as_ptr()) };
+    }
+}
+
+/// An inode that is locked has been initilised but
+/// needs to be inserted into hash and linked with dentry
+///
+/// # Invariants
+/// The inode is a new one, locked, and instantiated
+pub struct Ready<T: FileSystem + ?Sized>(
+    pub(crate) ptr::NonNull<bindings::inode>,
+    pub(crate) PhantomData<T>,
+);
+
+impl<T: FileSystem + ?Sized> Ready<T> {
+    pub fn mark_dirty(&mut self) {
+        // SAFETY: This is safe since it is guaranteed by the typestate
+        // that the inode has been inserted into the hash
+        let inode = unsafe { self.0.as_mut() };
+        unsafe { bindings::mark_inode_dirty(inode) };
+    }
+
+    pub fn instantiate_dentry(self, dentry: &dentry::Unhashed<'_, T>) {
+        let inode_ptr = unsafe { self.0.as_ptr() };
+        let dentry_ptr = unsafe { dentry.0 .0.get() };
+
+        // SAFETY: instantiates dentry and unlocks inode
+        // transfer ownership to C
+        unsafe {
+            bindings::d_instantiate_new(dentry_ptr, inode_ptr);
+        }
+
+        core::mem::forget(self);
     }
 }
 
@@ -576,7 +756,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 permission: None,
                 get_inode_acl: None,
                 readlink: None,
-                create: None,
+                create: if T::HAS_CREATE {
+                    Some(Self::create_callback)
+                } else {
+                    None
+                },
                 link: None,
                 unlink: None,
                 symlink: None,
@@ -619,6 +803,31 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     Ok(None) => ptr::null_mut(),
                     Ok(Some(ret)) => ManuallyDrop::new(ret).0.get(),
                 }
+            }
+
+            // TODO: add mnt_idmap support
+            unsafe extern "C" fn create_callback(
+                _mnt_idmap_ptr: *mut bindings::mnt_idmap,
+                parent_ptr: *mut bindings::inode,
+                dentry_ptr: *mut bindings::dentry,
+                mode: u16,
+                excl: bool,
+            ) -> i32 {
+                from_result(|| {
+                    // SAFETY: The C API guarantees that `parent_ptr` is a valid inode.
+                    let parent = unsafe { INode::from_raw(parent_ptr) };
+
+                    // SAFETY: The C API guarantees that `parent_ptr` is a valid inode.
+                    let dentry = unsafe { DEntry::from_raw(dentry_ptr) };
+
+                    // SAFETY: The C API guarantees that the inode's rw semaphore is locked at least in
+                    // read mode. It does not expect callees to unlock it, so we make the locked object
+                    // manually dropped to avoid unlocking it.
+                    let locked = ManuallyDrop::new(unsafe { Locked::new(parent) });
+
+                    let create = T::create(&locked, dentry::Unhashed(dentry), mode, excl)?;
+                    Ok(i32::try_from(create)?)
+                })
             }
         }
         Self(&Table::<U>::TABLE, PhantomData)

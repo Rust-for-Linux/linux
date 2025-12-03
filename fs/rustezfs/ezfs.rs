@@ -20,7 +20,9 @@ use kernel::inode::{INode, INodeState, Mapper, Params, Type};
 use kernel::iov::IovIterDest;
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
-use kernel::time::UNIX_EPOCH;
+use kernel::task::{Kgid, Kuid};
+use kernel::time::hrtimer::HrTimerExpires;
+use kernel::time::{Instant, Monotonic, NSEC_PER_SEC, UNIX_EPOCH};
 use kernel::transmute::FromBytes;
 use kernel::types::{ARef, Lockable, Locked};
 use kernel::{address_space, iomap};
@@ -85,7 +87,7 @@ impl RustEzFs {
 
         inode.set_iops(Self::IOPS).set_aops(Self::AOPS);
 
-        inode.init(Params {
+        inode.init_from_disk(Params {
             typ,
             mode: ezfs_inode.mode().try_into()?,
             size: ezfs_inode.file_size().try_into()?,
@@ -98,6 +100,63 @@ impl RustEzFs {
             atime: ezfs_inode.atime()?,
             value: ezfs_inode,
         })
+        // TODO: move unlock_new_inode from instantiate
+    }
+
+    fn new_inode(
+        dir: &Locked<&INode<Self>, kernel::inode::ReadSem>,
+        mode: u32,
+    ) -> Result<kernel::inode::Ready<Self>> {
+        let sb = dir.super_block();
+        let mut new_inode = sb.new_inode()?;
+
+        let ino = 0; // TODO
+
+        let typ = match mode & fs::mode::S_IFMT {
+            fs::mode::S_IFREG => {
+                new_inode.set_fops(Self::FILE_FOPS);
+                Type::Reg
+            }
+            fs::mode::S_IFDIR => {
+                new_inode.set_fops(Self::DIR_FOPS);
+                Type::Dir
+            }
+            _ => return Err(ENOENT),
+        };
+
+        let (uid, gid) = new_inode.init_owner(dir, mode.try_into()?);
+
+        new_inode
+            .set_iops(Self::IOPS)
+            .set_aops(Self::AOPS)
+            .set_ino(ino);
+
+        let now = Instant::<Monotonic>::now().as_nanos() / NSEC_PER_SEC;
+        let mut ezfs_inode = EzfsInode::default()
+            .set_mode(mode.try_into()?)
+            .set_uid(Kuid::from_raw(uid).into_uid_in_init_ns())
+            .set_gid(Kgid::from_raw(gid).into_gid_in_init_ns())
+            .set_atime(now)
+            .set_mtime(now)
+            .set_ctime(now);
+
+        let mut ready_inode = new_inode.init_new(Params {
+            typ,
+            mode: ezfs_inode.mode().try_into()?,
+            size: ezfs_inode.file_size().try_into()?,
+            blocks: ezfs_inode.nblocks() * 8,
+            nlink: ezfs_inode.nlink(),
+            uid: ezfs_inode.uid(),
+            gid: ezfs_inode.gid(),
+            ctime: ezfs_inode.ctime()?,
+            mtime: ezfs_inode.mtime()?,
+            atime: ezfs_inode.atime()?,
+            value: ezfs_inode,
+        })?;
+
+        ready_inode.mark_dirty();
+
+        Ok(ready_inode)
     }
 }
 
@@ -184,6 +243,18 @@ impl kernel::inode::Operations for RustEzFs {
         };
 
         dentry.splice_alias(inode)
+    }
+
+    fn create(
+        parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self::FileSystem>,
+        mode: u16,
+        _excl: bool,
+    ) -> Result<usize> {
+        let new_inode = Self::new_inode(parent, mode.into())?;
+
+        new_inode.instantiate_dentry(&dentry);
+        Ok(0)
     }
 }
 
