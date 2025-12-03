@@ -340,6 +340,14 @@ impl Page {
             reader.read_raw(unsafe { core::slice::from_raw_parts_mut(dst.cast(), len) })
         })
     }
+
+    pub fn copy_to(&self, to: &Page) {
+        let from_ptr = self.as_ptr();
+        let to_ptr = to.as_ptr();
+
+        // SAFETY: `from_ptr` and `to_ptr` are both valid page pointers
+        unsafe { bindings::copy_highpage(to_ptr, from_ptr) }
+    }
 }
 
 impl Drop for Page {
