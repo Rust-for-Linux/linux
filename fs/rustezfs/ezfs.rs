@@ -350,8 +350,12 @@ impl iomap::Operations for RustEzFs {
         let start_block: u64 = (pos >> sb.blocksize_bits()).try_into()?;
         let end_block: u64 = ((pos + length - 1) >> sb.blocksize_bits()).try_into()?;
 
+        pr_info!("start_block: {start_block}, end_block: {end_block}\n");
+
         let ez_blk_num = ezfs_inode.data_blk_num();
         let ez_blk_count = inode.blocks() / 8;
+
+        pr_info!("blk_num: {ez_blk_num}, ez_blk_count: {ez_blk_count}\n");
 
         let phys = if ez_blk_num > 0 {
             ez_blk_num + start_block
@@ -381,6 +385,7 @@ impl iomap::Operations for RustEzFs {
 
         pr_info!("WRITING\n");
 
+        // TODO: find the max number of blocks
         let blocks_needed = end_block + 1;
         let blocks_to_add = blocks_needed - ez_blk_count;
 
@@ -404,6 +409,8 @@ impl iomap::Operations for RustEzFs {
             MOVE,   // File has no adjacent, free block and must be moved
         }
 
+        let mut free_data_blocks = ezfs_sb.free_data_blocks.lock();
+
         let case_type = if ez_blk_num == 0 {
             pr_info!("file has no blocks\n");
             WriteCase::NEW
@@ -415,7 +422,27 @@ impl iomap::Operations for RustEzFs {
                 WriteCase::WITHIN
             } else {
                 pr_info!("extend: we need to allocate blocks\n");
-                WriteCase::MOVE
+
+                let can_extend = true;
+                let start = ez_blk_sidx + ez_blk_count;
+                let limit = ez_blk_sidx + blocks_needed;
+
+                // TODO: Check if limit extends beyond the final block
+
+                pr_info!("start={start} - limit={limit}\n");
+
+                // REMOVE, just for debugging
+                for s in start..limit {
+                    if free_data_blocks.is_set(s.try_into()?) {
+                        pr_info!("s={s} is_set, we can't expand\n");
+                    }
+                }
+
+                if (start..limit).any(|bit| free_data_blocks.is_set(bit)) {
+                    WriteCase::MOVE
+                } else {
+                    WriteCase::EXTEND
+                }
             }
         };
 
@@ -428,8 +455,12 @@ impl iomap::Operations for RustEzFs {
                 pr_info!("easiest write\n");
             }
             WriteCase::EXTEND => {
-                pr_info!("semi easy writ\n");
-                return Err(EIO);
+                pr_info!("semi easy write\n");
+                for bit in ez_blk_count..blocks_needed {
+                    free_data_blocks.set_bit(bit);
+                }
+
+                map.set_flags(iomap::map_flags::NEW);
             }
             WriteCase::MOVE => {
                 pr_info!("Hardest write\n");
