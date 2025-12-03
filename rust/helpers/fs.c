@@ -41,3 +41,8 @@ loff_t rust_helper_i_size_read(const struct inode *inode)
 {
 	return i_size_read(inode);
 }
+
+void rust_helper_mark_inode_dirty(struct inode *inode)
+{
+	return mark_inode_dirty(inode);
+}

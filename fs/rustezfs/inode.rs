@@ -17,7 +17,7 @@ pub(crate) struct EzfsInode {
     nlink: u32,
     pub data_blk_num: u64,
     file_size: u64,
-    nblocks: u64,
+    pub nblocks: u64,
 }
 
 impl EzfsInode {

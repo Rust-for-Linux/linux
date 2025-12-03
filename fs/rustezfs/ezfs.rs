@@ -57,7 +57,6 @@ fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
 }
 
 fn ezfs_move_block(mut from: u64, mut to: u64, sb: &SuperBlock<RustEzFs>) -> Result {
-    pr_info!("moving {from} -> {to}\n");
     from += EZFS_ROOT_DATABLOCK_NUMBER as u64;
     to += EZFS_ROOT_DATABLOCK_NUMBER as u64;
 
@@ -448,11 +447,11 @@ impl iomap::Operations for RustEzFs {
                 return Err(ENOSPC);
             }
 
-            pr_info!("start={start} - limit={end}\n");
+            pr_info!("start={start} - end={end}\n");
 
             // REMOVE, just for debugging
             for s in start..end {
-                if free_data_blocks.is_set(s.try_into()?) {
+                if free_data_blocks.is_set(s) {
                     pr_info!("s={s} is_set, we can't expand\n");
                 }
             }
@@ -474,7 +473,9 @@ impl iomap::Operations for RustEzFs {
             }
             WriteCase::EXTEND => {
                 pr_info!("semi easy write\n");
-                for bit in ez_blk_count..blocks_needed {
+                for i in ez_blk_count..blocks_needed {
+                    let bit = ez_blk_sidx + i;
+                    pr_info!("setting bit: {bit}\n");
                     free_data_blocks.set_bit(bit);
                 }
 
@@ -510,6 +511,8 @@ impl iomap::Operations for RustEzFs {
                         let old = ez_blk_sidx + j;
                         let new = new_block_start + j;
 
+                        pr_info!("move: {old} -> {new}\n");
+
                         ezfs_move_block(old, new, sb);
 
                         free_data_blocks.clear_bit(old);
@@ -533,14 +536,33 @@ impl iomap::Operations for RustEzFs {
     }
 
     fn end<'a>(
-        _inode: &'a INode<Self::FileSystem>,
+        inode: &'a INode<Self::FileSystem>,
         _pos: Offset,
         _length: Offset,
-        _written: isize,
+        written: isize,
         _flags: u32,
         _map: &iomap::Map<'a>,
     ) -> Result {
-        pr_info!("iomap_end()\n");
+        if (written > 0) {
+            pr_info!("iomap_end()\n");
+            let new_blocks =
+                ((inode.size() + (EZFS_BLOCK_SIZE as i64) - 1) / EZFS_BLOCK_SIZE as i64) as u64;
+            let sb = inode.super_block();
+            let ezfs_sb = sb.data();
+
+            // We'll modify our inodes, let's lock first
+            ezfs_sb.lock();
+
+            // SAFETY: We've acquired the super block lock
+            unsafe { inode.set_blocks(new_blocks * 8) };
+            let ezfs_inode = unsafe { inode.data_mut() };
+
+            ezfs_inode.nblocks = new_blocks;
+
+            // TODO:
+            // - get inode store and update nblocks
+            // - mark inode dirty
+        }
         Ok(())
     }
 }

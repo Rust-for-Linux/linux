@@ -97,9 +97,21 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { SuperBlock::from_raw((*self.0.get()).i_sb) }
     }
 
+    pub fn size(&self) -> i64 {
+        unsafe { (*self.0.get()).i_size }
+    }
+
     pub fn blocks(&self) -> u64 {
         // SAFETY: this is ok
         unsafe { (*self.0.get()).i_blocks }
+    }
+
+    pub unsafe fn set_blocks(&self, num_blocks: u64) {
+        unsafe { (*self.0.get()).i_blocks = num_blocks };
+    }
+
+    pub fn mark_dirty(&self) {
+        unsafe { bindings::mark_inode_dirty((self.0.get())) };
     }
 
     /// Returns the data associated with the inode.

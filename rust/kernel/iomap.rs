@@ -185,7 +185,7 @@ pub trait Operations {
         srcmap: &mut Map<'a>,
     ) -> Result;
 
-    /// Commits and/or unreserves space previously allocated using [`Operations::begin`]. `writte`n
+    /// Commits and/or unreserves space previously allocated using [`Operations::begin`]. `written`
     /// indicates the length of the successful write operation which needs to be commited, while
     /// the rest needs to be unreserved. `written` might be zero if no data was written.
     ///
