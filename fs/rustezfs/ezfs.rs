@@ -108,13 +108,12 @@ impl RustEzFs {
 
         for (word_idx, &word) in free_inodes.iter().enumerate() {
             if word != !0u32 {
-                // Find first ZERO bit by inverting first
-                let bit_idx: u32 = (!word).leading_zeros();
+                let bit_idx: u32 = (!word).trailing_zeros();
                 let inode_num: usize = (word_idx as usize * 32) + bit_idx as usize;
 
                 if inode_num < EZFS_MAX_INODES {
                     free_inodes[word_idx] |= 1 << bit_idx;
-                    return Ok(inode_num);
+                    return Ok(inode_num + 1); // FS is 1-indexed
                 }
             }
         }
@@ -130,6 +129,7 @@ impl RustEzFs {
         let mut new_inode = sb.new_inode()?;
 
         let ino = Self::allocate_inode(sb)?;
+        pr_info!("Allocating new inode: {:?}\n", ino);
 
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
@@ -155,6 +155,7 @@ impl RustEzFs {
             .set_mode(mode.try_into()?)
             .set_uid(Kuid::from_raw(uid).into_uid_in_init_ns())
             .set_gid(Kgid::from_raw(gid).into_gid_in_init_ns())
+            .set_nlink(1)
             .set_atime(now)
             .set_mtime(now)
             .set_ctime(now);
@@ -270,9 +271,11 @@ impl kernel::inode::Operations for RustEzFs {
         mode: u16,
         _excl: bool,
     ) -> Result<usize> {
-        let new_inode = Self::new_inode(parent, mode.into())?;
+        pr_info!("Calling create from rustezfs\n");
 
+        let new_inode = Self::new_inode(parent, mode.into())?;
         new_inode.instantiate_dentry(&dentry);
+
         Ok(0)
     }
 }
