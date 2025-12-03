@@ -294,7 +294,7 @@ impl<T: Operations + ?Sized> Table<T> {
         free_folio: None,
         // direct_IO: Some(bindings::noop_direct_IO),
         direct_IO: None,
-        migrate_folio: None,
+        migrate_folio: Some(bindings::filemap_migrate_folio),
         launder_folio: None,
         is_partially_uptodate: None,
         is_dirty_writeback: None,
