@@ -40,6 +40,35 @@ struct RustEzFsModule<RustEzFs> {
     _p: PhantomData<RustEzFs>,
 }
 
+macro_rules! min {
+    ($a:expr, $b:expr) => {{
+        let a_val = $a;
+        let b_val = $b;
+        if a_val < b_val {
+            a_val
+        } else {
+            b_val
+        }
+    }};
+}
+
+fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
+    min!(sb.disk_blocks - 2, EZFS_MAX_DATA_BLKS as u64)
+}
+
+fn ezfs_move_block(mut from: u64, mut to: u64, sb: &SuperBlock<RustEzFs>) -> Result {
+    pr_info!("moving {from} -> {to}\n");
+    from += EZFS_ROOT_DATABLOCK_NUMBER as u64;
+    to += EZFS_ROOT_DATABLOCK_NUMBER as u64;
+
+    let src = sb.read_mapping_page(from)?;
+    let dst = sb.read_mapping_page(to)?;
+
+    src.copy_to(&dst);
+
+    Ok(())
+}
+
 impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
     fn init(module: &'static ThisModule) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
@@ -357,7 +386,7 @@ impl iomap::Operations for RustEzFs {
 
         pr_info!("blk_num: {ez_blk_num}, ez_blk_count: {ez_blk_count}\n");
 
-        let phys = if ez_blk_num > 0 {
+        let mut phys = if ez_blk_num > 0 {
             ez_blk_num + start_block
         } else {
             0
@@ -385,22 +414,15 @@ impl iomap::Operations for RustEzFs {
 
         pr_info!("WRITING\n");
 
-        // TODO: find the max number of blocks
+        let max_blocks = get_max_blocks(ezfs_sb);
+        pr_info!("max blocks: {max_blocks}");
         let blocks_needed = end_block + 1;
         let blocks_to_add = blocks_needed - ez_blk_count;
 
-        // // Shifted physical index
-        // let phys_sidx: i64 = if ez_blk_num > 0 {
-        //     // phys should always be >= root datablock number
-        //     (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?
-        // } else {
-        //     -1i64
-        // };
-        //
-        pr_info!(
-            "blocks: needed={blocks_needed}, to_add={blocks_to_add}, ez_blk_num: {ez_blk_num}\n"
-        );
-        pr_info!("CASE\n");
+        // TODO: is this necessary ?
+        if blocks_needed > max_blocks {
+            return Err(ENOSPC);
+        }
 
         enum WriteCase {
             NEW,    // Write to an empty file without any allocated blocks
@@ -410,39 +432,33 @@ impl iomap::Operations for RustEzFs {
         }
 
         let mut free_data_blocks = ezfs_sb.free_data_blocks.lock();
+        let ez_blk_sidx = ez_blk_num - TryInto::<u64>::try_into(EZFS_ROOT_DATABLOCK_NUMBER)?;
 
         let case_type = if ez_blk_num == 0 {
-            pr_info!("file has no blocks\n");
             WriteCase::NEW
+        } else if blocks_to_add <= 0 {
+            WriteCase::WITHIN
         } else {
-            let ez_blk_sidx = ez_blk_num - TryInto::<u64>::try_into(EZFS_ROOT_DATABLOCK_NUMBER)?;
+            let start = ez_blk_sidx + ez_blk_count;
+            let end = ez_blk_sidx + blocks_needed;
 
-            if blocks_to_add <= 0 {
-                pr_info!("inside: don't need additional blocks to perform write\n");
-                WriteCase::WITHIN
+            if end > max_blocks {
+                return Err(ENOSPC);
+            }
+
+            pr_info!("start={start} - limit={end}\n");
+
+            // REMOVE, just for debugging
+            for s in start..end {
+                if free_data_blocks.is_set(s.try_into()?) {
+                    pr_info!("s={s} is_set, we can't expand\n");
+                }
+            }
+
+            if (start..end).any(|bit| free_data_blocks.is_set(bit)) {
+                WriteCase::MOVE
             } else {
-                pr_info!("extend: we need to allocate blocks\n");
-
-                let can_extend = true;
-                let start = ez_blk_sidx + ez_blk_count;
-                let limit = ez_blk_sidx + blocks_needed;
-
-                // TODO: Check if limit extends beyond the final block
-
-                pr_info!("start={start} - limit={limit}\n");
-
-                // REMOVE, just for debugging
-                for s in start..limit {
-                    if free_data_blocks.is_set(s.try_into()?) {
-                        pr_info!("s={s} is_set, we can't expand\n");
-                    }
-                }
-
-                if (start..limit).any(|bit| free_data_blocks.is_set(bit)) {
-                    WriteCase::MOVE
-                } else {
-                    WriteCase::EXTEND
-                }
+                WriteCase::EXTEND
             }
         };
 
@@ -464,7 +480,45 @@ impl iomap::Operations for RustEzFs {
             }
             WriteCase::MOVE => {
                 pr_info!("Hardest write\n");
-                return Err(EIO);
+
+                // Let's try to find a region of sequential free blocks
+                // of size `blocks_needed` to move our file to
+                let mut curr_block = 0;
+                let mut seen_free = 0;
+                while seen_free < blocks_needed && curr_block < max_blocks {
+                    // if block isn't free, we reset counter
+                    if free_data_blocks.is_set(curr_block) {
+                        seen_free = 0;
+                    } else {
+                        seen_free += 1;
+                    }
+
+                    curr_block += 1;
+                }
+
+                if (seen_free < blocks_needed) {
+                    return Err(ENOSPC);
+                }
+
+                // Move all blocks within the file to new region
+                let new_block_start = curr_block - blocks_needed;
+
+                if (ez_blk_num != 0) {
+                    for j in 0..ez_blk_count {
+                        let old = ez_blk_sidx + j;
+                        let new = new_block_start + j;
+
+                        ezfs_move_block(old, new, sb);
+
+                        free_data_blocks.clear_bit(old);
+                        free_data_blocks.set_bit(new);
+                    }
+                }
+
+                let mut ezfs_inode = unsafe { inode.data_mut() };
+                ezfs_inode.data_blk_num = new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                phys = ezfs_inode.data_blk_num() + start_block;
+                map.set_flags(iomap::map_flags::NEW);
             }
         }
 
