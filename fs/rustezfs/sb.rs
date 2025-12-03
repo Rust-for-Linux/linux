@@ -6,7 +6,10 @@ use core::ops::{Deref, DerefMut};
 use kernel::fs::FileSystem;
 use kernel::new_mutex;
 use kernel::prelude::*;
-use kernel::sync::Mutex;
+use kernel::sync::{
+    lock::{mutex::MutexBackend, Guard},
+    Mutex,
+};
 use kernel::transmute::FromBytes;
 use kernel::{block, inode};
 
@@ -94,6 +97,8 @@ pub(crate) struct EzfsSuperblock {
     pub(crate) free_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
     #[pin]
     pub(crate) zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
+    #[pin]
+    sb_lock: Mutex<()>,
     pub(crate) mapper: inode::Mapper<RustEzFs>,
 }
 
@@ -109,11 +114,16 @@ impl EzfsSuperblock {
             free_inodes <- new_mutex!(disk_sb.data.free_inodes),
             free_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.free_data_blocks)),
             zero_data_blocks <- new_mutex!(disk_sb.data.zero_data_blocks),
+            sb_lock <- new_mutex!(()),
             mapper,
         })
     }
 
     pub(crate) fn magic(&self) -> u64 {
         self.magic
+    }
+
+    pub(crate) fn lock(&self) -> Guard<'_, (), MutexBackend> {
+        self.sb_lock.lock()
     }
 }

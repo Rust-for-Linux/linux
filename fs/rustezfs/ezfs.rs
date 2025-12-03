@@ -414,8 +414,10 @@ impl iomap::Operations for RustEzFs {
 
         pr_info!("WRITING\n");
 
+        // As we'll modify the file system below, we must acquire a lock
+        ezfs_sb.lock();
+
         let max_blocks = get_max_blocks(ezfs_sb);
-        pr_info!("max blocks: {max_blocks}");
         let blocks_needed = end_block + 1;
         let blocks_to_add = blocks_needed - ez_blk_count;
 
@@ -515,6 +517,8 @@ impl iomap::Operations for RustEzFs {
                     }
                 }
 
+                // SAFETY: we've acquired the super block lock and can therefore
+                // modify the ezfs inode
                 let mut ezfs_inode = unsafe { inode.data_mut() };
                 ezfs_inode.data_blk_num = new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64);
                 phys = ezfs_inode.data_blk_num() + start_block;
