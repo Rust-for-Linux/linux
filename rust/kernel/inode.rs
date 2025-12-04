@@ -171,6 +171,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
 
     pub fn drop_nlink(&self) {
         let inode_ptr = self.0.get();
+        // SAFETY: Inode ptr is guaranteed to be valid and instantiated do to the typestate
         unsafe {
             bindings::drop_nlink(inode_ptr);
         }
