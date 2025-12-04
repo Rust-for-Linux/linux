@@ -195,6 +195,34 @@ impl RustEzFs {
     fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
         (sb.disk_blocks - 2).min(EZFS_MAX_DATA_BLKS as u64)
     }
+
+    fn find_dir_entry(
+        parent: &Locked<&INode<Self>, kernel::inode::ReadSem>,
+        dentry: &dentry::Unhashed<'_, Self>,
+    ) -> Result<Option<EzfsDirEntry>> {
+        let h = parent.super_block().data();
+        let ezfs_dir_inode = parent.data();
+        let name = dentry.name();
+
+        if name.len() > EZFS_FILENAME_BUF_SIZE {
+            return Err(ENAMETOOLONG);
+        }
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let dir_entry = dir_entries
+            .iter()
+            .find(|x| x.is_active() && x.filename() == name)
+            .copied();
+
+        Ok(dir_entry)
+    }
 }
 
 impl FileSystem for RustEzFs {
@@ -244,33 +272,8 @@ impl kernel::inode::Operations for RustEzFs {
         parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
         dentry: dentry::Unhashed<'_, Self::FileSystem>,
     ) -> Result<Option<ARef<dentry::DEntry<Self::FileSystem>>>> {
-        let sb = &*parent.super_block();
-        let h = sb.data();
-
-        let name = dentry.name();
-        pr_info!("lookup(name={:?})\n", core::str::from_utf8(name));
-
-        if name.len() > EZFS_FILENAME_BUF_SIZE {
-            return Err(ENAMETOOLONG);
-        }
-
-        let ezfs_dir_inode = parent.data();
-        // pr_info!("ezfs_dir inode number: {:?}", parent.ino());
-        // pr_info!("ezfs dir inode links: {:?}", ezfs_dir_inode.nlink());
-        // pr_info!("data_blk_num: {:?}", ezfs_dir_inode.data_blk_num());
-
-        let offset = ezfs_dir_inode
-            .data_blk_num()
-            .checked_mul(EZFS_BLOCK_SIZE as u64)
-            .ok_or(EIO)?;
-
-        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
-        let dir_entries =
-            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
-
-        let dir_entry = dir_entries
-            .iter()
-            .find(|x| x.is_active() && x.filename() == name);
+        let sb = parent.super_block();
+        let dir_entry = Self::find_dir_entry(parent, &dentry)?;
 
         let inode = if let Some(entry) = dir_entry {
             pr_info!("Inode found: {:?}\n", entry.inode_no());
@@ -292,7 +295,34 @@ impl kernel::inode::Operations for RustEzFs {
 
         let new_inode = Self::new_inode(parent, mode.into())?;
 
+        // TODO: Lock memory when writing DirEntries
         // TODO: Write DirEntry to memory
+        //
+        // let sb = parent.super_block();
+        // let h = sb.data();
+        //
+        // let ezfs_dir_inode = parent.data();
+        //
+        // let offset = ezfs_dir_inode
+        //     .data_blk_num()
+        //     .checked_mul(EZFS_BLOCK_SIZE as u64)
+        //     .ok_or(EIO)?;
+        //
+        // let mut mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        // let new_filename = dentry.name();
+        //
+        // let dir_entries =
+        //     DirEntryStore::from_bytes_mut(&mut mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+        //
+        // let dir_entry = dir_entries
+        //     .iter_mut()
+        //     .find(|x| !x.is_active())
+        //     .ok_or(ENOSPC)?;
+        //
+        // dir_entry
+        //     .set_inode_no(new_inode.ino().try_into()?)
+        //     .set_active()
+        //     .set_filename(new_filename);
 
         new_inode.instantiate_dentry(&dentry);
 

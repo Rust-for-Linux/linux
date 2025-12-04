@@ -1,8 +1,9 @@
 use crate::defs::{EZFS_FILENAME_BUF_SIZE, EZFS_MAX_CHILDREN};
 use core::ops::Deref;
-use kernel::transmute::FromBytes;
+use kernel::transmute::{AsBytes, FromBytes};
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub(crate) struct EzfsDirEntry {
     inode_no: u64,
     active: u8,
@@ -44,3 +45,4 @@ impl Deref for DirEntryStore {
 
 // TODO: Add Safety
 unsafe impl FromBytes for DirEntryStore {}
+unsafe impl AsBytes for DirEntryStore {}

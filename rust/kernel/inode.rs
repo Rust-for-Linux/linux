@@ -65,6 +65,13 @@ pub trait Operations {
     ) -> Result<usize> {
         Err(ENOTSUPP)
     }
+
+    fn unlink(
+        _parent: &Locked<&INode<Self::FileSystem>, ReadSem>,
+        _dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<usize> {
+        Err(ENOTSUPP)
+    }
 }
 
 /// A node (inode) in the file index.
@@ -677,6 +684,12 @@ impl<T: FileSystem + ?Sized> Ready<T> {
 
         core::mem::forget(self);
     }
+    /// Returns the number of the inode.
+    pub fn ino(&self) -> Ino {
+        // SAFETY: `i_ino` is immutable, and `self` is guaranteed to be valid by the existence of a
+        // shared reference (&self) to it.
+        unsafe { (*self.0.as_ref()).i_ino }
+    }
 }
 
 /// The type of an inode.
@@ -793,7 +806,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     None
                 },
                 link: None,
-                unlink: None,
+                unlink: if T::HAS_UNLINK {
+                    Some(Self::unlink_callback)
+                } else {
+                    None
+                },
                 symlink: None,
                 mkdir: None,
                 rmdir: None,
@@ -858,6 +875,28 @@ impl<T: FileSystem + ?Sized> Ops<T> {
 
                     let create = T::create(&locked, dentry::Unhashed(dentry), mode, excl)?;
                     Ok(i32::try_from(create)?)
+                })
+            }
+
+            unsafe extern "C" fn unlink_callback(
+                inode_ptr: *mut bindings::inode,
+                dentry_ptr: *mut bindings::dentry,
+            ) -> i32 {
+                from_result(|| {
+                    // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
+                    let inode = unsafe { INode::from_raw(inode_ptr) };
+
+                    // SAFETY: The C API guarantees that `dentry_ptr` is a valid inode.
+                    let dentry = unsafe { DEntry::from_raw(dentry_ptr) };
+
+                    // SAFETY: The C API guarantees that the inode's rw semaphore is locked at least in
+                    // read mode. It does not expect callees to unlock it, so we make the locked object
+                    // manually dropped to avoid unlocking it.
+                    let locked = ManuallyDrop::new(unsafe { Locked::new(inode) });
+
+                    let unlink = T::unlink(&locked, dentry::Unhashed(dentry))?;
+
+                    Ok(i32::try_from(unlink)?)
                 })
             }
         }
