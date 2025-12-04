@@ -115,7 +115,7 @@ impl EzfsInode {
         self
     }
 
-    pub(crate) fn set_nblock(mut self, nblocks: u64) -> Self {
+    pub(crate) fn set_nblocks(mut self, nblocks: u64) -> Self {
         self.nblocks = nblocks;
 
         self

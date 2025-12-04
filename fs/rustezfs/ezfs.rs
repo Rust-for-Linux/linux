@@ -42,34 +42,6 @@ struct RustEzFsModule<RustEzFs> {
     _p: PhantomData<RustEzFs>,
 }
 
-macro_rules! min {
-    ($a:expr, $b:expr) => {{
-        let a_val = $a;
-        let b_val = $b;
-        if a_val < b_val {
-            a_val
-        } else {
-            b_val
-        }
-    }};
-}
-
-fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
-    min!(sb.disk_blocks - 2, EZFS_MAX_DATA_BLKS as u64)
-}
-
-fn ezfs_move_block(mut from: u64, mut to: u64, sb: &SuperBlock<RustEzFs>) -> Result {
-    from += EZFS_ROOT_DATABLOCK_NUMBER as u64;
-    to += EZFS_ROOT_DATABLOCK_NUMBER as u64;
-
-    let src = sb.read_mapping_page(from)?;
-    let dst = sb.read_mapping_page(to)?;
-
-    src.copy_to(&dst);
-
-    Ok(())
-}
-
 impl kernel::InPlaceModule for RustEzFsModule<RustEzFs> {
     fn init(module: &'static ThisModule) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
@@ -206,6 +178,22 @@ impl RustEzFs {
         ready_inode.mark_dirty();
 
         Ok(ready_inode)
+    }
+
+    fn move_block(mut from: u64, mut to: u64, sb: &SuperBlock<RustEzFs>) -> Result {
+        from += EZFS_ROOT_DATABLOCK_NUMBER as u64;
+        to += EZFS_ROOT_DATABLOCK_NUMBER as u64;
+
+        let src = sb.read_mapping_page(from)?;
+        let dst = sb.read_mapping_page(to)?;
+
+        src.copy_to(&dst);
+
+        Ok(())
+    }
+
+    fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
+        (sb.disk_blocks - 2).min(EZFS_MAX_DATA_BLKS as u64)
     }
 }
 
@@ -416,13 +404,13 @@ impl file::Operations for RustEzFs {
     ) -> Result<usize> {
         pr_info!("write_iter\n");
         let flags = kiocb.ki_flags();
-        let file = kiocb.ki_filp();
+        let file: &File<Self> = kiocb.ki_filp();
 
         if flags & bindings::IOCB_DIRECT != 0 {
             return Err(EINVAL); // We don't support direct I/O
         }
 
-        if (file.flags() & bindings::O_APPEND) != 0 {
+        if (file.flags() & file::flags::O_APPEND) != 0 {
             *kiocb.ki_pos_mut() = file.host_inode().size();
         }
 
@@ -489,7 +477,7 @@ impl iomap::Operations for RustEzFs {
         // As we'll modify the file system below, we must acquire a lock
         ezfs_sb.lock();
 
-        let max_blocks = get_max_blocks(ezfs_sb);
+        let max_blocks = Self::get_max_blocks(ezfs_sb);
         let blocks_needed = end_block + 1;
         let blocks_to_add = blocks_needed - ez_blk_count;
 
@@ -506,11 +494,11 @@ impl iomap::Operations for RustEzFs {
         }
 
         let mut free_data_blocks = ezfs_sb.free_data_blocks.lock();
-        let ez_blk_sidx = ez_blk_num - TryInto::<u64>::try_into(EZFS_ROOT_DATABLOCK_NUMBER)?;
+        let ez_blk_sidx = ez_blk_num - (EZFS_ROOT_DATABLOCK_NUMBER as u64);
 
         let case_type = if ez_blk_num == 0 {
             WriteCase::NEW
-        } else if blocks_to_add <= 0 {
+        } else if blocks_to_add == 0 {
             WriteCase::WITHIN
         } else {
             let start = ez_blk_sidx + ez_blk_count;
@@ -571,7 +559,7 @@ impl iomap::Operations for RustEzFs {
                         let old = ez_blk_sidx + j;
                         let new = new_block_start + j;
 
-                        ezfs_move_block(old, new, sb);
+                        Self::move_block(old, new, sb);
 
                         free_data_blocks.clear_bit(old);
                         free_data_blocks.set_bit(new);
