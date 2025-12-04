@@ -248,7 +248,7 @@ impl kernel::inode::Operations for RustEzFs {
         let h = sb.data();
 
         let name = dentry.name();
-        pr_info!("lookup(name={:?})\n", core::str::from_utf8(name));
+        // pr_info!("lookup(name={:?})\n", core::str::from_utf8(name));
 
         if name.len() > EZFS_FILENAME_BUF_SIZE {
             return Err(ENAMETOOLONG);
@@ -330,7 +330,7 @@ impl file::Operations for RustEzFs {
         inode: &Locked<&INode<Self>, kernel::inode::ReadSem>,
         emitter: &mut file::DirEmitter,
     ) -> Result {
-        pr_info!("read_dir()\n");
+        // pr_info!("read_dir()\n");
         let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
 
         if pos < 2 {
@@ -430,7 +430,7 @@ impl iomap::Operations for RustEzFs {
         length: Offset,
         flags: u32,
         map: &mut iomap::Map<'a>,
-        srcmap: &mut iomap::Map<'a>,
+        srcmap: Option<&mut iomap::Map<'a>>,
     ) -> Result {
         pr_info!("iomap_begin()\n");
 

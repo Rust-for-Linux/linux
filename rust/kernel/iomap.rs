@@ -5,7 +5,7 @@
 //! C headers: [`include/linux/iomap.h`](srctree/include/linux/iomap.h)
 
 use super::address_space;
-use crate::error::to_result;
+use crate::error::{to_result, Error};
 use crate::iov::IovIterSource;
 use crate::pr_info;
 use crate::prelude::{EIO, EOVERFLOW};
@@ -166,6 +166,16 @@ pub mod flags {
     pub const DAX: u32 = bindings::IOMAP_DAX;
 }
 
+// TODO: We should probably have this instead
+// /// WritebackOperations  implemented by iomap users.
+// pub trait WritebackOperations {
+//     type FileSystem: FileSystem + ?Sized;
+//
+//     fn writeback_range<'a>(folio: &'a Folio<Self::FileSystem>) -> Result;
+//
+//     fn writeback_submit<'a>() -> Result;
+// }
+
 /// Operations implemented by iomap users.
 pub trait Operations {
     /// File system that these operations are compatible with.
@@ -182,7 +192,7 @@ pub trait Operations {
         length: Offset,
         flags: u32,
         map: &mut Map<'a>,
-        srcmap: &mut Map<'a>,
+        srcmap: Option<&mut Map<'a>>,
     ) -> Result;
 
     /// Commits and/or unreserves space previously allocated using [`Operations::begin`]. `written`
@@ -207,27 +217,74 @@ struct Table<T: Operations + ?Sized>(PhantomData<T>);
 impl<T: Operations + ?Sized> Table<T> {
     const WRITEBACK_TABLE: bindings::iomap_writeback_ops = bindings::iomap_writeback_ops {
         writeback_range: Some(Self::writeback_range_callback),
-        writeback_submit: Some(Self::writeback_submit),
+        writeback_submit: Some(Self::writeback_submit_callback),
     };
 
     extern "C" fn writeback_range_callback(
-        _wpc: *mut bindings::iomap_writepage_ctx,
-        _folio: *mut bindings::folio,
+        wpc: *mut bindings::iomap_writepage_ctx,
+        folio_ptr: *mut bindings::folio,
         pos: u64,
         len: u32,
         end_pos: u64,
     ) -> isize {
         from_result(|| {
             pr_info!("writeback_range()\n");
-            Ok(len.try_into()?)
+
+            // SAFETY: For this callback, iomap guarantees:
+            //   - `folio_ptr` points to a live `struct folio`.
+            //   - The folio remains valid and locked for the duration of this call.
+            let address_space_ptr =
+                unsafe { (*folio_ptr).__bindgen_anon_1.__bindgen_anon_1.mapping };
+
+            // SAFETY: when iomap_writepages is called, `mapping` is non-NULL and
+            // its `host` field points to the owning `struct inode`.
+            let inode_ptr = unsafe { (*address_space_ptr).host };
+
+            // SAFETY: `wpc` is guaranteed to be valid.
+            // `iomap` is valid storage that we are allowed to mutate.
+            let map = unsafe { &mut (*wpc).iomap };
+
+            let ret = Self::iomap_begin_callback(
+                inode_ptr,
+                pos as Offset,
+                len as Offset,
+                flags::WRITE,
+                map,
+                ptr::null_mut(),
+            );
+
+            if ret < 0 {
+                return Err(Error::from_errno(ret.try_into()?));
+            }
+
+            // SAFETY: all arguments provided were provided by the caller
+            // This is the go-to method for completing writebacks
+            let ret = unsafe {
+                bindings::iomap_add_to_ioend(
+                    wpc,
+                    folio_ptr,
+                    pos.try_into()?,
+                    end_pos.try_into()?,
+                    len,
+                )
+            };
+
+            if ret < 0 {
+                return Err(Error::from_errno(ret.try_into()?));
+            }
+
+            Ok(ret)
         })
     }
 
-    extern "C" fn writeback_submit(_wpc: *mut bindings::iomap_writepage_ctx, _error: i32) -> i32 {
-        from_result(|| {
-            pr_info!("writeback_submit()\n");
-            Ok(0)
-        })
+    extern "C" fn writeback_submit_callback(
+        wpc: *mut bindings::iomap_writepage_ctx,
+        error: i32,
+    ) -> i32 {
+        pr_info!("writeback_submit()\n");
+
+        // SAFETY: VFS/iomap guarantees `wpc` is valid here.
+        unsafe { bindings::iomap_ioend_writeback_submit(wpc, error) }
     }
 
     const MAP_TABLE: bindings::iomap_ops = bindings::iomap_ops {
@@ -246,6 +303,14 @@ impl<T: Operations + ?Sized> Table<T> {
         from_result(|| {
             // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
             let inode = unsafe { INode::from_raw(inode_ptr) };
+
+            let srcmap_opt: Option<&mut Map<'_>> = if srcmap.is_null() {
+                None
+            } else {
+                // SAFETY: We've just confirmed that srcmap is not null
+                Some(unsafe { &mut *srcmap.cast::<Map<'_>>() })
+            };
+
             T::begin(
                 inode,
                 pos,
@@ -253,8 +318,7 @@ impl<T: Operations + ?Sized> Table<T> {
                 flags,
                 // SAFETY: The C API guarantees that `map` is valid for write.
                 unsafe { &mut *map.cast::<Map<'_>>() },
-                // SAFETY: The C API guarantees that `srcmap` is valid for write.
-                unsafe { &mut *srcmap.cast::<Map<'_>>() },
+                srcmap_opt,
             )?;
             Ok(0)
         })
