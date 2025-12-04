@@ -479,7 +479,7 @@ impl iomap::Operations for RustEzFs {
 
         let max_blocks = Self::get_max_blocks(ezfs_sb);
         let blocks_needed = end_block + 1;
-        let blocks_to_add = blocks_needed - ez_blk_count;
+        let blocks_to_add = blocks_needed.checked_sub(ez_blk_count).ok_or(EIO)?;
 
         // TODO: is this necessary ?
         if blocks_needed > max_blocks {
