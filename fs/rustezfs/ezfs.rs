@@ -450,12 +450,6 @@ impl file::Operations for RustEzFs {
         let dir_entries =
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
 
-        pr_info!(
-            "readdir: dir_entries vaddr: {:p}\n",
-            dir_entries as *const _
-        );
-        pr_info!("readdir: mapped vaddr: {:p}\n", mapped.as_ptr());
-
         let inode_store_offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
         let mapped_inode_store = h.mapper.mapped_folio(inode_store_offset.try_into()?)?;
         let inode_store =
