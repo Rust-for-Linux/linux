@@ -1,6 +1,11 @@
-use core::{marker::PhantomData, ptr};
+use core::{
+    marker::PhantomData,
+    ops::Deref,
+    ptr::{self, NonNull},
+};
 
-use crate::error::{code::*, Result};
+use crate::error::{code::*, from_err_ptr, Result};
+use crate::page::{BorrowedPage, Page};
 use crate::types::{ARef, ForeignOwnable};
 use crate::{block, inode};
 use crate::{
@@ -87,6 +92,69 @@ impl<T: FileSystem + ?Sized, S> SuperBlock<T, S> {
     pub fn blocksize_bits(&self) -> u8 {
         // SAFETY: This should be fine??
         unsafe { (*self.0.get()).s_blocksize_bits }
+    }
+
+    pub fn read_mapping_page<'a>(&'a self, index: u64) -> Result<MappingPage<'a>> {
+        let bdev = self.bdev();
+
+        // SAFETY: all block devices have a valid bd_mapping
+        let mapping = unsafe { (*bdev.0.get()).bd_mapping };
+
+        Ok(MappingPage::read(self, mapping, index)?)
+    }
+}
+
+/// To be used when acquiring pages with read_mapping_page
+pub struct MappingPage<'a> {
+    page: BorrowedPage<'a>,
+}
+
+impl<'a> Deref for MappingPage<'a> {
+    type Target = Page;
+    fn deref(&self) -> &Self::Target {
+        &self.page
+    }
+}
+
+impl<'a> MappingPage<'a> {
+    pub fn as_ptr(&self) -> *mut bindings::page {
+        self.page.as_ptr()
+    }
+
+    /// `<C>` determines the lifetime of this page reference
+    pub fn read<C>(
+        _ctx: &'a C,
+        mapping: *mut bindings::address_space,
+        index: u64,
+    ) -> Result<MappingPage<'a>> {
+        // SAFETY: given a valid mapping and an index, the VFS will return a valid page
+        // or an error pointer
+        let page_ptr = from_err_ptr(unsafe {
+            bindings::read_mapping_page(mapping, index as usize, ptr::null_mut())
+        })?;
+
+        if page_ptr.is_null() {
+            return Err(EIO);
+        }
+
+        // SAFETY: `vmalloc_to_page` returns a valid pointer to a `struct page` for a valid
+        // pointer to `Vmalloc` memory.
+        let page = unsafe { NonNull::new_unchecked(page_ptr) };
+
+        // SAFETY: `page` is a valid page
+        let borrowed_page = unsafe { BorrowedPage::from_raw(page) };
+
+        Ok(MappingPage {
+            page: borrowed_page,
+        })
+    }
+}
+
+impl<'a> Drop for MappingPage<'a> {
+    fn drop(&mut self) {
+        // SAFETY: `read_mapping_page` gave us a ref; dropping this wrapper
+        // means we're done with it, so we drop that ref.
+        unsafe { bindings::put_page(self.as_ptr()) };
     }
 }
 

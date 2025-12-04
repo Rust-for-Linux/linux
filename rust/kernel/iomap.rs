@@ -5,22 +5,22 @@
 //! C headers: [`include/linux/iomap.h`](srctree/include/linux/iomap.h)
 
 use super::address_space;
+use crate::error::to_result;
+use crate::iov::IovIterSource;
 use crate::pr_info;
-use crate::prelude::EIO;
+use crate::prelude::{EIO, EOVERFLOW};
 use crate::{
     block,
     error::{from_result, Result},
-    folio::Folio,
-    folio::PageCache,
-    fs::file::File,
-    fs::FileSystem,
-    fs::Offset,
-    types::Locked,
+    folio::{Folio, PageCache},
+    fs::{file::File, FileSystem, Kiocb, Offset},
+    types::{ForeignOwnable, Locked},
 };
 
 use crate::inode::INode;
 use core::marker::PhantomData;
 use core::mem;
+use core::ptr;
 use macros::vtable;
 use uapi::writeback_control;
 
@@ -185,7 +185,7 @@ pub trait Operations {
         srcmap: &mut Map<'a>,
     ) -> Result;
 
-    /// Commits and/or unreserves space previously allocated using [`Operations::begin`]. `writte`n
+    /// Commits and/or unreserves space previously allocated using [`Operations::begin`]. `written`
     /// indicates the length of the successful write operation which needs to be commited, while
     /// the rest needs to be unreserved. `written` might be zero if no data was written.
     ///
@@ -202,125 +202,176 @@ pub trait Operations {
     }
 }
 
+struct Table<T: Operations + ?Sized>(PhantomData<T>);
+
+impl<T: Operations + ?Sized> Table<T> {
+    const WRITEBACK_TABLE: bindings::iomap_writeback_ops = bindings::iomap_writeback_ops {
+        writeback_range: Some(Self::writeback_range_callback),
+        writeback_submit: Some(Self::writeback_submit),
+    };
+
+    extern "C" fn writeback_range_callback(
+        _wpc: *mut bindings::iomap_writepage_ctx,
+        _folio: *mut bindings::folio,
+        pos: u64,
+        len: u32,
+        end_pos: u64,
+    ) -> isize {
+        from_result(|| {
+            pr_info!("writeback_range()\n");
+            Ok(len.try_into()?)
+        })
+    }
+
+    extern "C" fn writeback_submit(_wpc: *mut bindings::iomap_writepage_ctx, _error: i32) -> i32 {
+        from_result(|| {
+            pr_info!("writeback_submit()\n");
+            Ok(0)
+        })
+    }
+
+    const MAP_TABLE: bindings::iomap_ops = bindings::iomap_ops {
+        iomap_begin: Some(Self::iomap_begin_callback),
+        iomap_end: Some(Self::iomap_end_callback),
+    };
+
+    extern "C" fn iomap_begin_callback(
+        inode_ptr: *mut bindings::inode,
+        pos: Offset,
+        length: Offset,
+        flags: u32,
+        map: *mut bindings::iomap,
+        srcmap: *mut bindings::iomap,
+    ) -> i32 {
+        from_result(|| {
+            // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
+            let inode = unsafe { INode::from_raw(inode_ptr) };
+            T::begin(
+                inode,
+                pos,
+                length,
+                flags,
+                // SAFETY: The C API guarantees that `map` is valid for write.
+                unsafe { &mut *map.cast::<Map<'_>>() },
+                // SAFETY: The C API guarantees that `srcmap` is valid for write.
+                unsafe { &mut *srcmap.cast::<Map<'_>>() },
+            )?;
+            Ok(0)
+        })
+    }
+
+    extern "C" fn iomap_end_callback(
+        inode_ptr: *mut bindings::inode,
+        pos: Offset,
+        length: Offset,
+        written: isize,
+        flags: u32,
+        map: *mut bindings::iomap,
+    ) -> i32 {
+        from_result(|| {
+            // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
+            let inode = unsafe { INode::from_raw(inode_ptr) };
+            // SAFETY: The C API guarantees that `map` is valid for read.
+            T::end(inode, pos, length, written, flags, unsafe {
+                &*map.cast::<Map<'_>>()
+            })?;
+            Ok(0)
+        })
+    }
+
+    const TABLE: bindings::address_space_operations = bindings::address_space_operations {
+        read_folio: Some(Self::read_folio_callback),
+        writepages: Some(Self::writepages_callback),
+        dirty_folio: Some(bindings::iomap_dirty_folio),
+        // readahead: Some(Self::readahead_callback),
+        readahead: None,
+        write_begin: None,
+        write_end: None,
+        // bmap: Some(Self::bmap_callback),
+        bmap: None,
+        invalidate_folio: Some(bindings::iomap_invalidate_folio),
+        release_folio: Some(bindings::iomap_release_folio),
+        free_folio: None,
+        // direct_IO: Some(bindings::noop_direct_IO),
+        direct_IO: None,
+        migrate_folio: Some(bindings::filemap_migrate_folio),
+        launder_folio: None,
+        is_partially_uptodate: None,
+        is_dirty_writeback: None,
+        error_remove_folio: None,
+        swap_activate: None,
+        swap_deactivate: None,
+        swap_rw: None,
+    };
+
+    extern "C" fn read_folio_callback(
+        _file: *mut bindings::file,
+        folio: *mut bindings::folio,
+    ) -> i32 {
+        // SAFETY: `folio` is just forwarded from C and `Self::MAP_TABLE` is always valid.
+        unsafe { bindings::iomap_read_folio(folio, &Self::MAP_TABLE) }
+    }
+
+    extern "C" fn writepages_callback(
+        _mapping: *mut bindings::address_space,
+        _wbc: *mut bindings::writeback_control,
+    ) -> i32 {
+        // Safety: iomap docs say wpc must be zero-initialized.
+        let mut wpc: bindings::iomap_writepage_ctx = unsafe { mem::zeroed() };
+
+        // SAFETY: `_mapping` is guaranteed by the VFS to be a valid `struct address_space *`.
+        // Its `host` field is a valid `struct inode *`.
+        wpc.inode = unsafe { (*_mapping).host };
+        wpc.wbc = _wbc;
+        wpc.ops = &Self::WRITEBACK_TABLE;
+
+        // SAFETY: We just created `wpc` to be stack-allocated & zero-initialised.
+        // The VFS guarantees that `.inode` + `.wbc` are valid while `.ops` is static.
+        // We pass a unique mutable pointer to `wpc`.
+        unsafe { bindings::iomap_writepages(&mut wpc) }
+    }
+
+    extern "C" fn readahead_callback(rac: *mut bindings::readahead_control) {
+        // SAFETY: `rac` is just forwarded from C and `Self::MAP_TABLE` is always valid.
+        unsafe { bindings::iomap_readahead(rac, &Self::MAP_TABLE) }
+    }
+
+    extern "C" fn bmap_callback(mapping: *mut bindings::address_space, block: u64) -> u64 {
+        // SAFETY: `mapping` is just forwarded from C and `Self::MAP_TABLE` is always valid.
+        unsafe { bindings::iomap_bmap(mapping, block, &Self::MAP_TABLE) }
+    }
+}
+
 /// Returns address space oprerations backed by iomaps.
 pub const fn aops<T: Operations + ?Sized>() -> address_space::Ops<T::FileSystem> {
-    struct Table<T: Operations + ?Sized>(PhantomData<T>);
-    impl<T: Operations + ?Sized> Table<T> {
-        const MAP_TABLE: bindings::iomap_ops = bindings::iomap_ops {
-            iomap_begin: Some(Self::iomap_begin_callback),
-            iomap_end: Some(Self::iomap_end_callback),
-        };
-
-        const WRITEBACK_TABLE: bindings::iomap_writeback_ops = bindings::iomap_writeback_ops {
-            writeback_range: None,
-            writeback_submit: None,
-        };
-
-        extern "C" fn iomap_begin_callback(
-            inode_ptr: *mut bindings::inode,
-            pos: Offset,
-            length: Offset,
-            flags: u32,
-            map: *mut bindings::iomap,
-            srcmap: *mut bindings::iomap,
-        ) -> i32 {
-            from_result(|| {
-                // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
-                let inode = unsafe { INode::from_raw(inode_ptr) };
-                T::begin(
-                    inode,
-                    pos,
-                    length,
-                    flags,
-                    // SAFETY: The C API guarantees that `map` is valid for write.
-                    unsafe { &mut *map.cast::<Map<'_>>() },
-                    // SAFETY: The C API guarantees that `srcmap` is valid for write.
-                    unsafe { &mut *srcmap.cast::<Map<'_>>() },
-                )?;
-                Ok(0)
-            })
-        }
-
-        extern "C" fn iomap_end_callback(
-            inode_ptr: *mut bindings::inode,
-            pos: Offset,
-            length: Offset,
-            written: isize,
-            flags: u32,
-            map: *mut bindings::iomap,
-        ) -> i32 {
-            from_result(|| {
-                // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
-                let inode = unsafe { INode::from_raw(inode_ptr) };
-                // SAFETY: The C API guarantees that `map` is valid for read.
-                T::end(inode, pos, length, written, flags, unsafe {
-                    &*map.cast::<Map<'_>>()
-                })?;
-                Ok(0)
-            })
-        }
-
-        const TABLE: bindings::address_space_operations = bindings::address_space_operations {
-            read_folio: Some(Self::read_folio_callback),
-            writepages: Some(Self::writepages_callback),
-            dirty_folio: Some(bindings::iomap_dirty_folio),
-            // readahead: Some(Self::readahead_callback),
-            readahead: None,
-            write_begin: None,
-            write_end: None,
-            // bmap: Some(Self::bmap_callback),
-            bmap: None,
-            invalidate_folio: Some(bindings::iomap_invalidate_folio),
-            release_folio: Some(bindings::iomap_release_folio),
-            free_folio: None,
-            // direct_IO: Some(bindings::noop_direct_IO),
-            direct_IO: None,
-            migrate_folio: Some(bindings::filemap_migrate_folio),
-            launder_folio: None,
-            is_partially_uptodate: None,
-            is_dirty_writeback: None,
-            error_remove_folio: None,
-            swap_activate: None,
-            swap_deactivate: None,
-            swap_rw: None,
-        };
-
-        extern "C" fn read_folio_callback(
-            _file: *mut bindings::file,
-            folio: *mut bindings::folio,
-        ) -> i32 {
-            // SAFETY: `folio` is just forwarded from C and `Self::MAP_TABLE` is always valid.
-            unsafe { bindings::iomap_read_folio(folio, &Self::MAP_TABLE) }
-        }
-
-        extern "C" fn writepages_callback(
-            _mapping: *mut bindings::address_space,
-            _wbc: *mut bindings::writeback_control,
-        ) -> i32 {
-            // Safety: iomap docs say wpc must be zero-initialized.
-            let mut wpc: bindings::iomap_writepage_ctx = unsafe { mem::zeroed() };
-
-            // SAFETY: `_mapping` is guaranteed by the VFS to be a valid `struct address_space *`.
-            // Its `host` field is a valid `struct inode *`.
-            wpc.inode = unsafe { (*_mapping).host };
-            wpc.wbc = _wbc;
-            wpc.ops = &Self::WRITEBACK_TABLE;
-
-            // SAFETY: We just created `wpc` to be stack-allocated & zero-initialised.
-            // The VFS guarantees that `.inode` + `.wbc` are valid while `.ops` is static.
-            // We pass a unique mutable pointer to `wpc`.
-            unsafe { bindings::iomap_writepages(&mut wpc) }
-        }
-
-        extern "C" fn readahead_callback(rac: *mut bindings::readahead_control) {
-            // SAFETY: `rac` is just forwarded from C and `Self::MAP_TABLE` is always valid.
-            unsafe { bindings::iomap_readahead(rac, &Self::MAP_TABLE) }
-        }
-
-        extern "C" fn bmap_callback(mapping: *mut bindings::address_space, block: u64) -> u64 {
-            // SAFETY: `mapping` is just forwarded from C and `Self::MAP_TABLE` is always valid.
-            unsafe { bindings::iomap_bmap(mapping, block, &Self::MAP_TABLE) }
-        }
-    }
     address_space::Ops(&Table::<T>::TABLE, PhantomData)
+}
+
+pub const fn map_table<T: Operations + ?Sized>() -> &'static bindings::iomap_ops {
+    return &Table::<T>::MAP_TABLE;
+}
+
+pub fn file_buffered_write<FS: Operations + ?Sized>(
+    kiocb: Kiocb<'_, <FS::FileSystem as FileSystem>::Data>,
+    iov: &mut IovIterSource<'_>,
+) -> Result<usize> {
+    // SAFETY:
+    // - `kiocb.as_raw()` and `iov.as_raw()` are valid as given by the VFS/iov wrapper.
+    // - `map_table::<Ops>()` is a static iomap_ops for this filesystem.
+    // - The last two args are allowed to be NULL by iomap.
+    let ret = unsafe {
+        bindings::iomap_file_buffered_write(
+            kiocb.as_raw(),
+            iov.as_raw(),
+            map_table::<FS>(),
+            ptr::null(),
+            ptr::null_mut(),
+        )
+    };
+
+    // Returns Err if err is invalid
+    // We can't use it for Ok as it doesn't return usize
+    to_result(ret.try_into()?)?;
+
+    ret.try_into().map_err(|_| EOVERFLOW)
 }

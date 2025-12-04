@@ -21,7 +21,6 @@ void rust_helper_i_gid_write(struct inode *inode, gid_t gid)
 	i_gid_write(inode, gid);
 }
 
-
 void rust_helper_inode_lock_shared(struct inode *inode)
 {
 	inode_lock_shared(inode);
@@ -36,6 +35,11 @@ void *rust_helper_alloc_inode_sb(struct super_block *sb,
 				 struct kmem_cache *cache, gfp_t gfp)
 {
 	return alloc_inode_sb(sb, cache, gfp);
+}
+
+loff_t rust_helper_i_size_read(const struct inode *inode)
+{
+	return i_size_read(inode);
 }
 
 void rust_helper_mark_inode_dirty(struct inode *inode)

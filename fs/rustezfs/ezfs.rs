@@ -17,7 +17,7 @@ use kernel::folio::{Folio, PageCache};
 use kernel::fs::Kiocb;
 use kernel::fs::{file, File, FileSystem, Offset, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
-use kernel::iov::IovIterDest;
+use kernel::iov::{IovIterDest, IovIterSource};
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::task::{Kgid, Kuid};
@@ -30,6 +30,7 @@ use kernel::{c_str, fs, str::CStr};
 
 use core::marker::{PhantomData, Send, Sync};
 use core::mem::size_of;
+use core::ptr;
 use pin_init::{pin_data, PinInit, PinnedDrop};
 
 struct RustEzFs;
@@ -177,6 +178,22 @@ impl RustEzFs {
         ready_inode.mark_dirty();
 
         Ok(ready_inode)
+    }
+
+    fn move_block(mut from: u64, mut to: u64, sb: &SuperBlock<RustEzFs>) -> Result {
+        from += EZFS_ROOT_DATABLOCK_NUMBER as u64;
+        to += EZFS_ROOT_DATABLOCK_NUMBER as u64;
+
+        let src = sb.read_mapping_page(from)?;
+        let dst = sb.read_mapping_page(to)?;
+
+        src.copy_to(&dst);
+
+        Ok(())
+    }
+
+    fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
+        (sb.disk_blocks - 2).min(EZFS_MAX_DATA_BLKS as u64)
     }
 }
 
@@ -380,6 +397,27 @@ impl file::Operations for RustEzFs {
 
         Ok(())
     }
+
+    fn write_iter(
+        mut kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
+        mut iov: &mut IovIterSource<'_>,
+    ) -> Result<usize> {
+        pr_info!("write_iter\n");
+        let flags = kiocb.ki_flags();
+        let file: &File<Self> = kiocb.ki_filp();
+
+        if flags & bindings::IOCB_DIRECT != 0 {
+            return Err(EINVAL); // We don't support direct I/O
+        }
+
+        if (file.flags() & file::flags::O_APPEND) != 0 {
+            *kiocb.ki_pos_mut() = file.host_inode().size();
+        }
+
+        // SAFETY: We've got a valid kiocb and iov iter from our VFS and our iomap_ops is static
+        // The function treats null pointers as valid inputs for the last two params
+        iomap::file_buffered_write::<RustEzFs>(kiocb, iov)
+    }
 }
 
 impl iomap::Operations for RustEzFs {
@@ -403,10 +441,14 @@ impl iomap::Operations for RustEzFs {
         let start_block: u64 = (pos >> sb.blocksize_bits()).try_into()?;
         let end_block: u64 = ((pos + length - 1) >> sb.blocksize_bits()).try_into()?;
 
+        // pr_info!("start_block: {start_block}, end_block: {end_block}\n");
+
         let ez_blk_num = ezfs_inode.data_blk_num();
         let ez_blk_count = inode.blocks() / 8;
 
-        let phys = if ez_blk_num > 0 {
+        // pr_info!("blk_num: {ez_blk_num}, ez_blk_count: {ez_blk_count}\n");
+
+        let mut phys = if ez_blk_num > 0 {
             ez_blk_num + start_block
         } else {
             0
@@ -417,9 +459,8 @@ impl iomap::Operations for RustEzFs {
             .set_offset(pos)
             .set_length(length as u64);
 
+        // We're reading
         if (flags & iomap::flags::WRITE == 0) {
-            pr_info!("READING\n");
-
             // Invalid read, block does not belong to inode
             if ez_blk_num == 0 || start_block >= ez_blk_count {
                 map.set_type(iomap::Type::Hole)
@@ -432,28 +473,143 @@ impl iomap::Operations for RustEzFs {
             return Ok(());
         };
 
-        pr_info!("WRITING\n");
+        // We're writing
+        // As we'll modify the file system below, we must acquire a lock
+        ezfs_sb.lock();
 
-        // // Shifted physical index
-        // let phys_sidx: i64 = if ez_blk_num > 0 {
-        //     // phys should always be >= root datablock number
-        //     (phys - EZFS_ROOT_DATABLOCK_NUMBER as u64).try_into()?
-        // } else {
-        //     -1i64
-        // };
+        let max_blocks = Self::get_max_blocks(ezfs_sb);
+        let blocks_needed = end_block + 1;
+        let blocks_to_add = blocks_needed.checked_sub(ez_blk_count).ok_or(EIO)?;
 
-        Err(EIO)
+        // TODO: is this necessary ?
+        if blocks_needed > max_blocks {
+            return Err(ENOSPC);
+        }
+
+        enum WriteCase {
+            NEW,    // Write to an empty file without any allocated blocks
+            WITHIN, // File can fit written contents within allocated, unused block
+            EXTEND, // File has adjacent, free block to extend to
+            MOVE,   // File has no adjacent, free block and must be moved
+        }
+
+        let mut free_data_blocks = ezfs_sb.free_data_blocks.lock();
+        let ez_blk_sidx = ez_blk_num - (EZFS_ROOT_DATABLOCK_NUMBER as u64);
+
+        let case_type = if ez_blk_num == 0 {
+            WriteCase::NEW
+        } else if blocks_to_add == 0 {
+            WriteCase::WITHIN
+        } else {
+            let start = ez_blk_sidx + ez_blk_count;
+            let end = ez_blk_sidx + blocks_needed;
+
+            if end > max_blocks {
+                return Err(ENOSPC);
+            }
+
+            // pr_info!("start={start} - end={end}\n");
+
+            if (start..end).any(|bit| free_data_blocks.is_set(bit)) {
+                WriteCase::MOVE
+            } else {
+                WriteCase::EXTEND
+            }
+        };
+
+        match case_type {
+            WriteCase::NEW => {
+                pr_info!("adding to an empty file\n");
+                return Err(EIO);
+            }
+            WriteCase::WITHIN => {}
+            WriteCase::EXTEND => {
+                for i in ez_blk_count..blocks_needed {
+                    let bit = ez_blk_sidx + i;
+                    free_data_blocks.set_bit(bit);
+                }
+
+                map.set_flags(iomap::map_flags::NEW);
+            }
+            WriteCase::MOVE => {
+                // Let's try to find a region of sequential free blocks
+                // of size `blocks_needed` to move our file to
+                let mut curr_block = 0;
+                let mut seen_free = 0;
+                while seen_free < blocks_needed && curr_block < max_blocks {
+                    // if block isn't free, we reset counter
+                    if free_data_blocks.is_set(curr_block) {
+                        seen_free = 0;
+                    } else {
+                        seen_free += 1;
+                    }
+
+                    curr_block += 1;
+                }
+
+                if (seen_free < blocks_needed) {
+                    return Err(ENOSPC);
+                }
+
+                // Move all blocks within the file to new region
+                let new_block_start = curr_block - blocks_needed;
+
+                if (ez_blk_num != 0) {
+                    for j in 0..ez_blk_count {
+                        let old = ez_blk_sidx + j;
+                        let new = new_block_start + j;
+
+                        Self::move_block(old, new, sb);
+
+                        free_data_blocks.clear_bit(old);
+                        free_data_blocks.set_bit(new);
+                    }
+                }
+
+                // SAFETY: we've acquired the super block lock and can therefore
+                // modify the ezfs inode
+                let mut ezfs_inode = unsafe { inode.data_mut() };
+                ezfs_inode
+                    .set_data_block_num(new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64));
+                phys = ezfs_inode.data_blk_num() + start_block;
+                map.set_flags(iomap::map_flags::NEW);
+            }
+        }
+
+        map.set_type(iomap::Type::Mapped)
+            .set_addr(phys << sb.blocksize_bits());
+
+        Ok(())
     }
 
     fn end<'a>(
-        _inode: &'a INode<Self::FileSystem>,
+        inode: &'a INode<Self::FileSystem>,
         _pos: Offset,
         _length: Offset,
-        _written: isize,
+        written: isize,
         _flags: u32,
         _map: &iomap::Map<'a>,
     ) -> Result {
-        pr_info!("iomap_end()\n");
+        if (written > 0) {
+            pr_info!("iomap_end()\n");
+            let new_blocks =
+                ((inode.size() + (EZFS_BLOCK_SIZE as i64) - 1) / EZFS_BLOCK_SIZE as i64) as u64;
+            let sb = inode.super_block();
+            let ezfs_sb = sb.data();
+
+            // We'll modify our inodes, let's lock first
+            ezfs_sb.lock();
+
+            // SAFETY: We've acquired the super block lock
+            unsafe { inode.set_blocks(new_blocks * 8) };
+            let ezfs_inode = unsafe { inode.data_mut() };
+
+            ezfs_inode.set_nblocks(new_blocks);
+
+            // TODO:
+            // - get inode store and update nblocks
+            // - mark inode dirty
+        }
         Ok(())
     }
 }

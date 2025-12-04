@@ -113,9 +113,17 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { SuperBlock::from_raw((*self.0.get()).i_sb) }
     }
 
+    pub fn size(&self) -> i64 {
+        unsafe { (*self.0.get()).i_size }
+    }
+
     pub fn blocks(&self) -> u64 {
         // SAFETY: this is ok
         unsafe { (*self.0.get()).i_blocks }
+    }
+
+    pub unsafe fn set_blocks(&self, num_blocks: u64) {
+        unsafe { (*self.0.get()).i_blocks = num_blocks };
     }
 
     /// Returns the data associated with the inode.
@@ -129,6 +137,28 @@ impl<T: FileSystem + ?Sized> INode<T> {
         // (`&self`) to it. Additionally, we know `T::INodeData` is always initialised in an
         // `INode`.
         unsafe { &*(*outerp).data.as_ptr() }
+    }
+
+    /// Returns a mutable reference to the inode's associated data.
+    ///
+    /// # Safety
+    ///
+    /// - Callers must ensure exclusive access to this inode's data.
+    ///   Typically this means holding the appropriate inode or fs-level lock
+    ///   so that no other references (including shared ones) are being used
+    ///   concurrently.
+    /// - No other references obtained via [`INode::data`] may be used while
+    ///   the returned `&mut T::INodeData` is alive.
+    pub unsafe fn data_mut(&self) -> &mut T::INodeData {
+        if T::IS_UNSPECIFIED {
+            crate::build_error!("inode data type is unspecified");
+        }
+        // TODO: Add safety
+        let outerp = unsafe { container_of!(self.0.get(), WithData<T::INodeData>, inode) };
+        // SAFETY: `self` is guaranteed to be valid by the existence of a shared reference
+        // (`&self`) to it. Additionally, we know `T::INodeData` is always initialised in an
+        // `INode`.
+        unsafe { &mut *(*outerp).data.as_mut_ptr() }
     }
 
     /// Returns a mapper for this inode.
