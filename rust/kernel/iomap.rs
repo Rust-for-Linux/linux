@@ -166,6 +166,16 @@ pub mod flags {
     pub const DAX: u32 = bindings::IOMAP_DAX;
 }
 
+// TODO: We should probably have this instead
+// /// WritebackOperations  implemented by iomap users.
+// pub trait WritebackOperations {
+//     type FileSystem: FileSystem + ?Sized;
+//
+//     fn writeback_range<'a>(folio: &'a Folio<Self::FileSystem>) -> Result;
+//
+//     fn writeback_submit<'a>() -> Result;
+// }
+
 /// Operations implemented by iomap users.
 pub trait Operations {
     /// File system that these operations are compatible with.
@@ -182,7 +192,7 @@ pub trait Operations {
         length: Offset,
         flags: u32,
         map: &mut Map<'a>,
-        srcmap: &mut Map<'a>,
+        srcmap: Option<&mut Map<'a>>,
     ) -> Result;
 
     /// Commits and/or unreserves space previously allocated using [`Operations::begin`]. `written`
@@ -207,27 +217,61 @@ struct Table<T: Operations + ?Sized>(PhantomData<T>);
 impl<T: Operations + ?Sized> Table<T> {
     const WRITEBACK_TABLE: bindings::iomap_writeback_ops = bindings::iomap_writeback_ops {
         writeback_range: Some(Self::writeback_range_callback),
-        writeback_submit: Some(Self::writeback_submit),
+        writeback_submit: Some(Self::writeback_submit_callback),
     };
 
     extern "C" fn writeback_range_callback(
         _wpc: *mut bindings::iomap_writepage_ctx,
-        _folio: *mut bindings::folio,
+        folio_ptr: *mut bindings::folio,
         pos: u64,
         len: u32,
         end_pos: u64,
     ) -> isize {
         from_result(|| {
             pr_info!("writeback_range()\n");
-            Ok(len.try_into()?)
+
+            let address_space_ptr =
+                unsafe { (*folio_ptr).__bindgen_anon_1.__bindgen_anon_1.mapping };
+            let inode_ptr = unsafe { (*address_space_ptr).host };
+
+            let map = unsafe { &mut (*_wpc).iomap };
+
+            let res = Self::iomap_begin_callback(
+                inode_ptr,
+                pos as Offset,
+                len as Offset,
+                flags::WRITE,
+                map,
+                ptr::null_mut(),
+            );
+
+            pr_info!("writeback_range: result={res}\n");
+
+            to_result(res)?;
+
+            let ret = unsafe {
+                bindings::iomap_add_to_ioend(
+                    _wpc,
+                    folio_ptr,
+                    pos.try_into()?,
+                    end_pos.try_into()?,
+                    len,
+                )
+            };
+            to_result(ret.try_into()?)?;
+
+            Ok(ret)
         })
     }
 
-    extern "C" fn writeback_submit(_wpc: *mut bindings::iomap_writepage_ctx, _error: i32) -> i32 {
-        from_result(|| {
-            pr_info!("writeback_submit()\n");
-            Ok(0)
-        })
+    extern "C" fn writeback_submit_callback(
+        _wpc: *mut bindings::iomap_writepage_ctx,
+        _error: i32,
+    ) -> i32 {
+        pr_info!("writeback_submit()\n");
+
+        // SAFETY: VFS/iomap guarantees `wpc` is valid here.
+        unsafe { bindings::iomap_ioend_writeback_submit(_wpc, _error) }
     }
 
     const MAP_TABLE: bindings::iomap_ops = bindings::iomap_ops {
@@ -246,6 +290,14 @@ impl<T: Operations + ?Sized> Table<T> {
         from_result(|| {
             // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
             let inode = unsafe { INode::from_raw(inode_ptr) };
+
+            let srcmap_opt: Option<&mut Map<'_>> = if srcmap.is_null() {
+                None
+            } else {
+                // SAFETY: We've just confirmed that srcmap is not null
+                Some(unsafe { &mut *srcmap.cast::<Map<'_>>() })
+            };
+
             T::begin(
                 inode,
                 pos,
@@ -253,8 +305,7 @@ impl<T: Operations + ?Sized> Table<T> {
                 flags,
                 // SAFETY: The C API guarantees that `map` is valid for write.
                 unsafe { &mut *map.cast::<Map<'_>>() },
-                // SAFETY: The C API guarantees that `srcmap` is valid for write.
-                unsafe { &mut *srcmap.cast::<Map<'_>>() },
+                srcmap_opt,
             )?;
             Ok(0)
         })
