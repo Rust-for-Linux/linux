@@ -5,22 +5,22 @@
 //! C headers: [`include/linux/iomap.h`](srctree/include/linux/iomap.h)
 
 use super::address_space;
+use crate::error::to_result;
+use crate::iov::IovIterSource;
 use crate::pr_info;
-use crate::prelude::EIO;
+use crate::prelude::{EIO, EOVERFLOW};
 use crate::{
     block,
     error::{from_result, Result},
-    folio::Folio,
-    folio::PageCache,
-    fs::file::File,
-    fs::FileSystem,
-    fs::Offset,
-    types::Locked,
+    folio::{Folio, PageCache},
+    fs::{file::File, FileSystem, Kiocb, Offset},
+    types::{ForeignOwnable, Locked},
 };
 
 use crate::inode::INode;
 use core::marker::PhantomData;
 use core::mem;
+use core::ptr;
 use macros::vtable;
 use uapi::writeback_control;
 
@@ -349,4 +349,29 @@ pub const fn aops<T: Operations + ?Sized>() -> address_space::Ops<T::FileSystem>
 
 pub const fn map_table<T: Operations + ?Sized>() -> &'static bindings::iomap_ops {
     return &Table::<T>::MAP_TABLE;
+}
+
+pub fn file_buffered_write<FS: Operations + ?Sized>(
+    kiocb: Kiocb<'_, <FS::FileSystem as FileSystem>::Data>,
+    iov: &mut IovIterSource<'_>,
+) -> Result<usize> {
+    // SAFETY:
+    // - `kiocb.as_raw()` and `iov.as_raw()` are valid as given by the VFS/iov wrapper.
+    // - `map_table::<Ops>()` is a static iomap_ops for this filesystem.
+    // - The last two args are allowed to be NULL by iomap.
+    let ret = unsafe {
+        bindings::iomap_file_buffered_write(
+            kiocb.as_raw(),
+            iov.as_raw(),
+            map_table::<FS>(),
+            ptr::null(),
+            ptr::null_mut(),
+        )
+    };
+
+    // Returns Err if err is invalid
+    // We can't use it for Ok as it doesn't return usize
+    to_result(ret.try_into()?)?;
+
+    ret.try_into().map_err(|_| EOVERFLOW)
 }

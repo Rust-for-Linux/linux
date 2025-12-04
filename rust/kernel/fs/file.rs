@@ -355,6 +355,12 @@ impl<T: FileSystem + ?Sized> LocalFile<T> {
         unsafe { INode::from_raw((*self.inner.get()).f_inode) }
     }
 
+    /// Returns the host inode of that file
+    pub fn host_inode(&self) -> &INode<T> {
+        // SAFETY: f_mapping is always valid and requires a host
+        unsafe { INode::from_raw((*(*self.inner.get()).f_mapping).host) }
+    }
+
     /// Returns the dentry associated with the file.
     pub fn dentry(&self) -> &DEntry<T> {
         // SAFETY: `f_path` is an immutable field, so it's safe to read it. And will remain safe to
@@ -583,19 +589,7 @@ pub trait Operations {
         Err(EINVAL)
     }
 
-    // /// Writes data from the caller's buffer to this file.
-    // ///
-    // /// Corresponds to the `write_iter` function pointer in `struct file_operations`.
-    // fn write(
-    //     _data: <Self::Data as ForeignOwnable>::Borrowed<'_>,
-    //     _file: &File<Self::FileSystem>,
-    //     _reader: &mut impl IoBufferReader,
-    //     _offset: u64,
-    // ) -> Result<usize> {
-    //     Err(EINVAL)
-    // }
-
-    /// Write to this miscdevice.
+    /// Write to this file
     fn write_iter(
         _kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
         _iov: &mut IovIterSource<'_>,
@@ -740,22 +734,23 @@ impl<T: FileSystem + ?Sized> Ops<T> {
             /// # Safety
             ///
             /// `kiocb` must be correspond to a valid file that is associated with a
-            /// `MiscDeviceRegistration<T>`. `iter` must be a valid `struct iov_iter` for writing.
+            /// `<T>`. `iter` must be a valid `struct iov_iter` for writing.
             unsafe extern "C" fn write_iter_callback(
                 kiocb: *mut bindings::kiocb,
                 iter: *mut bindings::iov_iter,
             ) -> isize {
-                pr_info!("write_iter_callback\n");
-                // SAFETY: The caller provides a valid `struct kiocb` associated with a
-                // `MiscDeviceRegistration<T>` file.
-                let kiocb = unsafe { Kiocb::from_raw(kiocb) };
-                // SAFETY: This is a valid `struct iov_iter` for reading.
-                let iov = unsafe { IovIterSource::from_raw(iter) };
+                from_result(|| {
+                    pr_info!("write_iter_callback\n");
+                    // SAFETY: The caller provides a valid `struct kiocb` associated with a
+                    // `<T>` file.
+                    let kiocb = unsafe { Kiocb::from_raw(kiocb) };
+                    // SAFETY: This is a valid `struct iov_iter` for reading.
+                    let mut iov = unsafe { IovIterSource::from_raw(iter) };
 
-                match T::write_iter(kiocb, iov) {
-                    Ok(res) => res as isize,
-                    Err(err) => err.to_errno() as isize,
-                }
+                    let wrote = T::write_iter(kiocb, &mut iov)?;
+
+                    Ok(wrote.try_into()?)
+                })
             }
         }
         Self {
