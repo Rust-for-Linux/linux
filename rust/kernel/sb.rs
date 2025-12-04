@@ -218,4 +218,12 @@ impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
             Ok(INodeState::Uninitilized(inode::New(inode, PhantomData)))
         }
     }
+
+    pub fn new_inode(&self) -> Result<inode::New<T>> {
+        let sb_ptr = self.0.get();
+        // SAFETY: sb is guaranteed to be valid because of TypeState
+        let new_inode = ptr::NonNull::new(unsafe { bindings::new_inode(sb_ptr) }).ok_or(ENOMEM)?;
+
+        Ok(inode::New(new_inode, PhantomData))
+    }
 }

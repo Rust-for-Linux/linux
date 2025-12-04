@@ -6,7 +6,7 @@ use kernel::transmute::FromBytes;
 use kernel::uapi::{gid_t, mode_t, uid_t};
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub(crate) struct EzfsInode {
     mode: mode_t,
     uid: uid_t,
@@ -59,6 +59,66 @@ impl EzfsInode {
 
     pub(crate) fn nblocks(&self) -> u64 {
         self.nblocks
+    }
+
+    pub(crate) fn set_mode(mut self, mode: u32) -> Self {
+        self.mode = mode;
+
+        self
+    }
+
+    pub(crate) fn set_uid(mut self, uid: u32) -> Self {
+        self.uid = uid;
+
+        self
+    }
+
+    pub(crate) fn set_gid(mut self, gid: u32) -> Self {
+        self.gid = gid;
+
+        self
+    }
+
+    pub(crate) fn set_atime(mut self, tv_sec: i64) -> Self {
+        self.i_atime = tv_sec;
+
+        self
+    }
+
+    pub(crate) fn set_mtime(mut self, tv_sec: i64) -> Self {
+        self.i_mtime = tv_sec;
+
+        self
+    }
+
+    pub(crate) fn set_ctime(mut self, tv_sec: i64) -> Self {
+        self.i_ctime = tv_sec;
+
+        self
+    }
+
+    pub(crate) fn set_nlink(mut self, nlink: u32) -> Self {
+        self.nlink = nlink;
+
+        self
+    }
+
+    pub(crate) fn set_data_block_num(mut self, data_block_num: u64) -> Self {
+        self.data_blk_num = data_block_num;
+
+        self
+    }
+
+    pub(crate) fn set_file_size(mut self, file_size: u64) -> Self {
+        self.file_size = file_size;
+
+        self
+    }
+
+    pub(crate) fn set_nblock(mut self, nblocks: u64) -> Self {
+        self.nblocks = nblocks;
+
+        self
     }
 }
 
