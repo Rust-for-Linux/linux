@@ -416,7 +416,7 @@ impl file::Operations for RustEzFs {
     ) -> Result<usize> {
         pr_info!("write_iter\n");
         let flags = kiocb.ki_flags();
-        let file: &File<Self> = kiocb.ki_filp();
+        let file = kiocb.ki_filp();
 
         if flags & bindings::IOCB_DIRECT != 0 {
             return Err(EINVAL); // We don't support direct I/O
@@ -581,7 +581,8 @@ impl iomap::Operations for RustEzFs {
                 // SAFETY: we've acquired the super block lock and can therefore
                 // modify the ezfs inode
                 let mut ezfs_inode = unsafe { inode.data_mut() };
-                ezfs_inode.data_blk_num = new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                ezfs_inode
+                    .set_data_block_num(new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64));
                 phys = ezfs_inode.data_blk_num() + start_block;
                 map.set_flags(iomap::map_flags::NEW);
             }
@@ -615,7 +616,7 @@ impl iomap::Operations for RustEzFs {
             unsafe { inode.set_blocks(new_blocks * 8) };
             let ezfs_inode = unsafe { inode.data_mut() };
 
-            ezfs_inode.nblocks = new_blocks;
+            ezfs_inode.set_nblocks(new_blocks);
 
             // TODO:
             // - get inode store and update nblocks

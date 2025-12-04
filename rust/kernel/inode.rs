@@ -126,10 +126,6 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { (*self.0.get()).i_blocks = num_blocks };
     }
 
-    pub fn mark_dirty(&self) {
-        unsafe { bindings::mark_inode_dirty((self.0.get())) };
-    }
-
     /// Returns the data associated with the inode.
     pub fn data(&self) -> &T::INodeData {
         if T::IS_UNSPECIFIED {

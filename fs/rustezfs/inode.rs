@@ -15,9 +15,9 @@ pub(crate) struct EzfsInode {
     i_mtime: i64, /* modified time */
     i_ctime: i64, /* change time */
     nlink: u32,
-    pub data_blk_num: u64,
+    data_blk_num: u64,
     file_size: u64,
-    pub nblocks: u64,
+    nblocks: u64,
 }
 
 impl EzfsInode {
