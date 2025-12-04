@@ -54,6 +54,16 @@ impl EzfsDirEntry {
 
         Ok(self)
     }
+
+    pub(crate) fn zero(&mut self) -> &mut Self {
+        let len = self.filename.len();
+
+        self.inode_no = 0;
+        self.active = 0;
+        self.filename[..len].fill(0);
+
+        self
+    }
 }
 
 #[repr(C)]

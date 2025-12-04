@@ -295,8 +295,7 @@ impl kernel::inode::Operations for RustEzFs {
 
         let new_inode = Self::new_inode(parent, mode.into())?;
 
-        // TODO: Lock memory when writing DirEntries
-        // TODO: Write DirEntry to memory
+        // TODO: Write Inode to memory
 
         let sb = parent.super_block();
         let h = sb.data();
@@ -319,8 +318,6 @@ impl kernel::inode::Operations for RustEzFs {
         let mut dir_entries =
             DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
 
-        pr_info!("create: dir_entries vaddr: {:p}\n", dir_entries as *const _);
-
         let dir_entry = dir_entries
             .iter_mut()
             .find(|x| !x.is_active())
@@ -341,18 +338,45 @@ impl kernel::inode::Operations for RustEzFs {
         parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
         dentry: dentry::Unhashed<'_, Self::FileSystem>,
     ) -> Result<usize> {
-        let inode = dentry.inode();
+        let sb = parent.super_block();
+        let h = sb.data();
 
-        // TODO: Erase DirEntry from page
+        let inode = dentry.inode();
+        let filename = dentry.name();
+
+        let ezfs_dir_inode = parent.data();
+
+        // Erase DirEntry from page
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
+            h.mapper.read_mapping_folio(offset.try_into()?)?;
+
+        let folio_start = 0;
+        let locked_folio = folio.lock();
+        let mut guard = locked_folio.map(folio_start)?;
+        let mut dir_entries =
+            DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let dir_entry = dir_entries
+            .iter_mut()
+            .find(|x| x.filename() == filename)
+            .ok_or(ENOENT)?;
+
+        dir_entry.zero();
 
         // TODO: change m and ctime for parent and inode
+        // TODO: Implemnt evict_inode
 
         inode.drop_nlink();
 
         inode.mark_dirty();
         parent.mark_dirty();
 
-        todo!()
+        Ok(0)
     }
 }
 
