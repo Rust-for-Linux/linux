@@ -221,7 +221,7 @@ impl<T: Operations + ?Sized> Table<T> {
     };
 
     extern "C" fn writeback_range_callback(
-        _wpc: *mut bindings::iomap_writepage_ctx,
+        wpc: *mut bindings::iomap_writepage_ctx,
         folio_ptr: *mut bindings::folio,
         pos: u64,
         len: u32,
@@ -230,11 +230,19 @@ impl<T: Operations + ?Sized> Table<T> {
         from_result(|| {
             pr_info!("writeback_range()\n");
 
+            // SAFETY: For this callback, iomap guarantees:
+            //   - `folio_ptr` points to a live `struct folio`.
+            //   - The folio remains valid and locked for the duration of this call.
             let address_space_ptr =
                 unsafe { (*folio_ptr).__bindgen_anon_1.__bindgen_anon_1.mapping };
+
+            // SAFETY: when iomap_writepages is called, `mapping` is non-NULL and
+            // its `host` field points to the owning `struct inode`.
             let inode_ptr = unsafe { (*address_space_ptr).host };
 
-            let map = unsafe { &mut (*_wpc).iomap };
+            // SAFETY: `wpc` is guaranteed to be valid.
+            // `iomap` is valid storage that we are allowed to mutate.
+            let map = unsafe { &mut (*wpc).iomap };
 
             let res = Self::iomap_begin_callback(
                 inode_ptr,
@@ -245,13 +253,13 @@ impl<T: Operations + ?Sized> Table<T> {
                 ptr::null_mut(),
             );
 
-            pr_info!("writeback_range: result={res}\n");
-
             to_result(res)?;
 
+            // SAFETY: all arguments provided were provided by the caller
+            // This is the go-to method for completing writebacks
             let ret = unsafe {
                 bindings::iomap_add_to_ioend(
-                    _wpc,
+                    wpc,
                     folio_ptr,
                     pos.try_into()?,
                     end_pos.try_into()?,
