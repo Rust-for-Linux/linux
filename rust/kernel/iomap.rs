@@ -5,7 +5,7 @@
 //! C headers: [`include/linux/iomap.h`](srctree/include/linux/iomap.h)
 
 use super::address_space;
-use crate::error::to_result;
+use crate::error::{to_result, Error};
 use crate::iov::IovIterSource;
 use crate::pr_info;
 use crate::prelude::{EIO, EOVERFLOW};
@@ -244,7 +244,7 @@ impl<T: Operations + ?Sized> Table<T> {
             // `iomap` is valid storage that we are allowed to mutate.
             let map = unsafe { &mut (*wpc).iomap };
 
-            let res = Self::iomap_begin_callback(
+            let ret = Self::iomap_begin_callback(
                 inode_ptr,
                 pos as Offset,
                 len as Offset,
@@ -253,7 +253,9 @@ impl<T: Operations + ?Sized> Table<T> {
                 ptr::null_mut(),
             );
 
-            to_result(res)?;
+            if ret < 0 {
+                return Err(Error::from_errno(ret.try_into()?));
+            }
 
             // SAFETY: all arguments provided were provided by the caller
             // This is the go-to method for completing writebacks
@@ -266,20 +268,23 @@ impl<T: Operations + ?Sized> Table<T> {
                     len,
                 )
             };
-            to_result(ret.try_into()?)?;
+
+            if ret < 0 {
+                return Err(Error::from_errno(ret.try_into()?));
+            }
 
             Ok(ret)
         })
     }
 
     extern "C" fn writeback_submit_callback(
-        _wpc: *mut bindings::iomap_writepage_ctx,
-        _error: i32,
+        wpc: *mut bindings::iomap_writepage_ctx,
+        error: i32,
     ) -> i32 {
         pr_info!("writeback_submit()\n");
 
         // SAFETY: VFS/iomap guarantees `wpc` is valid here.
-        unsafe { bindings::iomap_ioend_writeback_submit(_wpc, _error) }
+        unsafe { bindings::iomap_ioend_writeback_submit(wpc, error) }
     }
 
     const MAP_TABLE: bindings::iomap_ops = bindings::iomap_ops {
