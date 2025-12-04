@@ -43,6 +43,12 @@ impl<T: FileSystem + ?Sized> DEntry<T> {
         // `d_sb` is immutable, so it's safe to read it.
         unsafe { SuperBlock::from_raw((*self.0.get()).d_sb) }
     }
+
+    /// Gets the associated inode with dentry
+    pub fn inode(&self) -> &INode<T> {
+        // SAFETY: VFS locking ensures d_inode is stable during filesystem operations.
+        unsafe { INode::from_raw((*self.0.get()).d_inode) }
+    }
 }
 
 pub struct Unhashed<'a, T: FileSystem + ?Sized>(pub(crate) &'a DEntry<T>);
