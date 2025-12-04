@@ -1,10 +1,15 @@
-use core::{marker::PhantomData, ops::Deref, ptr};
+use core::{
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    ptr,
+};
 
 use crate::{
     error::Result,
     fs::FileSystem,
+    pr_info,
     prelude::EDOM,
-    types::{Lockable, Locked, ARef, AlwaysRefCounted, Opaque},
+    types::{ARef, AlwaysRefCounted, Lockable, Locked, Opaque},
 };
 
 /// The type of a [`Folio`] is unspecified.
@@ -186,15 +191,80 @@ impl Drop for MapGuard<'_> {
     }
 }
 
+/// A mapped mutable [`Folio`].
+pub struct MapGuardMut<'a> {
+    data: &'a mut [u8],
+    page: *mut bindings::page,
+}
+
+impl Deref for MapGuardMut<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
+impl DerefMut for MapGuardMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.data
+    }
+}
+
+impl Drop for MapGuardMut<'_> {
+    fn drop(&mut self) {
+        pr_info!("Dropped guard, set pag dirty and unmapped\n");
+        // SAFETY: A `MapGuard` instance is only created when `kmap` succeeds, so it's ok to unmap
+        // it when the guard is dropped.
+        unsafe {
+            bindings::set_page_dirty(self.page);
+            bindings::kunmap(self.page)
+        };
+    }
+}
+
 // SAFETY: `raw_lock` calls folio_lock, which actually locks the folio.
 unsafe impl<S> Lockable for Folio<S> {
     fn raw_lock(&self) {
+        pr_info!("Locked folio\n");
         // SAFETY: The folio is valid because the shared reference implies a non-zero refcount.
         unsafe { bindings::folio_lock(self.0.get()) }
     }
 
     unsafe fn unlock(&self) {
+        pr_info!("unlocked folio\n");
         // SAFETY: The safety requirements guarantee that the folio is locked.
         unsafe { bindings::folio_unlock(self.0.get()) }
+    }
+}
+
+impl<T: Deref<Target = Folio<S>>, S> Locked<T> {
+    /// SAFETY: it is guarenteed that the folio is locked by the type invariant
+    pub fn map(&self, offset: usize) -> Result<MapGuardMut<'_>> {
+        if offset > self.size() {
+            return Err(EDOM);
+        }
+
+        let page_index = offset / bindings::PAGE_SIZE;
+        let page_offset = offset % bindings::PAGE_SIZE;
+
+        // SAFETY: We just checked that the index is within bounds of the folio.
+        let page = unsafe { bindings::folio_page(self.0.get(), page_index) };
+
+        // SAFETY: `page` is valid because it was returned by `folio_page` above.
+        let ptr = unsafe { bindings::kmap(page) };
+
+        let size = if self.test_highmem() {
+            bindings::PAGE_SIZE
+        } else {
+            self.size()
+        };
+
+        // SAFETY: We just mapped `ptr`, so it's valid for read.
+        let data = unsafe {
+            core::slice::from_raw_parts_mut(ptr.cast::<u8>().add(page_offset), size - page_offset)
+        };
+
+        Ok(MapGuardMut { data, page })
     }
 }

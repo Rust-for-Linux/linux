@@ -129,6 +129,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { (*self.0.get()).i_blocks }
     }
 
+    // FIXME: Does this work???
     pub unsafe fn set_blocks(&self, num_blocks: u64) {
         unsafe { (*self.0.get()).i_blocks = num_blocks };
     }
@@ -166,6 +167,13 @@ impl<T: FileSystem + ?Sized> INode<T> {
         // (`&self`) to it. Additionally, we know `T::INodeData` is always initialised in an
         // `INode`.
         unsafe { &mut *(*outerp).data.as_mut_ptr() }
+    }
+
+    pub fn drop_nlink(&self) {
+        let inode_ptr = self.0.get();
+        unsafe {
+            bindings::drop_nlink(inode_ptr);
+        }
     }
 
     /// Returns a mapper for this inode.

@@ -1,6 +1,9 @@
 use crate::defs::{EZFS_FILENAME_BUF_SIZE, EZFS_MAX_CHILDREN};
-use core::ops::Deref;
-use kernel::transmute::{AsBytes, FromBytes};
+use core::ops::{Deref, DerefMut};
+use kernel::{
+    prelude::*,
+    transmute::{AsBytes, FromBytes},
+};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -28,6 +31,29 @@ impl EzfsDirEntry {
 
         &self.filename[..len]
     }
+
+    pub(crate) fn set_inode_no(&mut self, ino: u64) -> &mut Self {
+        self.inode_no = ino;
+
+        self
+    }
+
+    pub(crate) fn set_active(&mut self) -> &mut Self {
+        self.active = 1;
+
+        self
+    }
+
+    pub(crate) fn set_filename(&mut self, filename: &[u8]) -> Result<&mut Self> {
+        if filename.len() > self.filename.len() {
+            return Err(ENAMETOOLONG);
+        }
+
+        self.filename[..filename.len()].copy_from_slice(filename);
+        self.filename[filename.len()..].fill(0);
+
+        Ok(self)
+    }
 }
 
 #[repr(C)]
@@ -40,6 +66,12 @@ impl Deref for DirEntryStore {
 
     fn deref(&self) -> &Self::Target {
         &self.dir_entries
+    }
+}
+
+impl DerefMut for DirEntryStore {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.dir_entries
     }
 }
 

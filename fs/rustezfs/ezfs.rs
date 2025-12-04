@@ -297,36 +297,58 @@ impl kernel::inode::Operations for RustEzFs {
 
         // TODO: Lock memory when writing DirEntries
         // TODO: Write DirEntry to memory
-        //
-        // let sb = parent.super_block();
-        // let h = sb.data();
-        //
-        // let ezfs_dir_inode = parent.data();
-        //
-        // let offset = ezfs_dir_inode
-        //     .data_blk_num()
-        //     .checked_mul(EZFS_BLOCK_SIZE as u64)
-        //     .ok_or(EIO)?;
-        //
-        // let mut mapped = h.mapper.mapped_folio(offset.try_into()?)?;
-        // let new_filename = dentry.name();
-        //
-        // let dir_entries =
-        //     DirEntryStore::from_bytes_mut(&mut mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
-        //
-        // let dir_entry = dir_entries
-        //     .iter_mut()
-        //     .find(|x| !x.is_active())
-        //     .ok_or(ENOSPC)?;
-        //
-        // dir_entry
-        //     .set_inode_no(new_inode.ino().try_into()?)
-        //     .set_active()
-        //     .set_filename(new_filename);
+
+        let sb = parent.super_block();
+        let h = sb.data();
+
+        let ezfs_dir_inode = parent.data();
+
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let new_filename = dentry.name();
+
+        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
+            parent.read_mapping_folio(offset.try_into()?)?;
+
+        let locked_folio = folio.lock();
+        let mut guard = locked_folio.map(offset.try_into()?)?;
+        let mut dir_entries =
+            DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let dir_entry = dir_entries
+            .iter_mut()
+            .find(|x| !x.is_active())
+            .ok_or(ENOSPC)?;
+
+        dir_entry
+            .set_inode_no(new_inode.ino().try_into()?)
+            .set_active()
+            .set_filename(new_filename)?;
 
         new_inode.instantiate_dentry(&dentry);
 
         Ok(0)
+    }
+
+    fn unlink(
+        parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<usize> {
+        let inode = dentry.inode();
+
+        // TODO: Erase DirEntry from page
+
+        // TODO: change m and ctime for parent and inode
+
+        inode.drop_nlink();
+
+        inode.mark_dirty();
+        parent.mark_dirty();
+
+        todo!()
     }
 }
 
