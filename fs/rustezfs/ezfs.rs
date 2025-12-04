@@ -311,12 +311,15 @@ impl kernel::inode::Operations for RustEzFs {
         let new_filename = dentry.name();
 
         let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
-            parent.read_mapping_folio(offset.try_into()?)?;
+            h.mapper.read_mapping_folio(offset.try_into()?)?;
 
+        let folio_start = 0;
         let locked_folio = folio.lock();
-        let mut guard = locked_folio.map(offset.try_into()?)?;
+        let mut guard = locked_folio.map(folio_start)?;
         let mut dir_entries =
             DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        pr_info!("create: dir_entries vaddr: {:p}\n", dir_entries as *const _);
 
         let dir_entry = dir_entries
             .iter_mut()
@@ -329,6 +332,7 @@ impl kernel::inode::Operations for RustEzFs {
             .set_filename(new_filename)?;
 
         new_inode.instantiate_dentry(&dentry);
+        parent.mark_dirty();
 
         Ok(0)
     }
@@ -421,6 +425,12 @@ impl file::Operations for RustEzFs {
         let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
         let dir_entries =
             DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        pr_info!(
+            "readdir: dir_entries vaddr: {:p}\n",
+            dir_entries as *const _
+        );
+        pr_info!("readdir: mapped vaddr: {:p}\n", mapped.as_ptr());
 
         let inode_store_offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
         let mapped_inode_store = h.mapper.mapped_folio(inode_store_offset.try_into()?)?;

@@ -390,6 +390,19 @@ impl<T: FileSystem + ?Sized> Mapper<T> {
         map.cap_len((self.end - offset).try_into()?);
         Ok(map)
     }
+
+    pub fn read_mapping_folio(
+        &self,
+        offset: Offset,
+    ) -> Result<ARef<folio::Folio<folio::PageCache<T>>>> {
+        if offset < self.begin || offset >= self.end {
+            return Err(ERANGE);
+        }
+
+        let page_index = offset >> bindings::PAGE_SHIFT;
+        let mut folio = self.inode.read_mapping_folio(page_index.try_into()?);
+        folio
+    }
 }
 
 struct WithData<T> {
