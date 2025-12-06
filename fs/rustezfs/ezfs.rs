@@ -500,6 +500,11 @@ impl file::Operations for RustEzFs {
     }
 }
 
+#[vtable]
+impl kernel::sb::Operations for RustEzFs {
+    type FileSystem = Self;
+}
+
 impl iomap::Operations for RustEzFs {
     type FileSystem = Self;
 

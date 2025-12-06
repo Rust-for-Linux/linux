@@ -7,8 +7,7 @@
 //! C headers: [`include/linux/fs.h`](srctree/include/linux/fs.h) and
 //! [`include/linux/file.h`](srctree/include/linux/file.h)
 
-use macros::vtable;
-
+use crate::prelude::*;
 use crate::{
     bindings,
     cred::Credential,

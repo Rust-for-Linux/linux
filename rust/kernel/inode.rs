@@ -2,7 +2,6 @@ use core::marker::PhantomData;
 use core::mem::{ManuallyDrop, MaybeUninit};
 
 use bindings::{init_user_ns, kgid_t, kuid_t};
-use macros::vtable;
 
 use crate::address_space;
 use crate::dentry::{self, DEntry};
@@ -11,7 +10,7 @@ use crate::folio::{self, Folio};
 use crate::fs::{self, mode, Registration};
 use crate::fs::{file, PageOffset, UnspecifiedFS};
 use crate::mem_cache::MemCache;
-use crate::prelude::{EINVAL, EIO, ENOTSUPP, ERANGE, GFP_KERNEL};
+use crate::prelude::*;
 use crate::sb::SuperBlock;
 use crate::str::CString;
 use crate::time::Timespec;

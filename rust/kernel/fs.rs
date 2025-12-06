@@ -69,7 +69,7 @@ pub mod mode {
 }
 
 /// A file system type.
-pub trait FileSystem {
+pub trait FileSystem: sb::Operations<FileSystem = Self> {
     /// Data associated with each file system instance (super-block).
     type Data: ForeignOwnable + Send + Sync;
 
@@ -117,6 +117,12 @@ impl FileSystem for UnspecifiedFS {
     fn init_root(_: &SuperBlock<Self>) -> Result<dentry::Root<Self>> {
         Err(ENOTSUPP)
     }
+}
+
+// Minimal set of sb operations (just fallback on default)
+#[vtable]
+impl kernel::sb::Operations for UnspecifiedFS {
+    type FileSystem = Self;
 }
 
 /// A file system registration.
@@ -247,7 +253,10 @@ impl<T: FileSystem + ?Sized> Tables<T> {
             // SAFETY: The callback contract guarantees that `sb_ptr`, from which `new_sb` is
             // derived, is valid for write.
             let sb = unsafe { &mut *new_sb.0.get() };
-            sb.s_op = &Tables::<T>::SUPER_BLOCK;
+            let sops = sb::Ops::<T>::new::<T>();
+            let sops_ptr = unsafe { sops.inner };
+            // sb.s_op = &Tables::<T>::SUPER_BLOCK;
+            sb.s_op = sops_ptr;
 
             let mapper = if matches!(T::SUPER_TYPE, sb::Type::BlockDev) {
                 // SAFETY: This is the only mapper created for this inode, so it is unique.
