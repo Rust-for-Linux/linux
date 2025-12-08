@@ -128,6 +128,24 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { (*self.0.get()).i_blocks }
     }
 
+    pub fn nlink(&self) -> u32 {
+        // SAFETY: this is ok
+        unsafe { (*self.0.get()).__bindgen_anon_1.i_nlink }
+    }
+
+    pub fn truncate_inode_pages_final(&self) {
+        // SAFETY: type semantics guarentee that Inode is instatiated
+        let data = unsafe { ptr::addr_of_mut!((*self.0.get()).i_data) };
+        unsafe { bindings::truncate_inode_pages_final(data) }
+    }
+
+    // FIXME: should consume self so you can't call any methods after clearing
+    pub fn clear(&self) {
+        // SAFETY: type semantics guarentee that Inode is instatiated
+        let inode_ptr = self.0.get();
+        unsafe { bindings::clear_inode(inode_ptr) }
+    }
+
     // FIXME: Does this work???
     pub unsafe fn set_blocks(&self, num_blocks: u64) {
         unsafe { (*self.0.get()).i_blocks = num_blocks };

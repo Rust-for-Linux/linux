@@ -503,6 +503,34 @@ impl file::Operations for RustEzFs {
 #[vtable]
 impl kernel::sb::Operations for RustEzFs {
     type FileSystem = Self;
+
+    fn evict_inode(inode: &INode<Self::FileSystem>) -> Result {
+        let sb = inode.super_block().data();
+
+        if (inode.nlink() == 0) {
+            let ino: u64 = inode.ino().try_into()?;
+
+            let mut free_inodes = sb.free_inodes.lock();
+            let mut free_data_blocks = sb.free_data_blocks.lock();
+            let mut zero_data_blocks = sb.zero_data_blocks.lock();
+
+            let ezfs_inode = inode.data();
+            let start = ezfs_inode.data_blk_num();
+            let end = start + inode.blocks();
+
+            for data_blk in start..end {
+                free_data_blocks.clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                zero_data_blocks.clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+            }
+
+            free_inodes.clear_bit(ino);
+        }
+
+        // TODO: Mark sb and inode store dirty
+
+        inode.truncate_inode_pages_final();
+        inode.clear();
+    }
 }
 
 impl iomap::Operations for RustEzFs {
