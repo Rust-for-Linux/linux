@@ -254,8 +254,8 @@ impl<T: FileSystem + ?Sized> Tables<T> {
             // derived, is valid for write.
             let sb = unsafe { &mut *new_sb.0.get() };
             let sops = sb::Ops::<T>::new::<T>();
-            let sops_ptr = unsafe { sops.inner };
-            // sb.s_op = &Tables::<T>::SUPER_BLOCK;
+            let sops_ptr = sops.inner;
+
             sb.s_op = sops_ptr;
 
             let mapper = if matches!(T::SUPER_TYPE, sb::Type::BlockDev) {
