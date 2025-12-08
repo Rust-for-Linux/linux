@@ -133,6 +133,43 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { (*self.0.get()).__bindgen_anon_1.i_nlink }
     }
 
+    pub fn ctime(&self) -> Result<Timespec> {
+        let sec = unsafe { (*self.0.get()).i_ctime_sec };
+        let nsec = unsafe { (*self.0.get()).i_ctime_nsec };
+
+        Timespec::new(sec.try_into()?, nsec)
+    }
+
+    pub fn mtime(&self) -> Result<Timespec> {
+        let sec = unsafe { (*self.0.get()).i_mtime_sec };
+        let nsec = unsafe { (*self.0.get()).i_mtime_nsec };
+
+        Timespec::new(sec.try_into()?, nsec)
+    }
+
+    pub fn atime(&self) -> Result<Timespec> {
+        let sec = unsafe { (*self.0.get()).i_atime_sec };
+        let nsec = unsafe { (*self.0.get()).i_atime_nsec };
+
+        Timespec::new(sec.try_into()?, nsec)
+    }
+
+    pub fn uid(&self) -> u32 {
+        let uid = unsafe { (*self.0.get()).i_uid };
+
+        uid.val
+    }
+
+    pub fn gid(&self) -> u32 {
+        let gid = unsafe { (*self.0.get()).i_gid };
+
+        gid.val
+    }
+
+    pub fn mode(&self) -> u16 {
+        unsafe { (*self.0.get()).i_mode }
+    }
+
     pub fn truncate_inode_pages_final(&self) {
         // SAFETY: type semantics guarentee that Inode is instatiated
         let data = unsafe { ptr::addr_of_mut!((*self.0.get()).i_data) };

@@ -4,7 +4,6 @@ use core::{
     ptr::{self, NonNull},
 };
 
-use crate::page::{BorrowedPage, Page};
 use crate::prelude::*;
 use crate::types::{ARef, ForeignOwnable};
 use crate::{block, inode};
@@ -13,6 +12,10 @@ use crate::{
     fs::FileSystem,
     inode::{INodeState, Ino},
     types::Opaque,
+};
+use crate::{
+    error::from_result,
+    page::{BorrowedPage, Page},
 };
 use crate::{
     error::{code::*, from_err_ptr, Result},
@@ -32,6 +35,10 @@ pub trait Operations {
     type FileSystem: FileSystem + ?Sized;
 
     fn evict_inode(_inode: &INode<Self::FileSystem>) -> Result {
+        Err(ENOTSUPP)
+    }
+
+    fn write_inode(_inode: &INode<Self::FileSystem>) -> Result<usize> {
         Err(ENOTSUPP)
     }
 }
@@ -261,7 +268,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 destroy_inode: Some(INode::<T::FileSystem>::destroy_inode_callback),
                 free_inode: None,
                 dirty_inode: None,
-                write_inode: None,
+                write_inode: if T::HAS_WRITE_INODE {
+                    Some(Self::write_inode_callback)
+                } else {
+                    None
+                },
                 drop_inode: None,
                 evict_inode: if T::HAS_EVICT_INODE {
                     Some(Self::evict_inode_callback)
@@ -298,6 +309,21 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 let inode = unsafe { INode::from_raw(inode_ptr) };
 
                 T::evict_inode(inode); // TODO: Should this return something?
+            }
+
+            unsafe extern "C" fn write_inode_callback(
+                inode_ptr: *mut bindings::inode,
+                _wbc: *mut bindings::writeback_control,
+            ) -> i32 {
+                // TODO: add support for wbc
+                from_result(|| {
+                    // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
+                    let inode = unsafe { INode::from_raw(inode_ptr) };
+
+                    let write = T::write_inode(inode)?;
+
+                    Ok(i32::try_from(write)?)
+                })
             }
         }
         Self {

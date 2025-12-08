@@ -1,8 +1,9 @@
-use crate::defs::*;
-use core::ops::Deref;
+use crate::{defs::*, RustEzFs};
+use core::ops::{Deref, DerefMut};
 use kernel::error::Result;
+use kernel::inode::INode;
 use kernel::time::Timespec;
-use kernel::transmute::FromBytes;
+use kernel::transmute::{AsBytes, FromBytes};
 use kernel::uapi::{gid_t, mode_t, uid_t};
 
 #[repr(C)]
@@ -21,6 +22,27 @@ pub(crate) struct EzfsInode {
 }
 
 impl EzfsInode {
+    pub(crate) fn from_vfs_inode(vfs_inode: &INode<RustEzFs>) -> Result<Self> {
+        let mut disk_inode = EzfsInode::default();
+
+        let mtime_sec = vfs_inode.mtime()?.tv_sec();
+        let ctime_sec = vfs_inode.ctime()?.tv_sec();
+        let atime_sec = vfs_inode.atime()?.tv_sec();
+
+        disk_inode.set_file_size(vfs_inode.size().try_into()?);
+        disk_inode.set_nblocks(vfs_inode.blocks() / 8);
+        disk_inode.set_mode(vfs_inode.mode() as u32);
+        disk_inode.set_uid(vfs_inode.uid());
+        disk_inode.set_gid(vfs_inode.gid());
+        disk_inode.set_nlink(vfs_inode.nlink());
+        disk_inode.set_atime(atime_sec);
+        disk_inode.set_ctime(ctime_sec);
+        disk_inode.set_mtime(mtime_sec);
+        disk_inode.set_data_block_num(vfs_inode.data().data_blk_num());
+
+        Ok(disk_inode)
+    }
+
     pub(crate) fn mode(&self) -> mode_t {
         self.mode
     }
@@ -135,5 +157,12 @@ impl Deref for InodeStore {
     }
 }
 
+impl DerefMut for InodeStore {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inodes
+    }
+}
+
 // SAFETY: EzfsInode is FromBytes, so array of them is too
 unsafe impl FromBytes for InodeStore {}
+unsafe impl AsBytes for InodeStore {}

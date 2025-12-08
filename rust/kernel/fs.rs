@@ -290,41 +290,4 @@ impl<T: FileSystem + ?Sized> Tables<T> {
             Ok(0)
         })
     }
-
-    const SUPER_BLOCK: bindings::super_operations = bindings::super_operations {
-        alloc_inode: if size_of::<T::INodeData>() != 0 {
-            Some(INode::<T>::alloc_inode_callback)
-        } else {
-            None
-        },
-        destroy_inode: Some(INode::<T>::destroy_inode_callback),
-        free_inode: None,
-        dirty_inode: None,
-        write_inode: None,
-        drop_inode: None,
-        evict_inode: None,
-        put_super: None,
-        sync_fs: None,
-        freeze_super: None,
-        freeze_fs: None,
-        thaw_super: None,
-        unfreeze_fs: None,
-        statfs: None,
-        remount_fs: None,
-        remove_bdev: None, // TODO: New field, research
-        umount_begin: None,
-        show_options: None,
-        show_devname: None,
-        show_path: None,
-        show_stats: None,
-        #[cfg(CONFIG_QUOTA)]
-        quota_read: None,
-        #[cfg(CONFIG_QUOTA)]
-        quota_write: None,
-        #[cfg(CONFIG_QUOTA)]
-        get_dquots: None,
-        nr_cached_objects: None,
-        free_cached_objects: None,
-        shutdown: None,
-    };
 }

@@ -64,14 +64,22 @@ impl RustEzFs {
             INodeState::Uninitilized(new_inode) => new_inode,
         };
 
-        let h = &*sb.data();
+        let ezfs_sb = sb.data();
+
+        {
+            // Check if inode is allocated
+            let sb_data = ezfs_sb.data.lock();
+            if !sb_data.free_inodes.is_set(ino.try_into()?) {
+                return Err(ENOENT);
+            }
+        }
 
         let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
-        let mapped_inode_store = h.mapper.mapped_folio(offset.try_into()?)?;
+        let mapped_inode_store = ezfs_sb.mapper.mapped_folio(offset.try_into()?)?;
         let inode_store =
             InodeStore::from_bytes(&mapped_inode_store[..size_of::<InodeStore>()]).ok_or(EIO)?;
 
-        let ezfs_inode = inode_store[ino - 1];
+        let ezfs_inode = inode_store[ino - EZFS_ROOT_INODE_NUMBER];
         let mode = ezfs_inode.mode();
 
         let typ = match mode & fs::mode::S_IFMT {
@@ -105,15 +113,15 @@ impl RustEzFs {
 
     fn allocate_inode(sb: &SuperBlock<Self>) -> Result<usize> {
         let ezfs_sb = sb.data();
-        let mut free_inodes = ezfs_sb.free_inodes.lock();
+        let mut sb_data = ezfs_sb.data.lock();
 
-        for (word_idx, &word) in free_inodes.iter().enumerate() {
+        for (word_idx, &word) in sb_data.free_inodes.iter().enumerate() {
             if word != !0u32 {
                 let bit_idx: u32 = (!word).trailing_zeros();
                 let inode_num: usize = (word_idx as usize * 32) + bit_idx as usize;
 
                 if inode_num < EZFS_MAX_INODES {
-                    free_inodes[word_idx] |= 1 << bit_idx;
+                    sb_data.free_inodes[word_idx] |= 1 << bit_idx;
                     return Ok(inode_num + 1); // FS is 1-indexed
                 }
             }
@@ -508,23 +516,25 @@ impl kernel::sb::Operations for RustEzFs {
             let sb = inode.super_block().data();
             let ino: u64 = inode.ino().try_into()?;
 
-            // TODO: Make sub-struct which the mutex owns
-            let mut free_inodes = sb.free_inodes.lock();
-            let mut free_data_blocks = sb.free_data_blocks.lock();
-            let mut zero_data_blocks = sb.zero_data_blocks.lock();
-
             let ezfs_inode = inode.data();
             let start = ezfs_inode.data_blk_num();
             let end = start + inode.blocks();
 
+            let mut sb_data = sb.data.lock();
+
             for data_blk in start..end {
-                free_data_blocks.clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
-                zero_data_blocks.clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                sb_data
+                    .free_data_blocks
+                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                sb_data
+                    .zero_data_blocks
+                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
             }
 
-            free_inodes.clear_bit(ino);
+            sb_data.free_inodes.clear_bit(ino);
         }
 
+        // TODO: remove inode from disk
         // TODO: Mark sb and inode store dirty
 
         // TODO: Make clear consume inode
@@ -532,6 +542,26 @@ impl kernel::sb::Operations for RustEzFs {
         inode.clear();
 
         Ok(())
+    }
+
+    fn write_inode(inode: &INode<Self::FileSystem>) -> Result<usize> {
+        let h = inode.super_block().data();
+        let ino = inode.ino();
+        let disk_inode = EzfsInode::from_vfs_inode(inode)?;
+
+        let offset = (EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE) as u64;
+        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
+            h.mapper.read_mapping_folio(offset.try_into()?)?;
+
+        let folio_start = 0;
+        let locked_folio = folio.lock();
+        let mut guard = locked_folio.map(folio_start)?;
+        let mut inodes =
+            InodeStore::from_bytes_mut(&mut guard[..size_of::<InodeStore>()]).ok_or(EIO)?;
+
+        inodes[ino - EZFS_ROOT_INODE_NUMBER] = disk_inode;
+
+        Ok(0)
     }
 }
 
@@ -590,7 +620,7 @@ impl iomap::Operations for RustEzFs {
 
         // We're writing
         // As we'll modify the file system below, we must acquire a lock
-        ezfs_sb.lock();
+        let mut sb_data = ezfs_sb.data.lock();
 
         let max_blocks = Self::get_max_blocks(ezfs_sb);
         let blocks_needed = end_block + 1;
@@ -608,7 +638,6 @@ impl iomap::Operations for RustEzFs {
             MOVE,   // File has no adjacent, free block and must be moved
         }
 
-        let mut free_data_blocks = ezfs_sb.free_data_blocks.lock();
         let ez_blk_sidx = ez_blk_num.saturating_sub(EZFS_ROOT_DATABLOCK_NUMBER as u64);
 
         let case_type = if ez_blk_num == 0 {
@@ -625,7 +654,7 @@ impl iomap::Operations for RustEzFs {
 
             // pr_info!("start={start} - end={end}\n");
 
-            if (start..end).any(|bit| free_data_blocks.is_set(bit)) {
+            if (start..end).any(|bit| sb_data.free_data_blocks.is_set(bit)) {
                 WriteCase::MOVE
             } else {
                 WriteCase::EXTEND
@@ -641,7 +670,7 @@ impl iomap::Operations for RustEzFs {
             WriteCase::EXTEND => {
                 for i in ez_blk_count..blocks_needed {
                     let bit = ez_blk_sidx + i;
-                    free_data_blocks.set_bit(bit);
+                    sb_data.free_data_blocks.set_bit(bit);
                 }
 
                 map.set_flags(iomap::map_flags::NEW);
@@ -653,7 +682,7 @@ impl iomap::Operations for RustEzFs {
                 let mut seen_free = 0;
                 while seen_free < blocks_needed && curr_block < max_blocks {
                     // if block isn't free, we reset counter
-                    if free_data_blocks.is_set(curr_block) {
+                    if sb_data.free_data_blocks.is_set(curr_block) {
                         seen_free = 0;
                     } else {
                         seen_free += 1;
@@ -676,8 +705,8 @@ impl iomap::Operations for RustEzFs {
 
                         Self::move_block(old, new, sb);
 
-                        free_data_blocks.clear_bit(old);
-                        free_data_blocks.set_bit(new);
+                        sb_data.free_data_blocks.clear_bit(old);
+                        sb_data.free_data_blocks.set_bit(new);
                     }
                 }
 
@@ -710,10 +739,11 @@ impl iomap::Operations for RustEzFs {
             let new_blocks =
                 ((inode.size() + (EZFS_BLOCK_SIZE as i64) - 1) / EZFS_BLOCK_SIZE as i64) as u64;
             let sb = inode.super_block();
-            let ezfs_sb = sb.data();
-
+            // TODO: do we need inode lock? and should we store inode store in sb?
+            // iomap locking docks (see locking hierarcy): https://docs.kernel.org/6.16/_sources/filesystems/iomap/design.rst.txt
+            // let ezfs_sb = sb.data();
             // We'll modify our inodes, let's lock first
-            ezfs_sb.lock();
+            // ezfs_sb.lock();
 
             // SAFETY: We've acquired the super block lock
             unsafe { inode.set_blocks(new_blocks * 8) };

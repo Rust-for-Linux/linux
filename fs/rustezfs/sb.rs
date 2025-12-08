@@ -92,14 +92,14 @@ pub(crate) struct EzfsSuperblock {
     pub(crate) magic: u64,
     pub(crate) disk_blocks: u64,
     #[pin]
-    pub(crate) free_inodes: Mutex<Bitmap<{ (EZFS_MAX_INODES / 32) + 1 }>>,
-    #[pin]
-    pub(crate) free_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
-    #[pin]
-    pub(crate) zero_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
-    #[pin]
-    sb_lock: Mutex<()>,
+    pub(crate) data: Mutex<EzfsSuperblockData>,
     pub(crate) mapper: inode::Mapper<RustEzFs>,
+}
+
+pub(crate) struct EzfsSuperblockData {
+    pub(crate) free_inodes: Bitmap<{ (EZFS_MAX_INODES / 32) + 1 }>,
+    pub(crate) free_data_blocks: Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>,
+    pub(crate) zero_data_blocks: Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>,
 }
 
 impl EzfsSuperblock {
@@ -111,19 +111,16 @@ impl EzfsSuperblock {
             version: disk_sb.data.version,
             magic: disk_sb.data.magic,
             disk_blocks: disk_sb.data.disk_blocks,
-            free_inodes <- new_mutex!(Bitmap::new(disk_sb.data.free_inodes)),
-            free_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.free_data_blocks)),
-            zero_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.zero_data_blocks)),
-            sb_lock <- new_mutex!(()),
+            data <- new_mutex!(EzfsSuperblockData {
+                free_inodes: Bitmap::new(disk_sb.data.free_inodes),
+                free_data_blocks: Bitmap::new(disk_sb.data.free_data_blocks),
+                zero_data_blocks: Bitmap::new(disk_sb.data.zero_data_blocks),
+            }),
             mapper,
         })
     }
 
     pub(crate) fn magic(&self) -> u64 {
         self.magic
-    }
-
-    pub(crate) fn lock(&self) -> Guard<'_, (), MutexBackend> {
-        self.sb_lock.lock()
     }
 }
