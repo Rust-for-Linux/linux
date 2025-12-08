@@ -369,7 +369,6 @@ impl kernel::inode::Operations for RustEzFs {
         dir_entry.zero();
 
         // TODO: change m and ctime for parent and inode
-        // TODO: Implemnt evict_inode
 
         inode.drop_nlink();
 
@@ -419,7 +418,7 @@ impl file::Operations for RustEzFs {
             }
         }
 
-        let sb = &*inode.super_block();
+        let sb = inode.super_block();
         let h = sb.data();
 
         let index = {
@@ -497,6 +496,42 @@ impl file::Operations for RustEzFs {
         // SAFETY: We've got a valid kiocb and iov iter from our VFS and our iomap_ops is static
         // The function treats null pointers as valid inputs for the last two params
         iomap::file_buffered_write::<RustEzFs>(kiocb, iov)
+    }
+}
+
+#[vtable]
+impl kernel::sb::Operations for RustEzFs {
+    type FileSystem = Self;
+
+    fn evict_inode(inode: &INode<Self::FileSystem>) -> Result {
+        if (inode.nlink() == 0) {
+            let sb = inode.super_block().data();
+            let ino: u64 = inode.ino().try_into()?;
+
+            // TODO: Make sub-struct which the mutex owns
+            let mut free_inodes = sb.free_inodes.lock();
+            let mut free_data_blocks = sb.free_data_blocks.lock();
+            let mut zero_data_blocks = sb.zero_data_blocks.lock();
+
+            let ezfs_inode = inode.data();
+            let start = ezfs_inode.data_blk_num();
+            let end = start + inode.blocks();
+
+            for data_blk in start..end {
+                free_data_blocks.clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                zero_data_blocks.clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+            }
+
+            free_inodes.clear_bit(ino);
+        }
+
+        // TODO: Mark sb and inode store dirty
+
+        // TODO: Make clear consume inode
+        inode.truncate_inode_pages_final();
+        inode.clear();
+
+        Ok(())
     }
 }
 

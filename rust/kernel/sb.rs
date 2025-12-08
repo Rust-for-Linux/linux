@@ -4,8 +4,8 @@ use core::{
     ptr::{self, NonNull},
 };
 
-use crate::error::{code::*, from_err_ptr, Result};
 use crate::page::{BorrowedPage, Page};
+use crate::prelude::*;
 use crate::types::{ARef, ForeignOwnable};
 use crate::{block, inode};
 use crate::{
@@ -14,12 +14,26 @@ use crate::{
     inode::{INodeState, Ino},
     types::Opaque,
 };
+use crate::{
+    error::{code::*, from_err_ptr, Result},
+    inode::INode,
+};
 
 pub enum Type {
     /// Multiple independent superblocks may exist.
     Independent,
     /// Uses a block device.
     BlockDev,
+}
+
+/// Operations implemented by super blocks
+#[vtable]
+pub trait Operations {
+    type FileSystem: FileSystem + ?Sized;
+
+    fn evict_inode(_inode: &INode<Self::FileSystem>) -> Result {
+        Err(ENOTSUPP)
+    }
 }
 
 /// Indicates that a superblock in this typestate has data initialized.
@@ -225,5 +239,70 @@ impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
         let new_inode = ptr::NonNull::new(unsafe { bindings::new_inode(sb_ptr) }).ok_or(ENOMEM)?;
 
         Ok(inode::New(new_inode, PhantomData))
+    }
+}
+
+/// Represents inode operations.
+pub struct Ops<T: FileSystem + ?Sized> {
+    pub(crate) inner: *const bindings::super_operations,
+    _p: PhantomData<T>,
+}
+
+impl<T: FileSystem + ?Sized> Ops<T> {
+    pub const fn new<U: Operations<FileSystem = T> + ?Sized>() -> Self {
+        struct Table<T: Operations + ?Sized>(PhantomData<T>);
+        impl<T: Operations + ?Sized> Table<T> {
+            const TABLE: bindings::super_operations = bindings::super_operations {
+                alloc_inode: if size_of::<<T::FileSystem as FileSystem>::INodeData>() != 0 {
+                    Some(INode::<T::FileSystem>::alloc_inode_callback)
+                } else {
+                    None
+                },
+                destroy_inode: Some(INode::<T::FileSystem>::destroy_inode_callback),
+                free_inode: None,
+                dirty_inode: None,
+                write_inode: None,
+                drop_inode: None,
+                evict_inode: if T::HAS_EVICT_INODE {
+                    Some(Self::evict_inode_callback)
+                } else {
+                    None
+                },
+                put_super: None,
+                sync_fs: None,
+                freeze_super: None,
+                freeze_fs: None,
+                thaw_super: None,
+                unfreeze_fs: None,
+                statfs: None,
+                remount_fs: None,
+                remove_bdev: None, // TODO: New field, research
+                umount_begin: None,
+                show_options: None,
+                show_devname: None,
+                show_path: None,
+                show_stats: None,
+                #[cfg(CONFIG_QUOTA)]
+                quota_read: None,
+                #[cfg(CONFIG_QUOTA)]
+                quota_write: None,
+                #[cfg(CONFIG_QUOTA)]
+                get_dquots: None,
+                nr_cached_objects: None,
+                free_cached_objects: None,
+                shutdown: None,
+            };
+
+            unsafe extern "C" fn evict_inode_callback(inode_ptr: *mut bindings::inode) {
+                // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
+                let inode = unsafe { INode::from_raw(inode_ptr) };
+
+                T::evict_inode(inode); // TODO: Should this return something?
+            }
+        }
+        Self {
+            inner: &Table::<U>::TABLE,
+            _p: PhantomData,
+        }
     }
 }

@@ -20,7 +20,7 @@ pub(crate) struct EzfsSuperblockDiskRaw {
     disk_blocks: u64,
     free_inodes: [u32; (EZFS_MAX_INODES / 32) + 1],
     free_data_blocks: [u32; (EZFS_MAX_DATA_BLKS / 32) + 1],
-    zero_data_blocks: [u8; (EZFS_MAX_DATA_BLKS / 32) + 1],
+    zero_data_blocks: [u32; (EZFS_MAX_DATA_BLKS / 32) + 1],
 }
 
 // TODO: assert size is equal to 4096 bytes
@@ -92,11 +92,11 @@ pub(crate) struct EzfsSuperblock {
     pub(crate) magic: u64,
     pub(crate) disk_blocks: u64,
     #[pin]
-    pub(crate) free_inodes: Mutex<[u32; (EZFS_MAX_INODES / 32) + 1]>,
+    pub(crate) free_inodes: Mutex<Bitmap<{ (EZFS_MAX_INODES / 32) + 1 }>>,
     #[pin]
     pub(crate) free_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
     #[pin]
-    pub(crate) zero_data_blocks: Mutex<[u8; (EZFS_MAX_DATA_BLKS / 32) + 1]>,
+    pub(crate) zero_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
     #[pin]
     sb_lock: Mutex<()>,
     pub(crate) mapper: inode::Mapper<RustEzFs>,
@@ -111,9 +111,9 @@ impl EzfsSuperblock {
             version: disk_sb.data.version,
             magic: disk_sb.data.magic,
             disk_blocks: disk_sb.data.disk_blocks,
-            free_inodes <- new_mutex!(disk_sb.data.free_inodes),
+            free_inodes <- new_mutex!(Bitmap::new(disk_sb.data.free_inodes)),
             free_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.free_data_blocks)),
-            zero_data_blocks <- new_mutex!(disk_sb.data.zero_data_blocks),
+            zero_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.zero_data_blocks)),
             sb_lock <- new_mutex!(()),
             mapper,
         })

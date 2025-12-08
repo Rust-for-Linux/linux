@@ -2,7 +2,6 @@ use core::marker::PhantomData;
 use core::mem::{ManuallyDrop, MaybeUninit};
 
 use bindings::{init_user_ns, kgid_t, kuid_t};
-use macros::vtable;
 
 use crate::address_space;
 use crate::dentry::{self, DEntry};
@@ -11,7 +10,7 @@ use crate::folio::{self, Folio};
 use crate::fs::{self, mode, Registration};
 use crate::fs::{file, PageOffset, UnspecifiedFS};
 use crate::mem_cache::MemCache;
-use crate::prelude::{EINVAL, EIO, ENOTSUPP, ERANGE, GFP_KERNEL};
+use crate::prelude::*;
 use crate::sb::SuperBlock;
 use crate::str::CString;
 use crate::time::Timespec;
@@ -127,6 +126,24 @@ impl<T: FileSystem + ?Sized> INode<T> {
     pub fn blocks(&self) -> u64 {
         // SAFETY: this is ok
         unsafe { (*self.0.get()).i_blocks }
+    }
+
+    pub fn nlink(&self) -> u32 {
+        // SAFETY: this is ok
+        unsafe { (*self.0.get()).__bindgen_anon_1.i_nlink }
+    }
+
+    pub fn truncate_inode_pages_final(&self) {
+        // SAFETY: type semantics guarentee that Inode is instatiated
+        let data = unsafe { ptr::addr_of_mut!((*self.0.get()).i_data) };
+        unsafe { bindings::truncate_inode_pages_final(data) }
+    }
+
+    // FIXME: should consume self so you can't call any methods after clearing
+    pub fn clear(&self) {
+        // SAFETY: type semantics guarentee that Inode is instatiated
+        let inode_ptr = self.0.get();
+        unsafe { bindings::clear_inode(inode_ptr) }
     }
 
     // FIXME: Does this work???
