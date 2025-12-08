@@ -369,7 +369,6 @@ impl kernel::inode::Operations for RustEzFs {
         dir_entry.zero();
 
         // TODO: change m and ctime for parent and inode
-        // TODO: Implemnt evict_inode
 
         inode.drop_nlink();
 
@@ -419,7 +418,7 @@ impl file::Operations for RustEzFs {
             }
         }
 
-        let sb = &*inode.super_block();
+        let sb = inode.super_block();
         let h = sb.data();
 
         let index = {
@@ -505,11 +504,11 @@ impl kernel::sb::Operations for RustEzFs {
     type FileSystem = Self;
 
     fn evict_inode(inode: &INode<Self::FileSystem>) -> Result {
-        let sb = inode.super_block().data();
-
         if (inode.nlink() == 0) {
+            let sb = inode.super_block().data();
             let ino: u64 = inode.ino().try_into()?;
 
+            // TODO: Make sub-struct which the mutex owns
             let mut free_inodes = sb.free_inodes.lock();
             let mut free_data_blocks = sb.free_data_blocks.lock();
             let mut zero_data_blocks = sb.zero_data_blocks.lock();
@@ -528,8 +527,11 @@ impl kernel::sb::Operations for RustEzFs {
 
         // TODO: Mark sb and inode store dirty
 
+        // TODO: Make clear consume inode
         inode.truncate_inode_pages_final();
         inode.clear();
+
+        Ok(())
     }
 }
 

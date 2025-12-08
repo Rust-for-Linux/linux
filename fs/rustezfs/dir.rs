@@ -60,7 +60,7 @@ impl EzfsDirEntry {
 
         self.inode_no = 0;
         self.active = 0;
-        self.filename[..len].fill(0);
+        self.filename.fill(0);
 
         self
     }
