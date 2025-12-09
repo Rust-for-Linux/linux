@@ -526,7 +526,7 @@ impl kernel::sb::Operations for RustEzFs {
     fn evict_inode(inode: &INode<Self::FileSystem>) -> Result {
         if (inode.nlink() == 0) {
             let sb = inode.super_block().data();
-            let ino: u64 = inode.ino().try_into()?;
+            let ino = inode.ino();
 
             let ezfs_inode = inode.data();
             let start = ezfs_inode.data_blk_num();
@@ -543,7 +543,9 @@ impl kernel::sb::Operations for RustEzFs {
                     .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
             }
 
-            sb_data.free_inodes.clear_bit(ino - EZFS_ROOT_INODE_NUMBER);
+            sb_data
+                .free_inodes
+                .clear_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64);
         }
 
         // TODO: Make clear consume inode
