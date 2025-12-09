@@ -1,17 +1,12 @@
 use crate::defs::{EZFS_BLOCK_SIZE, EZFS_MAX_DATA_BLKS, EZFS_MAX_INODES};
-use crate::inode::InodeStore;
 use crate::RustEzFs;
 use core::mem::size_of;
 use core::ops::{Deref, DerefMut};
-use kernel::fs::FileSystem;
+use kernel::inode;
 use kernel::new_mutex;
 use kernel::prelude::*;
-use kernel::sync::{
-    lock::{mutex::MutexBackend, Guard},
-    Mutex,
-};
+use kernel::sync::Mutex;
 use kernel::transmute::{AsBytes, FromBytes};
-use kernel::{block, inode};
 
 #[repr(C)]
 pub(crate) struct EzfsSuperblockDiskRaw {
@@ -77,14 +72,14 @@ impl<const N: usize> Bitmap<N> {
     }
 
     #[inline]
-    pub(crate) fn set_bit(&mut self, block_num: u64) -> () {
+    pub(crate) fn set_bit(&mut self, block_num: u64) {
         let idx: usize = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
         self.inner[idx] |= mask
     }
 
     #[inline]
-    pub(crate) fn clear_bit(&mut self, block_num: u64) -> () {
+    pub(crate) fn clear_bit(&mut self, block_num: u64) {
         let idx: usize = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
         self.inner[idx] &= !mask
@@ -141,10 +136,6 @@ impl EzfsSuperblock {
             }),
             mapper,
         })
-    }
-
-    pub(crate) fn magic(&self) -> u64 {
-        self.magic
     }
 
     pub(crate) fn to_disk(&self) -> EzfsSuperblockDisk {
