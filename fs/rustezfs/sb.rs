@@ -10,7 +10,7 @@ use kernel::sync::{
     lock::{mutex::MutexBackend, Guard},
     Mutex,
 };
-use kernel::transmute::FromBytes;
+use kernel::transmute::{AsBytes, FromBytes};
 use kernel::{block, inode};
 
 #[repr(C)]
@@ -30,6 +30,28 @@ pub(crate) struct EzfsSuperblockDisk {
     _padding: [u8; EZFS_BLOCK_SIZE - size_of::<EzfsSuperblockDiskRaw>()],
 }
 
+impl Default for EzfsSuperblockDiskRaw {
+    fn default() -> Self {
+        Self {
+            version: 0,
+            magic: 0,
+            disk_blocks: 0,
+            free_inodes: [0; (EZFS_MAX_INODES / 32) + 1],
+            free_data_blocks: [0; (EZFS_MAX_DATA_BLKS / 32) + 1],
+            zero_data_blocks: [0; (EZFS_MAX_DATA_BLKS / 32) + 1],
+        }
+    }
+}
+
+impl Default for EzfsSuperblockDisk {
+    fn default() -> Self {
+        Self {
+            data: EzfsSuperblockDiskRaw::default(),
+            _padding: [0; EZFS_BLOCK_SIZE - size_of::<EzfsSuperblockDiskRaw>()],
+        }
+    }
+}
+
 impl EzfsSuperblockDisk {
     pub(crate) fn magic(&self) -> u64 {
         self.data.magic
@@ -39,6 +61,7 @@ impl EzfsSuperblockDisk {
 // SAFETY: EzfsSuperblockDisk contains only primitive integer types (u32, u64, u8)
 // which accept any bit pattern. The struct is #[repr(C)] for consistent layout.
 unsafe impl FromBytes for EzfsSuperblockDisk {}
+unsafe impl AsBytes for EzfsSuperblockDisk {}
 
 #[repr(transparent)]
 pub(crate) struct Bitmap<const N: usize> {
@@ -92,14 +115,14 @@ pub(crate) struct EzfsSuperblock {
     pub(crate) magic: u64,
     pub(crate) disk_blocks: u64,
     #[pin]
-    pub(crate) free_inodes: Mutex<Bitmap<{ (EZFS_MAX_INODES / 32) + 1 }>>,
-    #[pin]
-    pub(crate) free_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
-    #[pin]
-    pub(crate) zero_data_blocks: Mutex<Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>>,
-    #[pin]
-    sb_lock: Mutex<()>,
+    pub(crate) data: Mutex<EzfsSuperblockData>,
     pub(crate) mapper: inode::Mapper<RustEzFs>,
+}
+
+pub(crate) struct EzfsSuperblockData {
+    pub(crate) free_inodes: Bitmap<{ (EZFS_MAX_INODES / 32) + 1 }>,
+    pub(crate) free_data_blocks: Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>,
+    pub(crate) zero_data_blocks: Bitmap<{ (EZFS_MAX_DATA_BLKS / 32) + 1 }>,
 }
 
 impl EzfsSuperblock {
@@ -111,10 +134,11 @@ impl EzfsSuperblock {
             version: disk_sb.data.version,
             magic: disk_sb.data.magic,
             disk_blocks: disk_sb.data.disk_blocks,
-            free_inodes <- new_mutex!(Bitmap::new(disk_sb.data.free_inodes)),
-            free_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.free_data_blocks)),
-            zero_data_blocks <- new_mutex!(Bitmap::new(disk_sb.data.zero_data_blocks)),
-            sb_lock <- new_mutex!(()),
+            data <- new_mutex!(EzfsSuperblockData {
+                free_inodes: Bitmap::new(disk_sb.data.free_inodes),
+                free_data_blocks: Bitmap::new(disk_sb.data.free_data_blocks),
+                zero_data_blocks: Bitmap::new(disk_sb.data.zero_data_blocks),
+            }),
             mapper,
         })
     }
@@ -123,7 +147,18 @@ impl EzfsSuperblock {
         self.magic
     }
 
-    pub(crate) fn lock(&self) -> Guard<'_, (), MutexBackend> {
-        self.sb_lock.lock()
+    pub(crate) fn to_disk(&self) -> EzfsSuperblockDisk {
+        let mut disk_sb = EzfsSuperblockDisk::default();
+
+        disk_sb.data.version = self.version;
+        disk_sb.data.magic = self.magic;
+        disk_sb.data.disk_blocks = self.disk_blocks;
+
+        let sb_data = self.data.lock();
+        disk_sb.data.free_inodes = *sb_data.free_inodes;
+        disk_sb.data.free_data_blocks = *sb_data.free_data_blocks;
+        disk_sb.data.zero_data_blocks = *sb_data.zero_data_blocks;
+
+        disk_sb
     }
 }
