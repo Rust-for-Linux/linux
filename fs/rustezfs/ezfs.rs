@@ -119,7 +119,7 @@ impl RustEzFs {
         for (word_idx, &word) in sb_data.free_inodes.iter().enumerate() {
             if word != !0u32 {
                 let bit_idx: u32 = (!word).trailing_zeros();
-                let inode_num: usize = (word_idx as usize * 32) + bit_idx as usize;
+                let inode_num: usize = (word_idx * 32) + bit_idx as usize;
 
                 if inode_num < EZFS_MAX_INODES {
                     sb_data.free_inodes[word_idx] |= 1 << bit_idx;
@@ -164,7 +164,7 @@ impl RustEzFs {
         let mut ezfs_inode = EzfsInode::default();
 
         ezfs_inode
-            .set_mode(mode.try_into()?)
+            .set_mode(mode)
             .set_uid(Kuid::from_raw(uid).into_uid_in_init_ns())
             .set_gid(Kgid::from_raw(gid).into_gid_in_init_ns())
             .set_nlink(1)
@@ -430,10 +430,8 @@ impl file::Operations for RustEzFs {
         // pr_info!("read_dir()\n");
         let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
 
-        if pos < 2 {
-            if !emitter.emit_dots(file) {
-                return Ok(());
-            }
+        if pos < 2 && !emitter.emit_dots(file) {
+            return Ok(());
         }
 
         let sb = inode.super_block();
@@ -660,18 +658,18 @@ impl iomap::Operations for RustEzFs {
         }
 
         enum WriteCase {
-            NEW,    // Write to an empty file without any allocated blocks
-            WITHIN, // File can fit written contents within allocated, unused block
-            EXTEND, // File has adjacent, free block to extend to
-            MOVE,   // File has no adjacent, free block and must be moved
+            New,    // Write to an empty file without any allocated blocks
+            Within, // File can fit written contents within allocated, unused block
+            Extend, // File has adjacent, free block to extend to
+            Move,   // File has no adjacent, free block and must be moved
         }
 
         let ez_blk_sidx = ez_blk_num.saturating_sub(EZFS_ROOT_DATABLOCK_NUMBER as u64);
 
         let case_type = if ez_blk_num == 0 {
-            WriteCase::NEW
+            WriteCase::New
         } else if blocks_to_add == 0 {
-            WriteCase::WITHIN
+            WriteCase::Within
         } else {
             let start = ez_blk_sidx + ez_blk_count;
             let end = ez_blk_sidx + blocks_needed;
@@ -683,19 +681,19 @@ impl iomap::Operations for RustEzFs {
             // pr_info!("start={start} - end={end}\n");
 
             if (start..end).any(|bit| sb_data.free_data_blocks.is_set(bit)) {
-                WriteCase::MOVE
+                WriteCase::Move
             } else {
-                WriteCase::EXTEND
+                WriteCase::Extend
             }
         };
 
         match case_type {
-            WriteCase::NEW => {
+            WriteCase::New => {
                 pr_info!("adding to an empty file\n");
                 return Err(EIO);
             }
-            WriteCase::WITHIN => {}
-            WriteCase::EXTEND => {
+            WriteCase::Within => {}
+            WriteCase::Extend => {
                 for i in ez_blk_count..blocks_needed {
                     let bit = ez_blk_sidx + i;
                     sb_data.free_data_blocks.set_bit(bit);
@@ -703,7 +701,7 @@ impl iomap::Operations for RustEzFs {
 
                 map.set_flags(iomap::map_flags::NEW);
             }
-            WriteCase::MOVE => {
+            WriteCase::Move => {
                 // Let's try to find a region of sequential free blocks
                 // of size `blocks_needed` to move our file to
                 let mut curr_block = 0;

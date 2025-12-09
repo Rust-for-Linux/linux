@@ -72,14 +72,14 @@ impl<const N: usize> Bitmap<N> {
     }
 
     #[inline]
-    pub(crate) fn set_bit(&mut self, block_num: u64) -> () {
+    pub(crate) fn set_bit(&mut self, block_num: u64) {
         let idx: usize = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
         self.inner[idx] |= mask
     }
 
     #[inline]
-    pub(crate) fn clear_bit(&mut self, block_num: u64) -> () {
+    pub(crate) fn clear_bit(&mut self, block_num: u64) {
         let idx: usize = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
         self.inner[idx] &= !mask
