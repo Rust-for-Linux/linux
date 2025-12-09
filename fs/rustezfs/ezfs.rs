@@ -557,13 +557,13 @@ impl kernel::sb::Operations for RustEzFs {
 
     fn write_inode(inode: &INode<Self::FileSystem>) -> Result<usize> {
         pr_info!("write inode called\n");
-        let h = inode.super_block().data();
+        let ezfs_sb = inode.super_block().data();
         let ino = inode.ino();
         let disk_inode = EzfsInode::from_vfs_inode(inode)?;
 
         let offset = (EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE) as u64;
         let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
-            h.mapper.read_mapping_folio(offset.try_into()?)?;
+            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
 
         let folio_start = 0;
         let locked_folio = folio.lock();
