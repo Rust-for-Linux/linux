@@ -9,7 +9,7 @@ mod inode;
 mod sb;
 use crate::dir::{DirEntryStore, EzfsDirEntry};
 use crate::inode::{EzfsInode, InodeStore};
-use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
+use crate::sb::{Bitmap, EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::bindings;
 use kernel::dentry;
@@ -69,7 +69,10 @@ impl RustEzFs {
         {
             // Check if inode is allocated
             let sb_data = ezfs_sb.data.lock();
-            if !sb_data.free_inodes.is_set(ino.try_into()?) {
+            if !sb_data
+                .free_inodes
+                .is_set((ino - EZFS_ROOT_INODE_NUMBER).try_into()?)
+            {
                 return Err(ENOENT);
             }
         }
@@ -160,7 +163,9 @@ impl RustEzFs {
             .set_ino(ino);
 
         let now = Instant::<Monotonic>::now().as_nanos() / NSEC_PER_SEC;
-        let mut ezfs_inode = EzfsInode::default()
+        let mut ezfs_inode = EzfsInode::default();
+
+        ezfs_inode
             .set_mode(mode.try_into()?)
             .set_uid(Kuid::from_raw(uid).into_uid_in_init_ns())
             .set_gid(Kgid::from_raw(gid).into_gid_in_init_ns())
@@ -184,6 +189,14 @@ impl RustEzFs {
         })?;
 
         ready_inode.mark_dirty();
+
+        // TODO: Should this be here or in the end of create?
+        let ezfs_sb = sb.data();
+        let mut sb_data = ezfs_sb.data.lock();
+
+        sb_data
+            .free_inodes
+            .set_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64);
 
         Ok(ready_inode)
     }
@@ -301,12 +314,11 @@ impl kernel::inode::Operations for RustEzFs {
     ) -> Result<usize> {
         pr_info!("Calling create from rustezfs\n");
 
-        let new_inode = Self::new_inode(parent, mode.into())?;
-
-        // TODO: Write Inode to memory
+        let mut new_inode = Self::new_inode(parent, mode.into())?;
+        let ino = new_inode.ino();
 
         let sb = parent.super_block();
-        let h = sb.data();
+        let ezfs_sb = sb.data();
 
         let ezfs_dir_inode = parent.data();
 
@@ -318,7 +330,7 @@ impl kernel::inode::Operations for RustEzFs {
         let new_filename = dentry.name();
 
         let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
-            h.mapper.read_mapping_folio(offset.try_into()?)?;
+            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
 
         let folio_start = 0;
         let locked_folio = folio.lock();
@@ -336,8 +348,8 @@ impl kernel::inode::Operations for RustEzFs {
             .set_active()
             .set_filename(new_filename)?;
 
-        new_inode.instantiate_dentry(&dentry);
         parent.mark_dirty();
+        new_inode.instantiate_dentry(&dentry);
 
         Ok(0)
     }
@@ -534,9 +546,6 @@ impl kernel::sb::Operations for RustEzFs {
             sb_data.free_inodes.clear_bit(ino);
         }
 
-        // TODO: remove inode from disk
-        // TODO: Mark sb and inode store dirty
-
         // TODO: Make clear consume inode
         inode.truncate_inode_pages_final();
         inode.clear();
@@ -566,8 +575,8 @@ impl kernel::sb::Operations for RustEzFs {
     }
 
     fn sync_fs(sb: &SuperBlock<Self::FileSystem>) -> Result<usize> {
+        pr_info!("sync_fs called\n");
         let ezfs_sb = sb.data();
-        let disk_sb = ezfs_sb.to_disk();
 
         let offset = (EZFS_SUPERBLOCK_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE) as u64;
         let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
@@ -577,6 +586,7 @@ impl kernel::sb::Operations for RustEzFs {
         let locked_folio = folio.lock();
         let mut guard = locked_folio.map(folio_start)?;
 
+        let disk_sb = ezfs_sb.to_disk();
         guard[..size_of::<EzfsSuperblockDisk>()].copy_from_slice(disk_sb.as_bytes());
 
         Ok(0)
@@ -765,7 +775,8 @@ impl iomap::Operations for RustEzFs {
 
             // SAFETY: We've acquired the super block lock
             unsafe { inode.set_blocks(new_blocks * 8) };
-            let ezfs_inode = unsafe { inode.data_mut() };
+
+            let mut ezfs_inode = unsafe { inode.data_mut() };
 
             ezfs_inode.set_nblocks(new_blocks);
 

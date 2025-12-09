@@ -23,22 +23,23 @@ pub(crate) struct EzfsInode {
 
 impl EzfsInode {
     pub(crate) fn from_vfs_inode(vfs_inode: &INode<RustEzFs>) -> Result<Self> {
-        let mut disk_inode = EzfsInode::default();
-
         let mtime_sec = vfs_inode.mtime()?.tv_sec();
         let ctime_sec = vfs_inode.ctime()?.tv_sec();
         let atime_sec = vfs_inode.atime()?.tv_sec();
 
-        disk_inode.set_file_size(vfs_inode.size().try_into()?);
-        disk_inode.set_nblocks(vfs_inode.blocks() / 8);
-        disk_inode.set_mode(vfs_inode.mode() as u32);
-        disk_inode.set_uid(vfs_inode.uid());
-        disk_inode.set_gid(vfs_inode.gid());
-        disk_inode.set_nlink(vfs_inode.nlink());
-        disk_inode.set_atime(atime_sec);
-        disk_inode.set_ctime(ctime_sec);
-        disk_inode.set_mtime(mtime_sec);
-        disk_inode.set_data_block_num(vfs_inode.data().data_blk_num());
+        let mut disk_inode = EzfsInode::default();
+
+        disk_inode
+            .set_file_size(vfs_inode.size().try_into()?)
+            .set_nblocks(vfs_inode.blocks() / 8)
+            .set_mode(vfs_inode.mode().into())
+            .set_uid(vfs_inode.uid())
+            .set_gid(vfs_inode.gid())
+            .set_nlink(vfs_inode.nlink())
+            .set_atime(atime_sec)
+            .set_ctime(ctime_sec)
+            .set_mtime(mtime_sec)
+            .set_data_block_num(vfs_inode.data().data_blk_num());
 
         Ok(disk_inode)
     }
@@ -83,61 +84,61 @@ impl EzfsInode {
         self.nblocks
     }
 
-    pub(crate) fn set_mode(mut self, mode: u32) -> Self {
+    pub(crate) fn set_mode(&mut self, mode: u32) -> &mut Self {
         self.mode = mode;
 
         self
     }
 
-    pub(crate) fn set_uid(mut self, uid: u32) -> Self {
+    pub(crate) fn set_uid(&mut self, uid: u32) -> &mut Self {
         self.uid = uid;
 
         self
     }
 
-    pub(crate) fn set_gid(mut self, gid: u32) -> Self {
+    pub(crate) fn set_gid(&mut self, gid: u32) -> &mut Self {
         self.gid = gid;
 
         self
     }
 
-    pub(crate) fn set_atime(mut self, tv_sec: i64) -> Self {
+    pub(crate) fn set_atime(&mut self, tv_sec: i64) -> &mut Self {
         self.i_atime = tv_sec;
 
         self
     }
 
-    pub(crate) fn set_mtime(mut self, tv_sec: i64) -> Self {
+    pub(crate) fn set_mtime(&mut self, tv_sec: i64) -> &mut Self {
         self.i_mtime = tv_sec;
 
         self
     }
 
-    pub(crate) fn set_ctime(mut self, tv_sec: i64) -> Self {
+    pub(crate) fn set_ctime(&mut self, tv_sec: i64) -> &mut Self {
         self.i_ctime = tv_sec;
 
         self
     }
 
-    pub(crate) fn set_nlink(mut self, nlink: u32) -> Self {
+    pub(crate) fn set_nlink(&mut self, nlink: u32) -> &mut Self {
         self.nlink = nlink;
 
         self
     }
 
-    pub(crate) fn set_data_block_num(mut self, data_block_num: u64) -> Self {
+    pub(crate) fn set_data_block_num(&mut self, data_block_num: u64) -> &mut Self {
         self.data_blk_num = data_block_num;
 
         self
     }
 
-    pub(crate) fn set_file_size(mut self, file_size: u64) -> Self {
+    pub(crate) fn set_file_size(&mut self, file_size: u64) -> &mut Self {
         self.file_size = file_size;
 
         self
     }
 
-    pub(crate) fn set_nblocks(mut self, nblocks: u64) -> Self {
+    pub(crate) fn set_nblocks(&mut self, nblocks: u64) -> &mut Self {
         self.nblocks = nblocks;
 
         self
