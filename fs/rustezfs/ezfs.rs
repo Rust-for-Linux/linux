@@ -9,7 +9,7 @@ mod inode;
 mod sb;
 use crate::dir::{DirEntryStore, EzfsDirEntry};
 use crate::inode::{EzfsInode, InodeStore};
-use crate::sb::{Bitmap, EzfsSuperblock, EzfsSuperblockDisk};
+use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::bindings;
 use kernel::dentry;
