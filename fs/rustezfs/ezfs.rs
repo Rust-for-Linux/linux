@@ -543,7 +543,7 @@ impl kernel::sb::Operations for RustEzFs {
                     .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
             }
 
-            sb_data.free_inodes.clear_bit(ino);
+            sb_data.free_inodes.clear_bit(ino - EZFS_ROOT_INODE_NUMBER);
         }
 
         // TODO: Make clear consume inode
