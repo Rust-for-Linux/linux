@@ -41,6 +41,10 @@ pub trait Operations {
     fn write_inode(_inode: &INode<Self::FileSystem>) -> Result<usize> {
         Err(ENOTSUPP)
     }
+
+    fn sync_fs(_sb: &SuperBlock<Self::FileSystem>) -> Result<usize> {
+        Err(ENOTSUPP)
+    }
 }
 
 /// Indicates that a superblock in this typestate has data initialized.
@@ -280,7 +284,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     None
                 },
                 put_super: None,
-                sync_fs: None,
+                sync_fs: if T::HAS_SYNC_FS {
+                    Some(Self::sync_fs_callback)
+                } else {
+                    None
+                },
                 freeze_super: None,
                 freeze_fs: None,
                 thaw_super: None,
@@ -323,6 +331,21 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     let write = T::write_inode(inode)?;
 
                     Ok(i32::try_from(write)?)
+                })
+            }
+
+            unsafe extern "C" fn sync_fs_callback(
+                sb_ptr: *mut bindings::super_block,
+                _wait: i32,
+            ) -> i32 {
+                // TODO: add support for wait
+                from_result(|| {
+                    // SAFETY: The C API guarantees that `sb_ptr` is a valid inode.
+                    let sb = unsafe { SuperBlock::from_raw(sb_ptr) };
+
+                    let sync_fs = T::sync_fs(sb)?;
+
+                    Ok(i32::try_from(sync_fs)?)
                 })
             }
         }

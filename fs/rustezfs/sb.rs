@@ -10,7 +10,7 @@ use kernel::sync::{
     lock::{mutex::MutexBackend, Guard},
     Mutex,
 };
-use kernel::transmute::FromBytes;
+use kernel::transmute::{AsBytes, FromBytes};
 use kernel::{block, inode};
 
 #[repr(C)]
@@ -30,6 +30,28 @@ pub(crate) struct EzfsSuperblockDisk {
     _padding: [u8; EZFS_BLOCK_SIZE - size_of::<EzfsSuperblockDiskRaw>()],
 }
 
+impl Default for EzfsSuperblockDiskRaw {
+    fn default() -> Self {
+        Self {
+            version: 0,
+            magic: 0,
+            disk_blocks: 0,
+            free_inodes: [0; (EZFS_MAX_INODES / 32) + 1],
+            free_data_blocks: [0; (EZFS_MAX_DATA_BLKS / 32) + 1],
+            zero_data_blocks: [0; (EZFS_MAX_DATA_BLKS / 32) + 1],
+        }
+    }
+}
+
+impl Default for EzfsSuperblockDisk {
+    fn default() -> Self {
+        Self {
+            data: EzfsSuperblockDiskRaw::default(),
+            _padding: [0; EZFS_BLOCK_SIZE - size_of::<EzfsSuperblockDiskRaw>()],
+        }
+    }
+}
+
 impl EzfsSuperblockDisk {
     pub(crate) fn magic(&self) -> u64 {
         self.data.magic
@@ -39,6 +61,7 @@ impl EzfsSuperblockDisk {
 // SAFETY: EzfsSuperblockDisk contains only primitive integer types (u32, u64, u8)
 // which accept any bit pattern. The struct is #[repr(C)] for consistent layout.
 unsafe impl FromBytes for EzfsSuperblockDisk {}
+unsafe impl AsBytes for EzfsSuperblockDisk {}
 
 #[repr(transparent)]
 pub(crate) struct Bitmap<const N: usize> {
@@ -122,5 +145,20 @@ impl EzfsSuperblock {
 
     pub(crate) fn magic(&self) -> u64 {
         self.magic
+    }
+
+    pub(crate) fn to_disk(&self) -> EzfsSuperblockDisk {
+        let mut disk_sb = EzfsSuperblockDisk::default();
+
+        disk_sb.data.version = self.version;
+        disk_sb.data.magic = self.magic;
+        disk_sb.data.disk_blocks = self.disk_blocks;
+
+        let sb_data = self.data.lock();
+        disk_sb.data.free_inodes = *sb_data.free_inodes;
+        disk_sb.data.free_data_blocks = *sb_data.free_data_blocks;
+        disk_sb.data.zero_data_blocks = *sb_data.zero_data_blocks;
+
+        disk_sb
     }
 }

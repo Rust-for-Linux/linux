@@ -23,7 +23,7 @@ use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::task::{Kgid, Kuid};
 use kernel::time::hrtimer::HrTimerExpires;
 use kernel::time::{Instant, Monotonic, NSEC_PER_SEC, UNIX_EPOCH};
-use kernel::transmute::FromBytes;
+use kernel::transmute::{AsBytes, FromBytes};
 use kernel::types::{ARef, Lockable, Locked};
 use kernel::{address_space, iomap};
 use kernel::{c_str, fs, str::CStr};
@@ -545,6 +545,7 @@ impl kernel::sb::Operations for RustEzFs {
     }
 
     fn write_inode(inode: &INode<Self::FileSystem>) -> Result<usize> {
+        pr_info!("write inode called\n");
         let h = inode.super_block().data();
         let ino = inode.ino();
         let disk_inode = EzfsInode::from_vfs_inode(inode)?;
@@ -560,6 +561,23 @@ impl kernel::sb::Operations for RustEzFs {
             InodeStore::from_bytes_mut(&mut guard[..size_of::<InodeStore>()]).ok_or(EIO)?;
 
         inodes[ino - EZFS_ROOT_INODE_NUMBER] = disk_inode;
+
+        Ok(0)
+    }
+
+    fn sync_fs(sb: &SuperBlock<Self::FileSystem>) -> Result<usize> {
+        let ezfs_sb = sb.data();
+        let disk_sb = ezfs_sb.to_disk();
+
+        let offset = (EZFS_SUPERBLOCK_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE) as u64;
+        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
+            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
+
+        let folio_start = 0;
+        let locked_folio = folio.lock();
+        let mut guard = locked_folio.map(folio_start)?;
+
+        guard[..size_of::<EzfsSuperblockDisk>()].copy_from_slice(disk_sb.as_bytes());
 
         Ok(0)
     }
