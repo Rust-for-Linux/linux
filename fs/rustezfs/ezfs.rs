@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! Easy filesystem written in Rust
-#![allow(unused)]
 
 mod defs;
 mod dir;
@@ -13,25 +12,24 @@ use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
 use defs::*;
 use kernel::bindings;
 use kernel::dentry;
-use kernel::folio::{Folio, PageCache};
+use kernel::folio::Folio;
 use kernel::fs::Kiocb;
 use kernel::fs::{file, File, FileSystem, Offset, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
-use kernel::iov::{IovIterDest, IovIterSource};
+use kernel::iomap;
+use kernel::iov::IovIterSource;
 use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::task::{Kgid, Kuid};
 use kernel::time::hrtimer::HrTimerExpires;
-use kernel::time::{Instant, Monotonic, NSEC_PER_SEC, UNIX_EPOCH};
+use kernel::time::{Instant, Monotonic, NSEC_PER_SEC};
 use kernel::transmute::{AsBytes, FromBytes};
 use kernel::types::{ARef, Lockable, Locked};
-use kernel::{address_space, iomap};
 use kernel::{c_str, fs, str::CStr};
 
-use core::marker::{PhantomData, Send, Sync};
+use core::marker::PhantomData;
 use core::mem::size_of;
-use core::ptr;
-use pin_init::{pin_data, PinInit, PinnedDrop};
+use pin_init::{pin_data, PinInit};
 
 struct RustEzFs;
 
@@ -225,7 +223,7 @@ impl RustEzFs {
         let ezfs_dir_inode = parent.data();
         let name = dentry.name();
 
-        if name.len() > EZFS_FILENAME_BUF_SIZE {
+        if name.len() > EZFS_FILENAME_LENGTH {
             return Err(ENAMETOOLONG);
         }
         let offset = ezfs_dir_inode
@@ -314,8 +312,8 @@ impl kernel::inode::Operations for RustEzFs {
     ) -> Result<usize> {
         pr_info!("Calling create from rustezfs\n");
 
-        let mut new_inode = Self::new_inode(parent, mode.into())?;
-        let ino = new_inode.ino();
+        let new_inode = Self::new_inode(parent, mode.into())?;
+        let ino: u64 = new_inode.ino().try_into()?;
 
         let sb = parent.super_block();
         let ezfs_sb = sb.data();
@@ -335,7 +333,7 @@ impl kernel::inode::Operations for RustEzFs {
         let folio_start = 0;
         let locked_folio = folio.lock();
         let mut guard = locked_folio.map(folio_start)?;
-        let mut dir_entries =
+        let dir_entries =
             DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
 
         let dir_entry = dir_entries
@@ -344,7 +342,7 @@ impl kernel::inode::Operations for RustEzFs {
             .ok_or(ENOSPC)?;
 
         dir_entry
-            .set_inode_no(new_inode.ino().try_into()?)
+            .set_inode_no(ino)
             .set_active()
             .set_filename(new_filename)?;
 
@@ -378,7 +376,7 @@ impl kernel::inode::Operations for RustEzFs {
         let folio_start = 0;
         let locked_folio = folio.lock();
         let mut guard = locked_folio.map(folio_start)?;
-        let mut dir_entries =
+        let dir_entries =
             DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
 
         let dir_entry = dir_entries
@@ -499,7 +497,7 @@ impl file::Operations for RustEzFs {
 
     fn write_iter(
         mut kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
-        mut iov: &mut IovIterSource<'_>,
+        iov: &mut IovIterSource<'_>,
     ) -> Result<usize> {
         pr_info!("write_iter\n");
         let flags = kiocb.ki_flags();
@@ -524,7 +522,7 @@ impl kernel::sb::Operations for RustEzFs {
     type FileSystem = Self;
 
     fn evict_inode(inode: &INode<Self::FileSystem>) -> Result {
-        if (inode.nlink() == 0) {
+        if inode.nlink() == 0 {
             let sb = inode.super_block().data();
             let ino = inode.ino();
 
@@ -568,7 +566,7 @@ impl kernel::sb::Operations for RustEzFs {
         let folio_start = 0;
         let locked_folio = folio.lock();
         let mut guard = locked_folio.map(folio_start)?;
-        let mut inodes =
+        let inodes =
             InodeStore::from_bytes_mut(&mut guard[..size_of::<InodeStore>()]).ok_or(EIO)?;
 
         inodes[ino - EZFS_ROOT_INODE_NUMBER] = disk_inode;
@@ -605,7 +603,7 @@ impl iomap::Operations for RustEzFs {
         length: Offset,
         flags: u32,
         map: &mut iomap::Map<'a>,
-        srcmap: Option<&mut iomap::Map<'a>>,
+        _srcmap: Option<&mut iomap::Map<'a>>,
     ) -> Result {
         pr_info!("iomap_begin()\n");
 
@@ -635,7 +633,7 @@ impl iomap::Operations for RustEzFs {
             .set_length(length as u64);
 
         // We're reading
-        if (flags & iomap::flags::WRITE == 0) {
+        if flags & iomap::flags::WRITE == 0 {
             // Invalid read, block does not belong to inode
             if ez_blk_num == 0 || start_block >= ez_blk_count {
                 map.set_type(iomap::Type::Hole)
@@ -721,19 +719,19 @@ impl iomap::Operations for RustEzFs {
                     curr_block += 1;
                 }
 
-                if (seen_free < blocks_needed) {
+                if seen_free < blocks_needed {
                     return Err(ENOSPC);
                 }
 
                 // Move all blocks within the file to new region
                 let new_block_start = curr_block - blocks_needed;
 
-                if (ez_blk_num != 0) {
+                if ez_blk_num != 0 {
                     for j in 0..ez_blk_count {
                         let old = ez_blk_sidx + j;
                         let new = new_block_start + j;
 
-                        Self::move_block(old, new, sb);
+                        Self::move_block(old, new, sb)?;
 
                         sb_data.free_data_blocks.clear_bit(old);
                         sb_data.free_data_blocks.set_bit(new);
@@ -742,7 +740,7 @@ impl iomap::Operations for RustEzFs {
 
                 // SAFETY: we've acquired the super block lock and can therefore
                 // modify the ezfs inode
-                let mut ezfs_inode = unsafe { inode.data_mut() };
+                let ezfs_inode = unsafe { inode.data_mut() };
                 ezfs_inode
                     .set_data_block_num(new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64));
                 phys = ezfs_inode.data_blk_num() + start_block;
@@ -764,11 +762,11 @@ impl iomap::Operations for RustEzFs {
         _flags: u32,
         _map: &iomap::Map<'a>,
     ) -> Result {
-        if (written > 0) {
+        if written > 0 {
             pr_info!("iomap_end()\n");
             let new_blocks =
                 ((inode.size() + (EZFS_BLOCK_SIZE as i64) - 1) / EZFS_BLOCK_SIZE as i64) as u64;
-            let sb = inode.super_block();
+            // let sb = inode.super_block();
             // TODO: do we need inode lock? and should we store inode store in sb?
             // iomap locking docks (see locking hierarcy): https://docs.kernel.org/6.16/_sources/filesystems/iomap/design.rst.txt
             // let ezfs_sb = sb.data();
@@ -778,7 +776,7 @@ impl iomap::Operations for RustEzFs {
             // SAFETY: We've acquired the super block lock
             unsafe { inode.set_blocks(new_blocks * 8) };
 
-            let mut ezfs_inode = unsafe { inode.data_mut() };
+            let ezfs_inode = unsafe { inode.data_mut() };
 
             ezfs_inode.set_nblocks(new_blocks);
 
