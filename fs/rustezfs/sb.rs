@@ -152,4 +152,8 @@ impl EzfsSuperblock {
 
         disk_sb
     }
+
+    pub(crate) fn disk_blocks(&self) -> u64 {
+        self.disk_blocks
+    }
 }

@@ -131,12 +131,43 @@ impl RustEzFs {
         Err(ENOSPC)
     }
 
+    fn allocate_data_block(sb: &SuperBlock<Self>) -> Result<u64> {
+        let ezfs_sb = sb.data();
+
+        let data_block_num = {
+            let mut sb_data = ezfs_sb.data.lock();
+            let max_blocks = Self::get_max_blocks(ezfs_sb);
+            let data_block_num = (0..max_blocks)
+                .find(|&x| !sb_data.free_data_blocks.is_set(x))
+                .ok_or(ENOSPC)?;
+
+            sb_data.free_data_blocks.set_bit(data_block_num);
+
+            data_block_num
+        };
+
+        let offset = data_block_num
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
+            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
+
+        let folio_start = 0;
+        let locked_folio = folio.lock();
+        let mut guard = locked_folio.map(folio_start)?;
+        guard.fill(0);
+
+        Ok(data_block_num + EZFS_ROOT_DATABLOCK_NUMBER as u64)
+    }
+
     fn new_inode(
         dir: &Locked<&INode<Self>, kernel::inode::ReadSem>,
         mode: u32,
     ) -> Result<kernel::inode::Ready<Self>> {
         let sb = dir.super_block();
         let mut new_inode = sb.new_inode()?;
+        let mut ezfs_inode = EzfsInode::default();
 
         let ino = Self::allocate_inode(sb)?;
         pr_info!("Allocating new inode: {:?}\n", ino);
@@ -144,10 +175,20 @@ impl RustEzFs {
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
                 new_inode.set_fops(Self::FILE_FOPS);
+                ezfs_inode.set_nlink(1);
+
                 Type::Reg
             }
             fs::mode::S_IFDIR => {
                 new_inode.set_fops(Self::DIR_FOPS);
+
+                let data_block_num = Self::allocate_data_block(sb)?;
+                ezfs_inode
+                    .set_nlink(2)
+                    .set_file_size(EZFS_BLOCK_SIZE as u64)
+                    .set_nblocks(8)
+                    .set_data_block_num(data_block_num);
+
                 Type::Dir
             }
             _ => return Err(ENOENT),
@@ -161,13 +202,11 @@ impl RustEzFs {
             .set_ino(ino);
 
         let now = Instant::<Monotonic>::now().as_nanos() / NSEC_PER_SEC;
-        let mut ezfs_inode = EzfsInode::default();
 
         ezfs_inode
             .set_mode(mode)
             .set_uid(Kuid::from_raw(uid).into_uid_in_init_ns())
             .set_gid(Kgid::from_raw(gid).into_gid_in_init_ns())
-            .set_nlink(1)
             .set_atime(now)
             .set_mtime(now)
             .set_ctime(now);
@@ -242,6 +281,53 @@ impl RustEzFs {
 
         Ok(dir_entry)
     }
+
+    fn create_helper(
+        parent: &Locked<&INode<Self>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self>,
+        mode: u16,
+    ) -> Result<usize> {
+        pr_info!("Calling create from rustezfs\n");
+
+        let new_inode = Self::new_inode(parent, mode.into())?;
+        let ino: u64 = new_inode.ino().try_into()?;
+
+        let sb = parent.super_block();
+        let ezfs_sb = sb.data();
+
+        let ezfs_dir_inode = parent.data();
+
+        let offset = ezfs_dir_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let new_filename = dentry.name();
+
+        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
+            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
+
+        let folio_start = 0;
+        let locked_folio = folio.lock();
+        let mut guard = locked_folio.map(folio_start)?;
+        let dir_entries =
+            DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        let dir_entry = dir_entries
+            .iter_mut()
+            .find(|x| !x.is_active())
+            .ok_or(ENOSPC)?;
+
+        dir_entry
+            .set_inode_no(ino)
+            .set_active()
+            .set_filename(new_filename)?;
+
+        parent.mark_dirty();
+        new_inode.instantiate_dentry(&dentry);
+
+        Ok(0)
+    }
 }
 
 impl FileSystem for RustEzFs {
@@ -312,44 +398,20 @@ impl kernel::inode::Operations for RustEzFs {
     ) -> Result<usize> {
         pr_info!("Calling create from rustezfs\n");
 
-        let new_inode = Self::new_inode(parent, mode.into())?;
-        let ino: u64 = new_inode.ino().try_into()?;
+        Self::create_helper(parent, dentry, mode)
+    }
 
-        let sb = parent.super_block();
-        let ezfs_sb = sb.data();
+    fn mkdir(
+        parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self::FileSystem>,
+        mode: u16,
+    ) -> Result<Option<ARef<dentry::DEntry<Self::FileSystem>>>> {
+        pr_info!("Calling mkdir from rustezfs\n");
 
-        let ezfs_dir_inode = parent.data();
+        Self::create_helper(parent, dentry, mode)?;
 
-        let offset = ezfs_dir_inode
-            .data_blk_num()
-            .checked_mul(EZFS_BLOCK_SIZE as u64)
-            .ok_or(EIO)?;
-
-        let new_filename = dentry.name();
-
-        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
-            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
-
-        let folio_start = 0;
-        let locked_folio = folio.lock();
-        let mut guard = locked_folio.map(folio_start)?;
-        let dir_entries =
-            DirEntryStore::from_bytes_mut(&mut guard[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
-
-        let dir_entry = dir_entries
-            .iter_mut()
-            .find(|x| !x.is_active())
-            .ok_or(ENOSPC)?;
-
-        dir_entry
-            .set_inode_no(ino)
-            .set_active()
-            .set_filename(new_filename)?;
-
-        parent.mark_dirty();
-        new_inode.instantiate_dentry(&dentry);
-
-        Ok(0)
+        // Since we use d_instantiate_new we don't return a dentry
+        Ok(None)
     }
 
     fn unlink(
