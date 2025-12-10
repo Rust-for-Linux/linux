@@ -472,8 +472,8 @@ impl file::Operations for RustEzFs {
 
         let active_entries = dir_entries
             .iter()
-            .skip(index)
-            .filter(|&entry| entry.is_active());
+            .filter(|&entry| entry.is_active())
+            .skip(index);
 
         for entry in active_entries {
             let ino: usize = entry.inode_no().try_into()?;
