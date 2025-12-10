@@ -117,15 +117,10 @@ impl RustEzFs {
         let ezfs_sb = sb.data();
         let mut sb_data = ezfs_sb.data.lock();
 
-        for (word_idx, &word) in sb_data.free_inodes.iter().enumerate() {
-            if word != !0u32 {
-                let bit_idx: u32 = (!word).trailing_zeros();
-                let inode_num: usize = (word_idx * 32) + bit_idx as usize;
-
-                if inode_num < EZFS_MAX_INODES {
-                    sb_data.free_inodes[word_idx] |= 1 << bit_idx;
-                    return Ok(inode_num + 1); // FS is 1-indexed
-                }
+        for idx in 0..EZFS_MAX_INODES {
+            if !sb_data.free_inodes.is_set(idx as u64) {
+                sb_data.free_inodes.set_bit(idx as u64);
+                return Ok(idx + 1); // FS is 1-indexed
             }
         }
 
@@ -228,14 +223,6 @@ impl RustEzFs {
         })?;
 
         ready_inode.mark_dirty();
-
-        // TODO: Should this be here or in the end of create?
-        let ezfs_sb = sb.data();
-        let mut sb_data = ezfs_sb.data.lock();
-
-        sb_data
-            .free_inodes
-            .set_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64);
 
         Ok(ready_inode)
     }
