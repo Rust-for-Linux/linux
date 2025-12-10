@@ -416,6 +416,37 @@ impl kernel::inode::Operations for RustEzFs {
         Ok(None)
     }
 
+    fn rmdir(
+        parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<usize> {
+        let inode = dentry.inode();
+        let ezfs_inode = inode.data();
+
+        let offset = ezfs_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let mapped = h.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        for entry in dir_entries.iter() {
+            if entry.is_active() {
+                return Err(ENOTEMPTY);
+            }
+        }
+
+        Self::unlink(parent, dentry)?;
+
+        inode.drop_nlink();
+        parent.drop_nlink();
+
+        inode.mark_dirty();
+        parent.mark_dirty();
+    }
+
     fn unlink(
         parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
         dentry: dentry::Unhashed<'_, Self::FileSystem>,

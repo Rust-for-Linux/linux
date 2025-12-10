@@ -79,6 +79,13 @@ pub trait Operations {
     ) -> Result<Option<ARef<DEntry<Self::FileSystem>>>> {
         Err(ENOTSUPP)
     }
+
+    fn rmdir(
+        _parent: &Locked<&INode<Self::FileSystem>, ReadSem>,
+        _dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<usize> {
+        Err(ENOTSUPP)
+    }
 }
 
 /// A node (inode) in the file index.
@@ -901,7 +908,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 } else {
                     None
                 },
-                rmdir: None,
+                rmdir: if T::HAS_RMDIR {
+                    Some(Self::rmdir_callback)
+                } else {
+                    None
+                },
                 mknod: None,
                 rename: None,
                 setattr: None,
@@ -1010,6 +1021,28 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     Ok(None) => ptr::null_mut(),
                     Ok(Some(ret)) => ManuallyDrop::new(ret).0.get(),
                 }
+            }
+
+            unsafe extern "C" fn rmdir_callback(
+                inode_ptr: *mut bindings::inode,
+                dentry_ptr: *mut bindings::dentry,
+            ) -> i32 {
+                from_result(|| {
+                    // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
+                    let inode = unsafe { INode::from_raw(inode_ptr) };
+
+                    // SAFETY: The C API guarantees that `dentry_ptr` is a valid inode.
+                    let dentry = unsafe { DEntry::from_raw(dentry_ptr) };
+
+                    // SAFETY: The C API guarantees that the inode's rw semaphore is locked at least in
+                    // read mode. It does not expect callees to unlock it, so we make the locked object
+                    // manually dropped to avoid unlocking it.
+                    let locked = ManuallyDrop::new(unsafe { Locked::new(inode) });
+
+                    let rmdir = T::rmdir(&locked, dentry::Unhashed(dentry))?;
+
+                    Ok(i32::try_from(rmdir)?)
+                })
             }
         }
         Self(&Table::<U>::TABLE, PhantomData)

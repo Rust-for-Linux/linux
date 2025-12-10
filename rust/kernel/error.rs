@@ -88,6 +88,7 @@ pub mod code {
     declare_err!(ERECALLCONFLICT, "Conflict with recalled state.");
     declare_err!(ENOGRACE, "NFS file lock reclaim refused.");
     declare_err!(ENAMETOOLONG, "File name too long");
+    declare_err!(ENOTEMPTY, "Directory not empty");
 }
 
 /// Generic integer kernel error.
