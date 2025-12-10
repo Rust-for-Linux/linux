@@ -412,8 +412,42 @@ impl kernel::inode::Operations for RustEzFs {
 
         Self::create_helper(parent, dentry, mode | S_IFDIR as u16)?;
 
+        parent.inc_link_count();
+
         // Since we use d_instantiate_new we don't return a dentry
         Ok(None)
+    }
+
+    fn rmdir(
+        parent: &Locked<&INode<Self::FileSystem>, kernel::inode::ReadSem>,
+        dentry: dentry::Unhashed<'_, Self::FileSystem>,
+    ) -> Result<usize> {
+        let ezfs_sb = parent.super_block().data();
+        let inode = dentry.inode();
+        let ezfs_inode = inode.data();
+
+        let offset = ezfs_inode
+            .data_blk_num()
+            .checked_mul(EZFS_BLOCK_SIZE as u64)
+            .ok_or(EIO)?;
+
+        let mapped = ezfs_sb.mapper.mapped_folio(offset.try_into()?)?;
+        let dir_entries =
+            DirEntryStore::from_bytes(&mapped[..size_of::<DirEntryStore>()]).ok_or(EIO)?;
+
+        for entry in dir_entries.iter() {
+            if entry.is_active() {
+                return Err(ENOTEMPTY);
+            }
+        }
+
+        inode.dec_link_count(); // drop link for "."
+
+        Self::unlink(parent, dentry)?;
+
+        parent.dec_link_count();
+
+        Ok(0)
     }
 
     fn unlink(
@@ -452,9 +486,7 @@ impl kernel::inode::Operations for RustEzFs {
 
         // TODO: change m and ctime for parent and inode
 
-        inode.drop_nlink();
-
-        inode.mark_dirty();
+        inode.dec_link_count();
         parent.mark_dirty();
 
         Ok(0)
