@@ -71,6 +71,14 @@ pub trait Operations {
     ) -> Result<usize> {
         Err(ENOTSUPP)
     }
+
+    fn mkdir(
+        _parent: &Locked<&INode<Self::FileSystem>, ReadSem>,
+        _dentry: dentry::Unhashed<'_, Self::FileSystem>,
+        _mode: u16,
+    ) -> Result<Option<ARef<DEntry<Self::FileSystem>>>> {
+        Err(ENOTSUPP)
+    }
 }
 
 /// A node (inode) in the file index.
@@ -888,7 +896,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     None
                 },
                 symlink: None,
-                mkdir: None,
+                mkdir: if T::HAS_MKDIR {
+                    Some(Self::mkdir_callback)
+                } else {
+                    None
+                },
                 rmdir: None,
                 mknod: None,
                 rename: None,
@@ -974,6 +986,30 @@ impl<T: FileSystem + ?Sized> Ops<T> {
 
                     Ok(i32::try_from(unlink)?)
                 })
+            }
+
+            unsafe extern "C" fn mkdir_callback(
+                _mnt_idmap_ptr: *mut bindings::mnt_idmap,
+                parent_ptr: *mut bindings::inode,
+                dentry_ptr: *mut bindings::dentry,
+                mode: u16,
+            ) -> *mut bindings::dentry {
+                // SAFETY: The C API guarantees that `parent_ptr` is a valid inode.
+                let parent = unsafe { INode::from_raw(parent_ptr) };
+
+                // SAFETY: The C API guarantees that `dentry_ptr` is a valid dentry.
+                let dentry = unsafe { DEntry::from_raw(dentry_ptr) };
+
+                // SAFETY: The C API guarantees that the inode's rw semaphore is locked at least in
+                // read mode. It does not expect callees to unlock it, so we make the locked object
+                // manually dropped to avoid unlocking it.
+                let locked = ManuallyDrop::new(unsafe { Locked::new(parent) });
+
+                match T::mkdir(&locked, dentry::Unhashed(dentry), mode) {
+                    Err(e) => e.to_ptr(),
+                    Ok(None) => ptr::null_mut(),
+                    Ok(Some(ret)) => ManuallyDrop::new(ret).0.get(),
+                }
             }
         }
         Self(&Table::<U>::TABLE, PhantomData)
