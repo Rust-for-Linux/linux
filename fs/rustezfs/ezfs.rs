@@ -13,6 +13,7 @@ use defs::*;
 use kernel::bindings;
 use kernel::dentry;
 use kernel::folio::Folio;
+use kernel::fs::mode::S_IFDIR;
 use kernel::fs::Kiocb;
 use kernel::fs::{file, File, FileSystem, Offset, Registration};
 use kernel::inode::{INode, INodeState, Mapper, Params, Type};
@@ -191,6 +192,7 @@ impl RustEzFs {
 
                 Type::Dir
             }
+            // FIXME: iget_failed called twice when this happens
             _ => return Err(ENOENT),
         };
 
@@ -287,7 +289,7 @@ impl RustEzFs {
         dentry: dentry::Unhashed<'_, Self>,
         mode: u16,
     ) -> Result<usize> {
-        pr_info!("Calling create from rustezfs\n");
+        pr_info!("Calling create helper from rustezfs\n");
 
         let new_inode = Self::new_inode(parent, mode.into())?;
         let ino: u64 = new_inode.ino().try_into()?;
@@ -408,7 +410,7 @@ impl kernel::inode::Operations for RustEzFs {
     ) -> Result<Option<ARef<dentry::DEntry<Self::FileSystem>>>> {
         pr_info!("Calling mkdir from rustezfs\n");
 
-        Self::create_helper(parent, dentry, mode)?;
+        Self::create_helper(parent, dentry, mode | S_IFDIR as u16)?;
 
         // Since we use d_instantiate_new we don't return a dentry
         Ok(None)
