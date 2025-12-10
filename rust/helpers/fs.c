@@ -46,3 +46,13 @@ void rust_helper_mark_inode_dirty(struct inode *inode)
 {
 	mark_inode_dirty(inode);
 }
+
+void rust_helper_inode_inc_link_count(struct inode *inode)
+{
+	inode_inc_link_count(inode);
+}
+
+void rust_helper_inode_dec_link_count(struct inode *inode)
+{
+	inode_dec_link_count(inode);
+}

@@ -246,6 +246,22 @@ impl<T: FileSystem + ?Sized> INode<T> {
         }
     }
 
+    pub fn inc_link_count(&self) {
+        let inode_ptr = self.0.get();
+        // SAFETY: Inode ptr is guaranteed to be valid and instantiated do to the typestate
+        unsafe {
+            bindings::inode_inc_link_count(inode_ptr);
+        }
+    }
+
+    pub fn dec_link_count(&self) {
+        let inode_ptr = self.0.get();
+        // SAFETY: Inode ptr is guaranteed to be valid and instantiated do to the typestate
+        unsafe {
+            bindings::inode_dec_link_count(inode_ptr);
+        }
+    }
+
     /// Returns a mapper for this inode.
     ///
     /// # Safety
