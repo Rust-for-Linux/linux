@@ -56,19 +56,33 @@ impl RustEzFs {
     const IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
     const AOPS: kernel::address_space::Ops<RustEzFs> = kernel::iomap::aops::<RustEzFs>();
 
+    fn inode_allocated(sb: &SuperBlock<Self>, ino: usize) -> Result<bool> {
+        let ezfs_sb = sb.data();
+        let sb_data = ezfs_sb.data.lock();
+
+        let idx: u64 = (ino - EZFS_ROOT_INODE_NUMBER).try_into()?;
+
+        Ok(sb_data.free_inodes.is_set(idx))
+    }
+
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
         pr_info!("iget(ino={ino})\n");
-        let ezfs_sb = sb.data();
-        {
-            // Check if inode is allocated
-            let sb_data = ezfs_sb.data.lock();
-            if !sb_data
-                .free_inodes
-                .is_set((ino - EZFS_ROOT_INODE_NUMBER).try_into()?)
-            {
-                return Err(ENOENT);
-            }
+        // {
+        //     // Check if inode is allocated
+        //     let sb_data = ezfs_sb.data.lock();
+        //     if !sb_data
+        //         .free_inodes
+        //         .is_set((ino - EZFS_ROOT_INODE_NUMBER).try_into()?)
+        //     {
+        //         return Err(ENOENT);
+        //     }
+        // }
+
+        if !Self::inode_allocated(sb, ino)? {
+            return Err(ENOENT);
         }
+
+        let ezfs_sb = sb.data();
 
         let mut inode = match sb.get_or_create_inode(ino)? {
             INodeState::Existing(inode) => return Ok(inode),
