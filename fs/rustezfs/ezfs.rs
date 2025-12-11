@@ -23,7 +23,7 @@ use kernel::prelude::*;
 use kernel::sb::{New, SuperBlock, Type as SuperType};
 use kernel::task::{Kgid, Kuid};
 use kernel::time::hrtimer::HrTimerExpires;
-use kernel::time::{Instant, Monotonic, NSEC_PER_SEC};
+use kernel::time::{Instant, RealTime, NSEC_PER_SEC};
 use kernel::transmute::{AsBytes, FromBytes};
 use kernel::types::{ARef, Lockable, Locked};
 use kernel::{c_str, fs, str::CStr};
@@ -58,13 +58,7 @@ impl RustEzFs {
 
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
         pr_info!("iget(ino={ino})\n");
-        let mut inode = match sb.get_or_create_inode(ino)? {
-            INodeState::Existing(inode) => return Ok(inode),
-            INodeState::Uninitilized(new_inode) => new_inode,
-        };
-
         let ezfs_sb = sb.data();
-
         {
             // Check if inode is allocated
             let sb_data = ezfs_sb.data.lock();
@@ -75,6 +69,11 @@ impl RustEzFs {
                 return Err(ENOENT);
             }
         }
+
+        let mut inode = match sb.get_or_create_inode(ino)? {
+            INodeState::Existing(inode) => return Ok(inode),
+            INodeState::Uninitilized(new_inode) => new_inode,
+        };
 
         let offset = EZFS_INODE_STORE_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE;
         let mapped_inode_store = ezfs_sb.mapper.mapped_folio(offset.try_into()?)?;
@@ -201,7 +200,7 @@ impl RustEzFs {
             .set_aops(Self::AOPS)
             .set_ino(ino);
 
-        let now = Instant::<Monotonic>::now().as_nanos() / NSEC_PER_SEC;
+        let now = Instant::<RealTime>::now().as_nanos() / NSEC_PER_SEC;
 
         ezfs_inode
             .set_mode(mode)
@@ -822,6 +821,7 @@ impl iomap::Operations for RustEzFs {
 
                 // SAFETY: we've acquired the super block lock and can therefore
                 // modify the ezfs inode
+                // FIXME: what about the inode lock?
                 let ezfs_inode = unsafe { inode.data_mut() };
                 ezfs_inode
                     .set_data_block_num(new_block_start + (EZFS_ROOT_DATABLOCK_NUMBER as u64));
