@@ -66,23 +66,37 @@ pub(crate) struct Bitmap<const N: usize> {
 impl<const N: usize> Bitmap<N> {
     #[inline]
     pub(crate) fn is_set(&self, block_num: u64) -> bool {
-        let idx: usize = (block_num / 32) as usize;
+        pr_info!("is set called");
+        let idx = (block_num / 32) as usize;
+        if idx >= N {
+            return false;
+        }
+
         let mask = 1 << (block_num % 32);
         (self.inner[idx] & mask) != 0
     }
 
     #[inline]
-    pub(crate) fn set_bit(&mut self, block_num: u64) {
-        let idx: usize = (block_num / 32) as usize;
+    pub(crate) fn set_bit(&mut self, block_num: u64) -> Result {
+        pr_info!("set bit called");
+        let idx = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
-        self.inner[idx] |= mask
+        let val = self.inner.get_mut(idx).ok_or(EINVAL)?;
+        *val |= mask;
+
+        Ok(())
     }
 
     #[inline]
-    pub(crate) fn clear_bit(&mut self, block_num: u64) {
+    pub(crate) fn clear_bit(&mut self, block_num: u64) -> Result {
+        pr_info!("clear bit called");
+
         let idx: usize = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
-        self.inner[idx] &= !mask
+        let val = self.inner.get_mut(idx).ok_or(EINVAL)?;
+        *val &= !mask;
+
+        Ok(())
     }
 
     const fn new(inner: [u32; N]) -> Self {
