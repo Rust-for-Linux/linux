@@ -118,7 +118,7 @@ impl RustEzFs {
 
         for idx in 0..EZFS_MAX_INODES {
             if !sb_data.free_inodes.is_set(idx as u64) {
-                sb_data.free_inodes.set_bit(idx as u64);
+                sb_data.free_inodes.set_bit(idx as u64)?;
                 return Ok(idx + 1); // FS is 1-indexed
             }
         }
@@ -136,7 +136,7 @@ impl RustEzFs {
                 .find(|&x| !sb_data.free_data_blocks.is_set(x))
                 .ok_or(ENOSPC)?;
 
-            sb_data.free_data_blocks.set_bit(data_block_num);
+            sb_data.free_data_blocks.set_bit(data_block_num)?;
 
             data_block_num
         };
@@ -616,15 +616,15 @@ impl kernel::sb::Operations for RustEzFs {
             for data_blk in start..end {
                 sb_data
                     .free_data_blocks
-                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64)?;
                 sb_data
                     .zero_data_blocks
-                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64);
+                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64)?;
             }
 
             sb_data
                 .free_inodes
-                .clear_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64);
+                .clear_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64)?;
         }
 
         // TODO: Make clear consume inode
@@ -779,7 +779,7 @@ impl iomap::Operations for RustEzFs {
             WriteCase::Extend => {
                 for i in ez_blk_count..blocks_needed {
                     let bit = ez_blk_sidx + i;
-                    sb_data.free_data_blocks.set_bit(bit);
+                    sb_data.free_data_blocks.set_bit(bit)?;
                 }
 
                 map.set_flags(iomap::map_flags::NEW);
@@ -814,8 +814,8 @@ impl iomap::Operations for RustEzFs {
 
                         Self::move_block(old, new, sb)?;
 
-                        sb_data.free_data_blocks.clear_bit(old);
-                        sb_data.free_data_blocks.set_bit(new);
+                        sb_data.free_data_blocks.clear_bit(old)?;
+                        sb_data.free_data_blocks.set_bit(new)?;
                     }
                 }
 
