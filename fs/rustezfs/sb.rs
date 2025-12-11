@@ -66,7 +66,6 @@ pub(crate) struct Bitmap<const N: usize> {
 impl<const N: usize> Bitmap<N> {
     #[inline]
     pub(crate) fn is_set(&self, block_num: u64) -> bool {
-        pr_info!("is set called");
         let idx = (block_num / 32) as usize;
         if idx >= N {
             return false;
@@ -78,7 +77,6 @@ impl<const N: usize> Bitmap<N> {
 
     #[inline]
     pub(crate) fn set_bit(&mut self, block_num: u64) -> Result {
-        pr_info!("set bit called");
         let idx = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
         let val = self.inner.get_mut(idx).ok_or(EINVAL)?;
@@ -89,8 +87,6 @@ impl<const N: usize> Bitmap<N> {
 
     #[inline]
     pub(crate) fn clear_bit(&mut self, block_num: u64) -> Result {
-        pr_info!("clear bit called");
-
         let idx: usize = (block_num / 32) as usize;
         let mask = 1 << (block_num % 32);
         let val = self.inner.get_mut(idx).ok_or(EINVAL)?;
