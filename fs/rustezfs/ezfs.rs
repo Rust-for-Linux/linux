@@ -179,11 +179,14 @@ impl RustEzFs {
                 new_inode.set_fops(Self::DIR_FOPS);
 
                 let data_block_num = Self::allocate_data_block(sb)?;
+
                 ezfs_inode
                     .set_nlink(2)
                     .set_file_size(EZFS_BLOCK_SIZE as u64)
                     .set_nblocks(8)
                     .set_data_block_num(data_block_num);
+
+                dir.inc_link_count();
 
                 Type::Dir
             }
@@ -398,8 +401,6 @@ impl kernel::inode::Operations for RustEzFs {
         pr_info!("Calling mkdir from rustezfs\n");
 
         Self::create_helper(parent, dentry, mode | S_IFDIR as u16)?;
-
-        parent.inc_link_count();
 
         // Since we use d_instantiate_new we don't return a dentry
         Ok(None)
