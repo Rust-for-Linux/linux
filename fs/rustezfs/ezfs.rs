@@ -164,7 +164,7 @@ impl RustEzFs {
 
     fn allocate_data_block(sb: &SuperBlock<Self>) -> Result<u64> {
         let ezfs_sb = sb.data();
-        let max_blocks = Self::max_blocks(ezfs_sb);
+        let max_blocks = Self::max_blocks(ezfs_sb)?;
 
         let mut sb_data = ezfs_sb.data.lock();
 
@@ -282,8 +282,8 @@ impl RustEzFs {
         Ok(())
     }
 
-    fn max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
-        (sb.disk_blocks - 2).min(EZFS_MAX_DATA_BLKS as u64)
+    fn max_blocks(sb: Pin<&EzfsSuperblock>) -> Result<u64> {
+        Ok((sb.disk_blocks.checked_sub(2).ok_or(EINVAL)?).min(EZFS_MAX_DATA_BLKS as u64))
     }
 
     fn find_dir_entry(
@@ -759,7 +759,7 @@ impl iomap::Operations for RustEzFs {
         // As we'll modify the file system below, we must acquire a lock
         let mut sb_data = ezfs_sb.data.lock();
 
-        let max_blocks = Self::max_blocks(ezfs_sb);
+        let max_blocks = Self::max_blocks(ezfs_sb)?;
         let blocks_needed = end_block + 1;
         let blocks_to_add = blocks_needed.checked_sub(ez_blk_count).ok_or(EIO)?;
 
