@@ -67,16 +67,6 @@ impl RustEzFs {
 
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
         pr_info!("iget(ino={ino})\n");
-        // {
-        //     // Check if inode is allocated
-        //     let sb_data = ezfs_sb.data.lock();
-        //     if !sb_data
-        //         .free_inodes
-        //         .is_set((ino - EZFS_ROOT_INODE_NUMBER).try_into()?)
-        //     {
-        //         return Err(ENOENT);
-        //     }
-        // }
 
         if !Self::inode_allocated(sb, ino)? {
             return Err(ENOENT);
