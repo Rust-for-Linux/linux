@@ -61,7 +61,10 @@ impl RustEzFs {
         let ezfs_sb = sb.data();
         let sb_data = ezfs_sb.data.lock();
 
-        let idx: u64 = (ino - EZFS_ROOT_INODE_NUMBER).try_into()?;
+        let idx: u64 = ino
+            .checked_sub(EZFS_ROOT_INODE_NUMBER)
+            .ok_or(EINVAL)?
+            .try_into()?;
 
         Ok(sb_data.free_inodes.is_set(idx))
     }
@@ -123,7 +126,7 @@ impl RustEzFs {
 
         sb_data
             .free_inodes
-            .clear_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64)?;
+            .clear_bit((ino.checked_sub(EZFS_ROOT_INODE_NUMBER).ok_or(EINVAL)?) as u64)?;
 
         Ok(())
     }
