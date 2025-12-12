@@ -30,6 +30,7 @@ use kernel::{c_str, fs, str::CStr};
 
 use core::marker::PhantomData;
 use core::mem::size_of;
+use core::ops::Range;
 use pin_init::{pin_data, PinInit};
 
 struct RustEzFs;
@@ -56,19 +57,26 @@ impl RustEzFs {
     const IOPS: kernel::inode::Ops<RustEzFs> = kernel::inode::Ops::new::<RustEzFs>();
     const AOPS: kernel::address_space::Ops<RustEzFs> = kernel::iomap::aops::<RustEzFs>();
 
+    fn inode_allocated(sb: &SuperBlock<Self>, ino: usize) -> Result<bool> {
+        let ezfs_sb = sb.data();
+        let sb_data = ezfs_sb.data.lock();
+
+        let idx: u64 = ino
+            .checked_sub(EZFS_ROOT_INODE_NUMBER)
+            .ok_or(EINVAL)?
+            .try_into()?;
+
+        Ok(sb_data.free_inodes.is_set(idx))
+    }
+
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
         pr_info!("iget(ino={ino})\n");
-        let ezfs_sb = sb.data();
-        {
-            // Check if inode is allocated
-            let sb_data = ezfs_sb.data.lock();
-            if !sb_data
-                .free_inodes
-                .is_set((ino - EZFS_ROOT_INODE_NUMBER).try_into()?)
-            {
-                return Err(ENOENT);
-            }
+
+        if !Self::inode_allocated(sb, ino)? {
+            return Err(ENOENT);
         }
+
+        let ezfs_sb = sb.data();
 
         let mut inode = match sb.get_or_create_inode(ino)? {
             INodeState::Existing(inode) => return Ok(inode),
@@ -112,6 +120,33 @@ impl RustEzFs {
         })
     }
 
+    fn deallocate_inode(sb: &SuperBlock<Self>, ino: usize) -> Result {
+        let ezfs_sb = sb.data();
+        let mut sb_data = ezfs_sb.data.lock();
+
+        sb_data
+            .free_inodes
+            .clear_bit((ino.checked_sub(EZFS_ROOT_INODE_NUMBER).ok_or(EINVAL)?) as u64)?;
+
+        Ok(())
+    }
+
+    fn deallocate_data_blocks(sb: &SuperBlock<Self>, range: Range<u64>) -> Result {
+        let ezfs_sb = sb.data();
+        let mut sb_data = ezfs_sb.data.lock();
+
+        for data_blk in range {
+            let blk_idx = data_blk
+                .checked_sub(EZFS_ROOT_DATABLOCK_NUMBER as u64)
+                .ok_or(EINVAL)?;
+
+            sb_data.free_data_blocks.clear_bit(blk_idx)?;
+            sb_data.zero_data_blocks.clear_bit(blk_idx)?;
+        }
+
+        Ok(())
+    }
+
     fn allocate_inode(sb: &SuperBlock<Self>) -> Result<usize> {
         let ezfs_sb = sb.data();
         let mut sb_data = ezfs_sb.data.lock();
@@ -119,7 +154,7 @@ impl RustEzFs {
         for idx in 0..EZFS_MAX_INODES {
             if !sb_data.free_inodes.is_set(idx as u64) {
                 sb_data.free_inodes.set_bit(idx as u64)?;
-                return Ok(idx + 1); // FS is 1-indexed
+                return Ok(idx + EZFS_ROOT_INODE_NUMBER); // FS is 1-indexed
             }
         }
 
@@ -128,18 +163,23 @@ impl RustEzFs {
 
     fn allocate_data_block(sb: &SuperBlock<Self>) -> Result<u64> {
         let ezfs_sb = sb.data();
+        let max_blocks = Self::max_blocks(ezfs_sb)?;
 
-        let data_block_num = {
-            let mut sb_data = ezfs_sb.data.lock();
-            let max_blocks = Self::get_max_blocks(ezfs_sb);
-            let data_block_num = (0..max_blocks)
-                .find(|&x| !sb_data.free_data_blocks.is_set(x))
-                .ok_or(ENOSPC)?;
+        let mut sb_data = ezfs_sb.data.lock();
 
-            sb_data.free_data_blocks.set_bit(data_block_num)?;
+        for idx in 0..max_blocks {
+            if !sb_data.free_data_blocks.is_set(idx) {
+                sb_data.free_data_blocks.set_bit(idx)?;
+                return Ok(idx + EZFS_ROOT_DATABLOCK_NUMBER as u64);
+            }
+        }
 
-            data_block_num
-        };
+        Err(ENOSPC)
+    }
+
+    fn zeroed_data_block(sb: &SuperBlock<Self>) -> Result<u64> {
+        let ezfs_sb = sb.data();
+        let data_block_num = Self::allocate_data_block(sb)?;
 
         let offset = data_block_num
             .checked_mul(EZFS_BLOCK_SIZE as u64)
@@ -153,7 +193,7 @@ impl RustEzFs {
         let mut guard = locked_folio.map(folio_start)?;
         guard.fill(0);
 
-        Ok(data_block_num + EZFS_ROOT_DATABLOCK_NUMBER as u64)
+        Ok(data_block_num)
     }
 
     fn new_inode(
@@ -177,7 +217,7 @@ impl RustEzFs {
             fs::mode::S_IFDIR => {
                 new_inode.set_fops(Self::DIR_FOPS);
 
-                let data_block_num = Self::allocate_data_block(sb)?;
+                let data_block_num = Self::zeroed_data_block(sb)?;
 
                 ezfs_inode
                     .set_nlink(2)
@@ -241,8 +281,8 @@ impl RustEzFs {
         Ok(())
     }
 
-    fn get_max_blocks(sb: Pin<&EzfsSuperblock>) -> u64 {
-        (sb.disk_blocks - 2).min(EZFS_MAX_DATA_BLKS as u64)
+    fn max_blocks(sb: Pin<&EzfsSuperblock>) -> Result<u64> {
+        Ok((sb.disk_blocks.checked_sub(2).ok_or(EINVAL)?).min(EZFS_MAX_DATA_BLKS as u64))
     }
 
     fn find_dir_entry(
@@ -604,27 +644,14 @@ impl kernel::sb::Operations for RustEzFs {
 
     fn evict_inode(inode: &INode<Self::FileSystem>) -> Result {
         if inode.nlink() == 0 {
-            let sb = inode.super_block().data();
+            let sb = inode.super_block();
             let ino = inode.ino();
 
-            let ezfs_inode = inode.data();
-            let start = ezfs_inode.data_blk_num();
+            let start = inode.data().data_blk_num();
             let end = start + inode.blocks();
 
-            let mut sb_data = sb.data.lock();
-
-            for data_blk in start..end {
-                sb_data
-                    .free_data_blocks
-                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64)?;
-                sb_data
-                    .zero_data_blocks
-                    .clear_bit(data_blk - EZFS_ROOT_DATABLOCK_NUMBER as u64)?;
-            }
-
-            sb_data
-                .free_inodes
-                .clear_bit((ino - EZFS_ROOT_INODE_NUMBER) as u64)?;
+            Self::deallocate_data_blocks(sb, start..end)?;
+            Self::deallocate_inode(sb, ino)?;
         }
 
         // TODO: Make clear consume inode
@@ -731,7 +758,7 @@ impl iomap::Operations for RustEzFs {
         // As we'll modify the file system below, we must acquire a lock
         let mut sb_data = ezfs_sb.data.lock();
 
-        let max_blocks = Self::get_max_blocks(ezfs_sb);
+        let max_blocks = Self::max_blocks(ezfs_sb)?;
         let blocks_needed = end_block + 1;
         let blocks_to_add = blocks_needed.checked_sub(ez_blk_count).ok_or(EIO)?;
 
