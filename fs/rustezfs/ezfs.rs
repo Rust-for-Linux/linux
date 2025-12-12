@@ -8,7 +8,7 @@ mod inode;
 mod sb;
 use crate::dir::{DirEntryStore, EzfsDirEntry};
 use crate::inode::{EzfsInode, InodeStore};
-use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk};
+use crate::sb::{EzfsSuperblock, EzfsSuperblockDisk, Transaction};
 use defs::*;
 use kernel::bindings;
 use kernel::dentry;
@@ -147,55 +147,6 @@ impl RustEzFs {
         Ok(())
     }
 
-    fn allocate_inode(sb: &SuperBlock<Self>) -> Result<usize> {
-        let ezfs_sb = sb.data();
-        let mut sb_data = ezfs_sb.data.lock();
-
-        for idx in 0..EZFS_MAX_INODES {
-            if !sb_data.free_inodes.is_set(idx as u64) {
-                sb_data.free_inodes.set_bit(idx as u64)?;
-                return Ok(idx + EZFS_ROOT_INODE_NUMBER); // FS is 1-indexed
-            }
-        }
-
-        Err(ENOSPC)
-    }
-
-    fn allocate_data_block(sb: &SuperBlock<Self>) -> Result<u64> {
-        let ezfs_sb = sb.data();
-        let max_blocks = Self::max_blocks(ezfs_sb)?;
-
-        let mut sb_data = ezfs_sb.data.lock();
-
-        for idx in 0..max_blocks {
-            if !sb_data.free_data_blocks.is_set(idx) {
-                sb_data.free_data_blocks.set_bit(idx)?;
-                return Ok(idx + EZFS_ROOT_DATABLOCK_NUMBER as u64);
-            }
-        }
-
-        Err(ENOSPC)
-    }
-
-    fn zeroed_data_block(sb: &SuperBlock<Self>) -> Result<u64> {
-        let ezfs_sb = sb.data();
-        let data_block_num = Self::allocate_data_block(sb)?;
-
-        let offset = data_block_num
-            .checked_mul(EZFS_BLOCK_SIZE as u64)
-            .ok_or(EIO)?;
-
-        let folio: ARef<Folio<kernel::folio::PageCache<Self>>> =
-            ezfs_sb.mapper.read_mapping_folio(offset.try_into()?)?;
-
-        let folio_start = 0;
-        let locked_folio = folio.lock();
-        let mut guard = locked_folio.map(folio_start)?;
-        guard.fill(0);
-
-        Ok(data_block_num)
-    }
-
     fn new_inode(
         dir: &Locked<&INode<Self>, kernel::inode::ReadSem>,
         mode: u32,
@@ -204,7 +155,9 @@ impl RustEzFs {
         let mut new_inode = sb.new_inode()?;
         let mut ezfs_inode = EzfsInode::default();
 
-        let ino = Self::allocate_inode(sb)?;
+        let mut tx = Transaction::new(sb);
+        let ino = tx.allocate_inode()?;
+
         pr_info!("Allocating new inode: {:?}\n", ino);
 
         let typ = match mode & fs::mode::S_IFMT {
@@ -217,7 +170,8 @@ impl RustEzFs {
             fs::mode::S_IFDIR => {
                 new_inode.set_fops(Self::DIR_FOPS);
 
-                let data_block_num = Self::zeroed_data_block(sb)?;
+                let max_blocks = Self::max_blocks(sb.data())?;
+                let data_block_num = tx.zeroed_data_block(max_blocks)?;
 
                 ezfs_inode
                     .set_nlink(2)
@@ -265,6 +219,7 @@ impl RustEzFs {
         })?;
 
         ready_inode.mark_dirty();
+        tx.commit();
 
         Ok(ready_inode)
     }
