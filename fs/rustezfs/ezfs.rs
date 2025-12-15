@@ -70,7 +70,7 @@ impl RustEzFs {
     }
 
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
-        pr_info!("iget(ino={ino})\n");
+        // pr_info!("iget(ino={ino})\n");
 
         if !Self::inode_allocated(sb, ino)? {
             return Err(ENOENT);
@@ -326,7 +326,6 @@ impl FileSystem for RustEzFs {
         sb: &mut SuperBlock<Self, New>,
         mapper: Option<Mapper<Self>>,
     ) -> Result<Self::Data> {
-        pr_info!("fill_super()\n");
         let Some(mapper) = mapper else {
             return Err(EINVAL);
         };
@@ -349,7 +348,6 @@ impl FileSystem for RustEzFs {
     }
 
     fn init_root(sb: &SuperBlock<Self>) -> Result<dentry::Root<Self>> {
-        pr_info!("init_root()\n");
         let inode = Self::iget(sb, EZFS_ROOT_INODE_NUMBER)?;
         dentry::Root::try_new(inode)
     }
@@ -367,7 +365,7 @@ impl kernel::inode::Operations for RustEzFs {
         let dir_entry = Self::find_dir_entry(parent, &dentry)?;
 
         let inode = if let Some(entry) = dir_entry {
-            pr_info!("Inode found: {:?}\n", entry.inode_no());
+            // pr_info!("Inode found: {:?}\n", entry.inode_no());
             Some(Self::iget(sb, entry.inode_no().try_into()?)?)
         } else {
             None
@@ -753,10 +751,6 @@ impl iomap::Operations for RustEzFs {
         };
 
         match case_type {
-            WriteCase::New => {
-                pr_info!("adding to an empty file\n");
-                return Err(EIO);
-            }
             WriteCase::Within => {}
             WriteCase::Extend => {
                 for i in ez_blk_count..blocks_needed {
@@ -766,7 +760,7 @@ impl iomap::Operations for RustEzFs {
 
                 map.set_flags(iomap::map_flags::NEW);
             }
-            WriteCase::Move => {
+            WriteCase::New | WriteCase::Move => {
                 // Let's try to find a region of sequential free blocks
                 // of size `blocks_needed` to move our file to
                 let mut curr_block = 0;

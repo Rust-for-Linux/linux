@@ -213,7 +213,6 @@ impl DerefMut for MapGuardMut<'_> {
 
 impl Drop for MapGuardMut<'_> {
     fn drop(&mut self) {
-        pr_info!("Dropped guard, set pag dirty and unmapped\n");
         // SAFETY: A `MapGuard` instance is only created when `kmap` succeeds, so it's ok to unmap
         // it when the guard is dropped.
         unsafe {
@@ -226,13 +225,11 @@ impl Drop for MapGuardMut<'_> {
 // SAFETY: `raw_lock` calls folio_lock, which actually locks the folio.
 unsafe impl<S> Lockable for Folio<S> {
     fn raw_lock(&self) {
-        pr_info!("Locked folio\n");
         // SAFETY: The folio is valid because the shared reference implies a non-zero refcount.
         unsafe { bindings::folio_lock(self.0.get()) }
     }
 
     unsafe fn unlock(&self) {
-        pr_info!("unlocked folio\n");
         // SAFETY: The safety requirements guarantee that the folio is locked.
         unsafe { bindings::folio_unlock(self.0.get()) }
     }
