@@ -482,22 +482,6 @@ impl file::Operations for RustEzFs {
         file::generic_seek(file, offset, whence)
     }
 
-    // TODO: file::Operations currently just calls generic_file_read_iter directly
-    // we might want to move it here but that requires us being able to have both
-    // Kiocb and IovIterDest implement ::to_ptr(); Let's do that later
-    // fn read_iter(
-    //     _kiocb: Kiocb<'_, <Self as FileSystem>::Data>,
-    //     _iov: &mut IovIterDest<'_>,
-    // ) -> Result<usize> {
-    //     pr_info!("read_iter()\n");
-    //
-    //     // from_result(|| {
-    //     //     let res = unsafe { bindings::generic_file_read_iter() };
-    //     // })
-    //
-    //     Err(EINVAL)
-    // }
-
     fn read_dir(
         file: &File<Self>,
         inode: &Locked<&INode<Self>, kernel::inode::ReadSem>,
@@ -713,7 +697,7 @@ impl iomap::Operations for RustEzFs {
 
         let max_blocks = Self::max_blocks(ezfs_sb)?;
         let blocks_needed = end_block + 1;
-        let blocks_to_add = blocks_needed.checked_sub(ez_blk_count).ok_or(EIO)?;
+        let blocks_to_add = blocks_needed.saturating_sub(ez_blk_count);
 
         // TODO: is this necessary ?
         if blocks_needed > max_blocks {
