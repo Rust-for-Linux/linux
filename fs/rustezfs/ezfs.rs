@@ -70,8 +70,6 @@ impl RustEzFs {
     }
 
     fn iget(sb: &SuperBlock<Self>, ino: usize) -> Result<ARef<INode<Self>>> {
-        // pr_info!("iget(ino={ino})\n");
-
         if !Self::inode_allocated(sb, ino)? {
             return Err(ENOENT);
         }
@@ -157,8 +155,6 @@ impl RustEzFs {
 
         let mut tx = Transaction::new(sb);
         let ino = tx.allocate_inode()?;
-
-        pr_info!("Allocating new inode: {:?}\n", ino);
 
         let typ = match mode & fs::mode::S_IFMT {
             fs::mode::S_IFREG => {
@@ -273,8 +269,6 @@ impl RustEzFs {
         dentry: dentry::Unhashed<'_, Self>,
         mode: u16,
     ) -> Result<usize> {
-        pr_info!("Calling create helper from rustezfs\n");
-
         let new_inode = Self::new_inode(parent, mode.into())?;
         let ino: u64 = new_inode.ino().try_into()?;
 
@@ -365,7 +359,6 @@ impl kernel::inode::Operations for RustEzFs {
         let dir_entry = Self::find_dir_entry(parent, &dentry)?;
 
         let inode = if let Some(entry) = dir_entry {
-            // pr_info!("Inode found: {:?}\n", entry.inode_no());
             Some(Self::iget(sb, entry.inode_no().try_into()?)?)
         } else {
             None
@@ -380,8 +373,6 @@ impl kernel::inode::Operations for RustEzFs {
         mode: u16,
         _excl: bool,
     ) -> Result<usize> {
-        pr_info!("Calling create from rustezfs\n");
-
         Self::create_helper(parent, dentry, mode)
     }
 
@@ -390,8 +381,6 @@ impl kernel::inode::Operations for RustEzFs {
         dentry: dentry::Unhashed<'_, Self::FileSystem>,
         mode: u16,
     ) -> Result<Option<ARef<dentry::DEntry<Self::FileSystem>>>> {
-        pr_info!("Calling mkdir from rustezfs\n");
-
         Self::create_helper(parent, dentry, mode | S_IFDIR as u16)?;
 
         // Since we use d_instantiate_new we don't return a dentry
@@ -478,7 +467,6 @@ impl file::Operations for RustEzFs {
     type FileSystem = Self;
 
     fn seek(file: &File<Self>, offset: Offset, whence: file::Whence) -> Result<Offset> {
-        pr_info!("seek()\n");
         file::generic_seek(file, offset, whence)
     }
 
@@ -487,7 +475,6 @@ impl file::Operations for RustEzFs {
         inode: &Locked<&INode<Self>, kernel::inode::ReadSem>,
         emitter: &mut file::DirEmitter,
     ) -> Result {
-        // pr_info!("read_dir()\n");
         let pos: usize = emitter.pos().try_into().map_err(|_| ENOENT)?;
 
         if pos < 2 && !emitter.emit_dots(file) {
@@ -507,14 +494,11 @@ impl file::Operations for RustEzFs {
             disk_pos / size_of::<EzfsDirEntry>()
         };
 
-        // pr_info!("emitter index: {:?}", index);
-
         if index >= EZFS_MAX_CHILDREN {
             return Ok(());
         }
 
         let ezfs_dir_inode = inode.data();
-        // pr_info!("inode data_blk_num: {:?}", ezfs_dir_inode.data_blk_num());
 
         let offset = ezfs_dir_inode
             .data_blk_num()
@@ -557,7 +541,6 @@ impl file::Operations for RustEzFs {
         mut kiocb: Kiocb<'_, <Self::FileSystem as FileSystem>::Data>,
         iov: &mut IovIterSource<'_>,
     ) -> Result<usize> {
-        pr_info!("write_iter\n");
         let flags = kiocb.ki_flags();
         let file: &File<Self> = kiocb.ki_filp();
 
@@ -599,7 +582,6 @@ impl kernel::sb::Operations for RustEzFs {
     }
 
     fn write_inode(inode: &INode<Self::FileSystem>) -> Result<usize> {
-        pr_info!("write inode called\n");
         let ezfs_sb = inode.super_block().data();
         let ino = inode.ino();
         let disk_inode = EzfsInode::from_vfs_inode(inode)?;
@@ -620,7 +602,6 @@ impl kernel::sb::Operations for RustEzFs {
     }
 
     fn sync_fs(sb: &SuperBlock<Self::FileSystem>) -> Result<usize> {
-        pr_info!("sync_fs called\n");
         let ezfs_sb = sb.data();
 
         let offset = (EZFS_SUPERBLOCK_DATABLOCK_NUMBER * EZFS_BLOCK_SIZE) as u64;
@@ -650,8 +631,6 @@ impl iomap::Operations for RustEzFs {
         map: &mut iomap::Map<'a>,
         _srcmap: Option<&mut iomap::Map<'a>>,
     ) -> Result {
-        pr_info!("iomap_begin()\n");
-
         let sb = inode.super_block();
         let ezfs_sb: Pin<&EzfsSuperblock> = sb.data();
         let ezfs_inode = inode.data();
@@ -659,12 +638,8 @@ impl iomap::Operations for RustEzFs {
         let start_block: u64 = (pos >> sb.blocksize_bits()).try_into()?;
         let end_block: u64 = ((pos + length - 1) >> sb.blocksize_bits()).try_into()?;
 
-        // pr_info!("start_block: {start_block}, end_block: {end_block}\n");
-
         let ez_blk_num = ezfs_inode.data_blk_num();
         let ez_blk_count = inode.blocks() / 8;
-
-        // pr_info!("blk_num: {ez_blk_num}, ez_blk_count: {ez_blk_count}\n");
 
         let mut phys = if ez_blk_num > 0 {
             ez_blk_num + start_block
@@ -724,8 +699,6 @@ impl iomap::Operations for RustEzFs {
             if end > max_blocks {
                 return Err(ENOSPC);
             }
-
-            // pr_info!("start={start} - end={end}\n");
 
             if (start..end).any(|bit| sb_data.free_data_blocks.is_set(bit)) {
                 WriteCase::Move
@@ -805,7 +778,6 @@ impl iomap::Operations for RustEzFs {
         _map: &iomap::Map<'a>,
     ) -> Result {
         if written > 0 {
-            pr_info!("iomap_end()\n");
             let new_blocks =
                 ((inode.size() + (EZFS_BLOCK_SIZE as i64) - 1) / EZFS_BLOCK_SIZE as i64) as u64;
             // let sb = inode.super_block();

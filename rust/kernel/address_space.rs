@@ -4,7 +4,6 @@
 //!
 //! C headers: [`include/linux/fs.h`](srctree/include/linux/fs.h)
 
-use crate::pr_info;
 use crate::{
     error::{from_result, Result},
     folio::Folio,
@@ -69,8 +68,6 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 folio_ptr: *mut bindings::folio,
             ) -> i32 {
                 from_result(|| {
-                    pr_info!("RUSTEZFS: in read_folio_callback\n");
-
                     let file = if file_ptr.is_null() {
                         None
                     } else {

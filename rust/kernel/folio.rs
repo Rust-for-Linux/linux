@@ -7,7 +7,6 @@ use core::{
 use crate::{
     error::Result,
     fs::FileSystem,
-    pr_info,
     prelude::EDOM,
     types::{ARef, AlwaysRefCounted, Lockable, Locked, Opaque},
 };
