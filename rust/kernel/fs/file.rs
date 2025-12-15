@@ -726,7 +726,6 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 kiocb: *mut bindings::kiocb,
                 iter: *mut bindings::iov_iter,
             ) -> isize {
-                pr_info!("read_iter_callback\n");
                 return unsafe { bindings::generic_file_read_iter(kiocb, iter) };
             }
 
@@ -739,7 +738,6 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 iter: *mut bindings::iov_iter,
             ) -> isize {
                 from_result(|| {
-                    pr_info!("write_iter_callback\n");
                     // SAFETY: The caller provides a valid `struct kiocb` associated with a
                     // `<T>` file.
                     let kiocb = unsafe { Kiocb::from_raw(kiocb) };
