@@ -22,7 +22,6 @@ use crate::{
     user,
 };
 
-use crate::pr_info;
 use core::{marker::PhantomData, mem::ManuallyDrop, ptr};
 
 /// Flags associated with a [`File`].

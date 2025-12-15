@@ -245,7 +245,7 @@ impl<'a> Transaction<'a> {
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
         if !self.committed {
-            pr_info!(
+            pr_warn!(
                 "Rolling back transaction: {} inodes, {} blocks\n",
                 self.allocated_inodes.len(),
                 self.allocated_blocks.len()

@@ -7,7 +7,6 @@
 use super::address_space;
 use crate::error::{to_result, Error};
 use crate::iov::IovIterSource;
-use crate::pr_info;
 use crate::prelude::{EIO, EOVERFLOW};
 use crate::{
     block,
@@ -228,8 +227,6 @@ impl<T: Operations + ?Sized> Table<T> {
         end_pos: u64,
     ) -> isize {
         from_result(|| {
-            pr_info!("writeback_range()\n");
-
             // SAFETY: For this callback, iomap guarantees:
             //   - `folio_ptr` points to a live `struct folio`.
             //   - The folio remains valid and locked for the duration of this call.
@@ -281,8 +278,6 @@ impl<T: Operations + ?Sized> Table<T> {
         wpc: *mut bindings::iomap_writepage_ctx,
         error: i32,
     ) -> i32 {
-        pr_info!("writeback_submit()\n");
-
         // SAFETY: VFS/iomap guarantees `wpc` is valid here.
         unsafe { bindings::iomap_ioend_writeback_submit(wpc, error) }
     }
