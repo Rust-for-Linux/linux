@@ -13,6 +13,7 @@
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
+mod init;
 mod pin_data;
 mod pinned_drop;
 mod zeroable;
@@ -38,6 +39,26 @@ pub fn derive_zeroable(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(MaybeZeroable)]
 pub fn maybe_derive_zeroable(input: TokenStream) -> TokenStream {
     ok_or_compile_error(zeroable::maybe_derive(parse_macro_input!(input)))
+}
+
+#[proc_macro]
+pub fn init(input: TokenStream) -> TokenStream {
+    init::expand(
+        parse_macro_input!(input),
+        Some("::core::convert::Infallible"),
+        false,
+    )
+    .into()
+}
+
+#[proc_macro]
+pub fn pin_init(input: TokenStream) -> TokenStream {
+    init::expand(
+        parse_macro_input!(input),
+        Some("::core::convert::Infallible"),
+        true,
+    )
+    .into()
 }
 
 fn ok_or_compile_error(res: syn::Result<proc_macro2::TokenStream>) -> TokenStream {
