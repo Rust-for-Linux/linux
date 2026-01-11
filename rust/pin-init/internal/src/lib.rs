@@ -11,6 +11,7 @@
 #![allow(missing_docs)]
 
 use proc_macro::TokenStream;
+use syn::parse_macro_input;
 
 mod helpers;
 mod pin_data;
@@ -29,19 +30,18 @@ pub fn pinned_drop(args: TokenStream, input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(Zeroable)]
 pub fn derive_zeroable(input: TokenStream) -> TokenStream {
-    zeroable::derive(input.into()).into()
+    ok_or_compile_error(zeroable::derive(parse_macro_input!(input)))
 }
 
 #[proc_macro_derive(MaybeZeroable)]
 pub fn maybe_derive_zeroable(input: TokenStream) -> TokenStream {
-    zeroable::maybe_derive(input.into()).into()
+    ok_or_compile_error(zeroable::maybe_derive(parse_macro_input!(input)))
 }
 
-#[expect(dead_code)]
 fn ok_or_compile_error(res: syn::Result<proc_macro2::TokenStream>) -> TokenStream {
     match res {
         Ok(stream) => stream,
-        Err(error) => error.into_compile_error(),
+        Err(err) => err.into_compile_error(),
     }
     .into()
 }
