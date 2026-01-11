@@ -13,14 +13,16 @@
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
-mod helpers;
 mod pin_data;
 mod pinned_drop;
 mod zeroable;
 
 #[proc_macro_attribute]
-pub fn pin_data(inner: TokenStream, item: TokenStream) -> TokenStream {
-    pin_data::pin_data(inner.into(), item.into()).into()
+pub fn pin_data(args: TokenStream, input: TokenStream) -> TokenStream {
+    ok_or_compile_error(pin_data::pin_data(
+        parse_macro_input!(args),
+        parse_macro_input!(input),
+    ))
 }
 
 #[proc_macro_attribute]
