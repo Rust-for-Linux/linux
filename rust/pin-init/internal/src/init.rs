@@ -27,7 +27,12 @@ struct This {
     _in_token: Token![in],
 }
 
-enum InitializerField {
+struct InitializerField {
+    attrs: Vec<Attribute>,
+    kind: InitializerKind,
+}
+
+enum InitializerKind {
     Value {
         ident: Ident,
         value: Option<(Token![:], Expr)>,
@@ -44,7 +49,7 @@ enum InitializerField {
     },
 }
 
-impl InitializerField {
+impl InitializerKind {
     fn ident(&self) -> Option<&Ident> {
         match self {
             Self::Value { ident, .. } | Self::Init { ident, .. } => Some(ident),
@@ -229,10 +234,16 @@ fn init_fields(
     slot: &Ident,
 ) -> TokenStream {
     let mut guards = vec![];
+    let mut guard_attrs = vec![];
     let mut res = TokenStream::new();
-    for field in fields {
-        let init = match field {
-            InitializerField::Value { ident, value } => {
+    for InitializerField { attrs, kind } in fields {
+        let cfgs = {
+            let mut cfgs = attrs.clone();
+            cfgs.retain(|attr| attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr"));
+            cfgs
+        };
+        let init = match kind {
+            InitializerKind::Value { ident, value } => {
                 let mut value_ident = ident.clone();
                 let value_prep = value.as_ref().map(|value| &value.1).map(|value| {
                     // Setting the span of `value_ident` to `value`'s span improves error messages
@@ -255,21 +266,24 @@ fn init_fields(
                     }
                 };
                 quote! {
+                    #(#attrs)*
                     {
                         #value_prep
                         // SAFETY: TODO
                         unsafe { #write(::core::ptr::addr_of_mut!((*#slot).#ident), #value_ident) };
                     }
+                    #(#cfgs)*
                     #[allow(unused_variables)]
                     let #ident = #accessor;
                 }
             }
-            InitializerField::Init { ident, value, .. } => {
+            InitializerKind::Init { ident, value, .. } => {
                 // Again span for better diagnostics
                 let init = format_ident!("init", span = value.span());
                 if pinned {
                     let project_ident = format_ident!("__project_{ident}");
                     quote! {
+                        #(#attrs)*
                         {
                             let #init = #value;
                             // SAFETY:
@@ -279,12 +293,14 @@ fn init_fields(
                             //   for `#ident`.
                             unsafe { #data.#ident(::core::ptr::addr_of_mut!((*#slot).#ident), #init)? };
                         }
+                        #(#cfgs)*
                         // SAFETY: TODO
                         #[allow(unused_variables)]
                         let #ident = unsafe { #data.#project_ident(&mut (*#slot).#ident) };
                     }
                 } else {
                     quote! {
+                        #(#attrs)*
                         {
                             let #init = #value;
                             // SAFETY: `slot` is valid, because we are inside of an initializer
@@ -296,20 +312,25 @@ fn init_fields(
                                 )?
                             };
                         }
+                        #(#cfgs)*
                         // SAFETY: TODO
                         #[allow(unused_variables)]
                         let #ident = unsafe { &mut (*#slot).#ident };
                     }
                 }
             }
-            InitializerField::Code { block: value, .. } => quote!(#[allow(unused_braces)] #value),
+            InitializerKind::Code { block: value, .. } => quote! {
+                #(#attrs)*
+                #[allow(unused_braces)]
+                #value
+            },
         };
         res.extend(init);
-        if let Some(ident) = field.ident() {
+        if let Some(ident) = kind.ident() {
             // `mixed_site` ensures that the guard is not accessible to the user-controlled code.
             let guard = format_ident!("__{ident}_guard", span = Span::mixed_site());
-            guards.push(guard.clone());
             res.extend(quote! {
+                #(#cfgs)*
                 // Create the drop guard:
                 //
                 // We rely on macro hygiene to make it impossible for users to access this local
@@ -321,13 +342,18 @@ fn init_fields(
                     )
                 };
             });
+            guards.push(guard);
+            guard_attrs.push(cfgs);
         }
     }
     quote! {
         #res
         // If execution reaches this point, all fields have been initialized. Therefore we can now
         // dismiss the guards by forgetting them.
-        #(::core::mem::forget(#guards);)*
+        #(
+            #(#guard_attrs)*
+            ::core::mem::forget(#guards);
+        )*
     }
 }
 
@@ -337,7 +363,10 @@ fn make_field_check(
     init_kind: InitKind,
     path: &Path,
 ) -> TokenStream {
-    let fields = fields.iter().filter_map(|f| f.ident());
+    let field_attrs = fields
+        .iter()
+        .filter_map(|f| f.kind.ident().map(|_| &f.attrs));
+    let field_name = fields.iter().filter_map(|f| f.kind.ident());
     match init_kind {
         InitKind::Normal => quote! {
             // We use unreachable code to ensure that all fields have been mentioned exactly once,
@@ -348,7 +377,8 @@ fn make_field_check(
             let _ = || unsafe {
                 ::core::ptr::write(slot, #path {
                     #(
-                        #fields: ::core::panic!(),
+                        #(#field_attrs)*
+                        #field_name: ::core::panic!(),
                     )*
                 })
             };
@@ -368,7 +398,8 @@ fn make_field_check(
                 zeroed = ::core::mem::zeroed();
                 ::core::ptr::write(slot, #path {
                     #(
-                        #fields: ::core::panic!(),
+                        #(#field_attrs)*
+                        #field_name: ::core::panic!(),
                     )*
                     ..zeroed
                 })
@@ -389,7 +420,7 @@ impl Parse for Initializer {
             let lh = content.lookahead1();
             if lh.peek(End) || lh.peek(Token![..]) {
                 break;
-            } else if lh.peek(Ident) || lh.peek(Token![_]) {
+            } else if lh.peek(Ident) || lh.peek(Token![_]) || lh.peek(Token![#]) {
                 fields.push_value(content.parse()?);
                 let lh = content.lookahead1();
                 if lh.peek(End) {
@@ -451,6 +482,16 @@ impl Parse for This {
 }
 
 impl Parse for InitializerField {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let attrs = input.call(Attribute::parse_outer)?;
+        Ok(Self {
+            attrs,
+            kind: input.parse()?,
+        })
+    }
+}
+
+impl Parse for InitializerKind {
     fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
         let lh = input.lookahead1();
         if lh.peek(Token![_]) {
