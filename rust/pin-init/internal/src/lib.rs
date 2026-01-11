@@ -25,7 +25,7 @@ pub fn pin_data(inner: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn pinned_drop(args: TokenStream, input: TokenStream) -> TokenStream {
-    pinned_drop::pinned_drop(args.into(), input.into()).into()
+    pinned_drop::pinned_drop(parse_macro_input!(args), parse_macro_input!(input)).into()
 }
 
 #[proc_macro_derive(Zeroable)]
@@ -55,12 +55,10 @@ impl From<syn::Error> for Error {
 }
 
 impl Error {
-    #[expect(dead_code)]
     pub(crate) fn none() -> Self {
         Self(None)
     }
 
-    #[expect(dead_code)]
     pub(crate) fn combine(&mut self, error: impl Into<Self>) {
         let error = error.into();
         if let Some(this) = self.0.as_mut() {
