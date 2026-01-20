@@ -283,6 +283,66 @@ macro_rules! container_of {
 #[doc(hidden)]
 pub fn assert_same_type<T>(_: T, _: T) {}
 
+/// Conditional compilation based on kernel config options.
+///
+/// This macro simplifies conditional compilation patterns by providing a more readable
+/// syntax for selecting code based on kernel configuration options.
+///
+/// # Syntax
+///
+/// ```ignore
+/// if_cfg!(if CONFIG_FOO { expr1 } else { expr2 })
+/// ```
+///
+/// If `CONFIG_FOO` is enabled, this expands to `expr1`. Otherwise, it expands to `expr2`.
+///
+/// # Examples
+///
+/// ```
+/// # use kernel::if_cfg;
+/// # #[cfg(CONFIG_64BIT)]
+/// let result = if_cfg!(if CONFIG_64BIT { 42 } else { 0 });
+/// # #[cfg(CONFIG_64BIT)]
+/// assert_eq!(result, 42);
+/// ```
+///
+/// The macro works in both expression and statement positions:
+///
+/// ```ignore
+/// // Expression position
+/// let value = if_cfg!(if CONFIG_64BIT { x / y } else { unsafe { div64_s64(x, y) } });
+///
+/// // Statement position
+/// if_cfg!(if CONFIG_FOO {
+///     let x = 1;
+/// } else {
+///     let x = 2;
+/// });
+/// ```
+#[macro_export]
+macro_rules! if_cfg {
+    // Expression form
+    (if $config:ident { $true_expr:expr } else { $false_expr:expr }) => {
+        {
+            #[cfg($config)]
+            {
+                $true_expr
+            }
+            #[cfg(not($config))]
+            {
+                $false_expr
+            }
+        }
+    };
+    // Statement form
+    (if $config:ident { $true_stmt:stmt } else { $false_stmt:stmt }) => {
+        #[cfg($config)]
+        $true_stmt
+        #[cfg(not($config))]
+        $false_stmt
+    };
+}
+
 /// Helper for `.rs.S` files.
 #[doc(hidden)]
 #[macro_export]
