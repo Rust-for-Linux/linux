@@ -25,7 +25,7 @@ impl Writer {
             bindings::copy_to_user(
                 self.ptr.cast::<core::ffi::c_void>(),
                 data.as_ptr().cast::<core::ffi::c_void>(),
-                data.len().try_into()?,
+                data.len(),
             )
         };
         if pending != 0 {

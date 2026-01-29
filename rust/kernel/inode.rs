@@ -117,7 +117,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
     }
 
     pub(crate) const fn as_raw(&self) -> *const bindings::inode {
-        unsafe { self.0.get() as *const bindings::inode }
+        self.0.get().cast_const()
     }
 
     /// Returns the number of the inode.
@@ -193,12 +193,11 @@ impl<T: FileSystem + ?Sized> INode<T> {
 
     // FIXME: should consume self so you can't call any methods after clearing
     pub fn clear(&self) {
-        // SAFETY: type semantics guarentee that Inode is instatiated
         let inode_ptr = self.0.get();
         unsafe { bindings::clear_inode(inode_ptr) }
     }
 
-    // FIXME: Does this work???
+    // FIXME: Smells bad
     pub unsafe fn set_blocks(&self, num_blocks: u64) {
         unsafe { (*self.0.get()).i_blocks = num_blocks };
     }
@@ -208,7 +207,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         if T::IS_UNSPECIFIED {
             crate::build_error!("inode data type is unspecified");
         }
-        // TODO: Add safety
+        // SAFETY: Inode is guaranteed to be instantiated because of the typestate
         let outerp = unsafe { container_of!(self.0.get(), WithData<T::INodeData>, inode) };
         // SAFETY: `self` is guaranteed to be valid by the existence of a shared reference
         // (`&self`) to it. Additionally, we know `T::INodeData` is always initialised in an
@@ -230,7 +229,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         if T::IS_UNSPECIFIED {
             crate::build_error!("inode data type is unspecified");
         }
-        // TODO: Add safety
+        // SAFETY: Inode is guaranteed to be instantiated because of the typestate
         let outerp = unsafe { container_of!(self.0.get(), WithData<T::INodeData>, inode) };
         // SAFETY: `self` is guaranteed to be valid by the existence of a shared reference
         // (`&self`) to it. Additionally, we know `T::INodeData` is always initialised in an
@@ -301,11 +300,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         index: PageOffset,
     ) -> Result<ARef<Folio<folio::PageCache<T>>>> {
         let folio = from_err_ptr(unsafe {
-            bindings::read_mapping_folio(
-                (*self.0.get()).i_mapping,
-                index.try_into()?,
-                ptr::null_mut(),
-            )
+            bindings::read_mapping_folio((*self.0.get()).i_mapping, index, ptr::null_mut())
         })?;
         let ptr = ptr::NonNull::new(folio)
             .ok_or(EIO)?
@@ -327,8 +322,6 @@ impl<T: FileSystem + ?Sized> INode<T> {
     }
 
     pub fn mark_dirty(&self) {
-        // SAFETY: This is safe since it is guaranteed by the typestate
-        // that the inode has been inserted into the hash
         let inode = self.0.get();
         unsafe { bindings::mark_inode_dirty(inode) };
     }
@@ -486,8 +479,7 @@ impl<T: FileSystem + ?Sized> Mapper<T> {
         }
 
         let page_index = offset >> bindings::PAGE_SHIFT;
-        let mut folio = self.inode.read_mapping_folio(page_index.try_into()?);
-        folio
+        self.inode.read_mapping_folio(page_index.try_into()?)
     }
 }
 
@@ -548,12 +540,12 @@ impl<T: FileSystem + ?Sized> New<T> {
             }
             Type::Fifo => {
                 // SAFETY: `inode` is valid for write as it's a new inode.
-                unsafe { bindings::init_special_inode(inode, bindings::S_IFIFO as _, 0) };
+                unsafe { bindings::init_special_inode(inode, bindings::S_IFIFO as u16, 0) };
                 bindings::S_IFIFO
             }
             Type::Sock => {
                 // SAFETY: `inode` is valid for write as it's a new inode.
-                unsafe { bindings::init_special_inode(inode, bindings::S_IFSOCK as _, 0) };
+                unsafe { bindings::init_special_inode(inode, bindings::S_IFSOCK as u16, 0) };
                 bindings::S_IFSOCK
             }
             Type::Chr(major, minor) => {
@@ -572,7 +564,7 @@ impl<T: FileSystem + ?Sized> New<T> {
                 unsafe {
                     bindings::init_special_inode(
                         inode,
-                        bindings::S_IFBLK as _,
+                        bindings::S_IFBLK as u16,
                         bindings::MKDEV(major, minor & bindings::MINORMASK),
                     )
                 };
@@ -646,12 +638,12 @@ impl<T: FileSystem + ?Sized> New<T> {
             }
             Type::Fifo => {
                 // SAFETY: `inode` is valid for write as it's a new inode.
-                unsafe { bindings::init_special_inode(inode, bindings::S_IFIFO as _, 0) };
+                unsafe { bindings::init_special_inode(inode, bindings::S_IFIFO as u16, 0) };
                 bindings::S_IFIFO
             }
             Type::Sock => {
                 // SAFETY: `inode` is valid for write as it's a new inode.
-                unsafe { bindings::init_special_inode(inode, bindings::S_IFSOCK as _, 0) };
+                unsafe { bindings::init_special_inode(inode, bindings::S_IFSOCK as u16, 0) };
                 bindings::S_IFSOCK
             }
             Type::Chr(major, minor) => {
@@ -659,7 +651,7 @@ impl<T: FileSystem + ?Sized> New<T> {
                 unsafe {
                     bindings::init_special_inode(
                         inode,
-                        bindings::S_IFCHR as _,
+                        bindings::S_IFCHR as u16,
                         bindings::MKDEV(major, minor & bindings::MINORMASK),
                     )
                 };
@@ -670,7 +662,7 @@ impl<T: FileSystem + ?Sized> New<T> {
                 unsafe {
                     bindings::init_special_inode(
                         inode,
-                        bindings::S_IFBLK as _,
+                        bindings::S_IFBLK as u16,
                         bindings::MKDEV(major, minor & bindings::MINORMASK),
                     )
                 };
@@ -795,7 +787,7 @@ impl<T: FileSystem + ?Sized> Ready<T> {
     pub fn ino(&self) -> Ino {
         // SAFETY: `i_ino` is immutable, and `self` is guaranteed to be valid by the existence of a
         // shared reference (&self) to it.
-        unsafe { (*self.0.as_ref()).i_ino }
+        unsafe { self.0.as_ref().i_ino }
     }
 }
 

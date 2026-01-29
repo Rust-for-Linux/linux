@@ -244,14 +244,14 @@ impl<T: Operations + ?Sized> Table<T> {
             let ret = Self::iomap_begin_callback(
                 inode_ptr,
                 pos as Offset,
-                len as Offset,
+                Offset::from(len),
                 flags::WRITE,
                 map,
                 ptr::null_mut(),
             );
 
             if ret < 0 {
-                return Err(Error::from_errno(ret.try_into()?));
+                return Err(Error::from_errno(ret));
             }
 
             // SAFETY: all arguments provided were provided by the caller
@@ -407,7 +407,7 @@ pub const fn aops<T: Operations + ?Sized>() -> address_space::Ops<T::FileSystem>
 }
 
 pub const fn map_table<T: Operations + ?Sized>() -> &'static bindings::iomap_ops {
-    return &Table::<T>::MAP_TABLE;
+    &Table::<T>::MAP_TABLE
 }
 
 pub fn file_buffered_write<FS: Operations + ?Sized>(

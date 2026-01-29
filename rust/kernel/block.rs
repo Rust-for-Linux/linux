@@ -56,7 +56,7 @@ impl Device {
     pub fn inode<T: FileSystem + ?Sized>(&self) -> &INode<T> {
         // SAFETY: `bd_inode` is never reassigned.
         let mapping = unsafe { (*self.0.get()).bd_mapping };
-        // TODO: Why is this safe
+        // TODO: add safety
         let inode_ptr = unsafe { (*mapping).host };
         // SAFET: `ptr` is valid as long as the block device remains valid as well.
         unsafe { INode::from_raw(inode_ptr) }

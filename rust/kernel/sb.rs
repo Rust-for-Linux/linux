@@ -125,7 +125,7 @@ impl<T: FileSystem + ?Sized, S> SuperBlock<T, S> {
         // SAFETY: all block devices have a valid bd_mapping
         let mapping = unsafe { (*bdev.0.get()).bd_mapping };
 
-        Ok(MappingPage::read(self, mapping, index)?)
+        MappingPage::read(self, mapping, index)
     }
 }
 
@@ -238,7 +238,7 @@ impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
                 ARef::from_raw(inode.cast())
             }))
         } else {
-            // SAFETY: The new inode is valid but not fully initialised yet, so it's ok to create a
+            // The new inode is valid but not fully initialised yet, so it's ok to create a
             // `inode::New`.
             Ok(INodeState::Uninitilized(inode::New(inode, PhantomData)))
         }

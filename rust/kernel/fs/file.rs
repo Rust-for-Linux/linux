@@ -725,7 +725,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 kiocb: *mut bindings::kiocb,
                 iter: *mut bindings::iov_iter,
             ) -> isize {
-                return unsafe { bindings::generic_file_read_iter(kiocb, iter) };
+                unsafe { bindings::generic_file_read_iter(kiocb, iter) }
             }
 
             /// # Safety
@@ -741,9 +741,9 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     // `<T>` file.
                     let kiocb = unsafe { Kiocb::from_raw(kiocb) };
                     // SAFETY: This is a valid `struct iov_iter` for reading.
-                    let mut iov = unsafe { IovIterSource::from_raw(iter) };
+                    let iov = unsafe { IovIterSource::from_raw(iter) };
 
-                    let wrote = T::write_iter(kiocb, &mut iov)?;
+                    let wrote = T::write_iter(kiocb, iov)?;
 
                     Ok(wrote.try_into()?)
                 })
@@ -824,7 +824,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     // been succesfully emitted: this is because we want users to see them before
                     // the error.
                     match T::read_dir(file, &locked, emitter) {
-                        Ok(_) => Ok(0),
+                        Ok(()) => Ok(0),
                         Err(e) => {
                             if emitter.pos() == orig_pos {
                                 Err(e)
@@ -960,7 +960,7 @@ impl DirEmitter {
                 name_len,
                 self.0.pos,
                 ino,
-                etype as _,
+                etype as u32,
             )
         };
         if ret {
@@ -970,16 +970,12 @@ impl DirEmitter {
     }
 
     pub fn emit_dots<T: FileSystem + ?Sized>(&mut self, file: &File<T>) -> bool {
-        if self.0.pos == 0 {
-            if !self.emit(1, b".", file.inode().ino() as u64, DirEntryType::Dir) {
-                return false;
-            }
+        if self.0.pos == 0 && !self.emit(1, b".", file.inode().ino() as u64, DirEntryType::Dir) {
+            return false;
         }
 
-        if self.0.pos == 1 {
-            if !self.emit(1, b"..", file.parent_ino() as u64, DirEntryType::Dir) {
-                return false;
-            }
+        if self.0.pos == 1 && !self.emit(1, b"..", file.parent_ino() as u64, DirEntryType::Dir) {
+            return false;
         }
 
         true
