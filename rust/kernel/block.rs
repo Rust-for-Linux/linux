@@ -54,11 +54,11 @@ impl Device {
     // TODO: Maybe this should be dealt with in the Address space struct instead of here
     // Also should be default type instead of generic
     pub fn inode<T: FileSystem + ?Sized>(&self) -> &INode<T> {
-        // SAFETY: `bd_inode` is never reassigned.
+        // SAFETY: `bd_mapping` is never reassigned.
         let mapping = unsafe { (*self.0.get()).bd_mapping };
-        // TODO: add safety
+        // SAFETY: `mapping` is set if device is initilized.
         let inode_ptr = unsafe { (*mapping).host };
-        // SAFET: `ptr` is valid as long as the block device remains valid as well.
+        // SAFETY: `ptr` is valid as long as the block device remains valid as well.
         unsafe { INode::from_raw(inode_ptr) }
     }
 }

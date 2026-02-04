@@ -157,6 +157,7 @@ impl<S> Deref for Mapped<'_, S> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
+        // SAFETY: Mapped is initilized so `data`, is valid for read.
         unsafe { core::slice::from_raw_parts(self.data, self.data_len) }
     }
 }

@@ -40,7 +40,7 @@ impl<T: FileSystem + ?Sized> DEntry<T> {
 
     /// Returns the superblock of the dentry.
     pub fn super_block(&self) -> &SuperBlock<T> {
-        // `d_sb` is immutable, so it's safe to read it.
+        // SAFETY: `d_sb` is immutable, so it's safe to read it.
         unsafe { SuperBlock::from_raw((*self.0.get()).d_sb) }
     }
 
