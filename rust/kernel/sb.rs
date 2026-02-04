@@ -148,6 +148,10 @@ impl<'a> MappingPage<'a> {
     }
 
     /// `<C>` determines the lifetime of this page reference
+    ///
+    /// # Safety
+    ///
+    /// `mapping` must point to a valid reference of `struct address_space`
     pub unsafe fn read<C>(
         _ctx: &'a C,
         mapping: *mut bindings::address_space,
@@ -315,14 +319,14 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 shutdown: None,
             };
 
-            unsafe extern "C" fn evict_inode_callback(inode_ptr: *mut bindings::inode) {
+            extern "C" fn evict_inode_callback(inode_ptr: *mut bindings::inode) {
                 // SAFETY: The C API guarantees that `inode_ptr` is a valid inode.
                 let inode = unsafe { INode::from_raw(inode_ptr) };
 
                 T::evict_inode(inode); // TODO: Should this return something?
             }
 
-            unsafe extern "C" fn write_inode_callback(
+            extern "C" fn write_inode_callback(
                 inode_ptr: *mut bindings::inode,
                 _wbc: *mut bindings::writeback_control,
             ) -> i32 {
@@ -337,10 +341,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 })
             }
 
-            unsafe extern "C" fn sync_fs_callback(
-                sb_ptr: *mut bindings::super_block,
-                _wait: i32,
-            ) -> i32 {
+            extern "C" fn sync_fs_callback(sb_ptr: *mut bindings::super_block, _wait: i32) -> i32 {
                 // TODO: add support for wait
                 from_result(|| {
                     // SAFETY: The C API guarantees that `sb_ptr` is a valid inode.

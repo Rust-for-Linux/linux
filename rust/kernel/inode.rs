@@ -338,7 +338,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { bindings::mark_inode_dirty(inode) };
     }
 
-    unsafe extern "C" fn inode_init_once_callback(outer_inode: *mut core::ffi::c_void) {
+    extern "C" fn inode_init_once_callback(outer_inode: *mut core::ffi::c_void) {
         let ptr = outer_inode.cast::<WithData<T::INodeData>>();
 
         // SAFETY: This is only used in `new`, so we know that we have a valid `inode::WithData`
@@ -346,7 +346,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { bindings::inode_init_once(ptr::addr_of_mut!((*ptr).inode)) };
     }
 
-    pub(crate) unsafe extern "C" fn alloc_inode_callback(
+    pub(crate) extern "C" fn alloc_inode_callback(
         sb: *mut bindings::super_block,
     ) -> *mut bindings::inode {
         // SAFETY: The callback contract guarantees that `sb` is valid for read.
@@ -372,7 +372,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         unsafe { ptr::addr_of_mut!((*ptr).inode) }
     }
 
-    pub(crate) unsafe extern "C" fn destroy_inode_callback(inode: *mut bindings::inode) {
+    pub(crate) extern "C" fn destroy_inode_callback(inode: *mut bindings::inode) {
         // SAFETY: By the C contract, `inode` is a valid pointer.
         let is_bad = unsafe { bindings::is_bad_inode(inode) };
 
@@ -431,6 +431,9 @@ unsafe impl<T: FileSystem + ?Sized> AlwaysRefCounted for INode<T> {
         unsafe { bindings::ihold(self.0.get()) };
     }
 
+    /// # Safety
+    ///
+    /// Caller must guarantee the reference count of 'obj' is greater than 0
     unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
         // SAFETY: The safety requirements guarantee that the refcount is nonzero.
         unsafe { bindings::iput(obj.as_ref().0.get()) }
@@ -980,9 +983,8 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 }
             }
 
-            // TODO: add mnt_idmap support
-            unsafe extern "C" fn create_callback(
-                _mnt_idmap_ptr: *mut bindings::mnt_idmap,
+            extern "C" fn create_callback(
+                _mnt_idmap_ptr: *mut bindings::mnt_idmap, // TODO: add mnt_idmap support
                 parent_ptr: *mut bindings::inode,
                 dentry_ptr: *mut bindings::dentry,
                 mode: u16,
@@ -992,7 +994,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                     // SAFETY: The C API guarantees that `parent_ptr` is a valid inode.
                     let parent = unsafe { INode::from_raw(parent_ptr) };
 
-                    // SAFETY: The C API guarantees that `parent_ptr` is a valid inode.
+                    // SAFETY: The C API guarantees that `denty_ptr` is a valid dentry.
                     let dentry = unsafe { DEntry::from_raw(dentry_ptr) };
 
                     // SAFETY: The C API guarantees that the inode's rw semaphore is locked at least in
@@ -1005,7 +1007,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 })
             }
 
-            unsafe extern "C" fn unlink_callback(
+            extern "C" fn unlink_callback(
                 inode_ptr: *mut bindings::inode,
                 dentry_ptr: *mut bindings::dentry,
             ) -> i32 {
@@ -1027,7 +1029,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 })
             }
 
-            unsafe extern "C" fn mkdir_callback(
+            extern "C" fn mkdir_callback(
                 _mnt_idmap_ptr: *mut bindings::mnt_idmap,
                 parent_ptr: *mut bindings::inode,
                 dentry_ptr: *mut bindings::dentry,
@@ -1051,7 +1053,7 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 }
             }
 
-            unsafe extern "C" fn rmdir_callback(
+            extern "C" fn rmdir_callback(
                 inode_ptr: *mut bindings::inode,
                 dentry_ptr: *mut bindings::dentry,
             ) -> i32 {
