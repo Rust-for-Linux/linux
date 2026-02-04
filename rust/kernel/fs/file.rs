@@ -666,6 +666,11 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 uring_cmd_iopoll: None,
             };
 
+            /// Seek into a file, file system dependant
+            ///
+            /// # Safety
+            ///
+            /// `file_ptr` must be a reference to a valid `struct file`
             unsafe extern "C" fn seek_callback(
                 file_ptr: *mut bindings::file,
                 offset: bindings::loff_t,
@@ -680,6 +685,12 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 })
             }
 
+            /// Read a file, file system dependant
+            ///
+            /// # Safety
+            ///
+            /// `file_ptr` must be a reference to a valid `struct file`
+            /// `ptr` must point to allocated memory which is at least of `len` bytes
             unsafe extern "C" fn read_callback(
                 file_ptr: *mut bindings::file,
                 ptr: *mut core::ffi::c_char,
@@ -804,6 +815,12 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 uring_cmd_iopoll: None,
             };
 
+            /// Read a directory, file system dependant
+            ///
+            /// # Safety
+            ///
+            /// `file_ptr` must be a reference to a valid `struct file`
+            /// `ctx_ptr` must be a reference to a valid `struct dir_context`
             unsafe extern "C" fn read_dir_callback(
                 file_ptr: *mut bindings::file,
                 ctx_ptr: *mut bindings::dir_context,
