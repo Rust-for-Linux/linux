@@ -135,53 +135,63 @@ impl<T: FileSystem + ?Sized> INode<T> {
     }
 
     pub fn size(&self) -> i64 {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         unsafe { (*self.0.get()).i_size }
     }
 
     pub fn blocks(&self) -> u64 {
-        // SAFETY: this is ok
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         unsafe { (*self.0.get()).i_blocks }
     }
 
     pub fn nlink(&self) -> u32 {
-        // SAFETY: this is ok
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         unsafe { (*self.0.get()).__bindgen_anon_1.i_nlink }
     }
 
     pub fn ctime(&self) -> Result<Timespec> {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let sec = unsafe { (*self.0.get()).i_ctime_sec };
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let nsec = unsafe { (*self.0.get()).i_ctime_nsec };
 
         Timespec::new(sec.try_into()?, nsec)
     }
 
     pub fn mtime(&self) -> Result<Timespec> {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let sec = unsafe { (*self.0.get()).i_mtime_sec };
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let nsec = unsafe { (*self.0.get()).i_mtime_nsec };
 
         Timespec::new(sec.try_into()?, nsec)
     }
 
     pub fn atime(&self) -> Result<Timespec> {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let sec = unsafe { (*self.0.get()).i_atime_sec };
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let nsec = unsafe { (*self.0.get()).i_atime_nsec };
 
         Timespec::new(sec.try_into()?, nsec)
     }
 
     pub fn uid(&self) -> u32 {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let uid = unsafe { (*self.0.get()).i_uid };
 
         uid.val
     }
 
     pub fn gid(&self) -> u32 {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         let gid = unsafe { (*self.0.get()).i_gid };
 
         gid.val
     }
 
     pub fn mode(&self) -> u16 {
+        // SAFETY: inode is guaranteed to be in a valid sate due to type state
         unsafe { (*self.0.get()).i_mode }
     }
 
@@ -239,7 +249,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
 
     pub fn drop_nlink(&self) {
         let inode_ptr = self.0.get();
-        // SAFETY: Inode ptr is guaranteed to be valid and instantiated do to the typestate
+        // SAFETY: Inode ptr is guaranteed to be valid and instantiated due to the typestate
         unsafe {
             bindings::drop_nlink(inode_ptr);
         }
@@ -247,7 +257,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
 
     pub fn inc_link_count(&self) {
         let inode_ptr = self.0.get();
-        // SAFETY: Inode ptr is guaranteed to be valid and instantiated do to the typestate
+        // SAFETY: Inode ptr is guaranteed to be valid and instantiated due to the typestate
         unsafe {
             bindings::inode_inc_link_count(inode_ptr);
         }
@@ -255,7 +265,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
 
     pub fn dec_link_count(&self) {
         let inode_ptr = self.0.get();
-        // SAFETY: Inode ptr is guaranteed to be valid and instantiated do to the typestate
+        // SAFETY: Inode ptr is guaranteed to be valid and instantiated due to the typestate
         unsafe {
             bindings::inode_dec_link_count(inode_ptr);
         }
@@ -299,6 +309,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         &self,
         index: PageOffset,
     ) -> Result<ARef<Folio<folio::PageCache<T>>>> {
+        // SAFETY: Inode is valid due to typestate and err is handled
         let folio = from_err_ptr(unsafe {
             bindings::read_mapping_folio((*self.0.get()).i_mapping, index, ptr::null_mut())
         })?;
@@ -323,6 +334,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
 
     pub fn mark_dirty(&self) {
         let inode = self.0.get();
+        // SAFETY: Inode is in the correct state
         unsafe { bindings::mark_inode_dirty(inode) };
     }
 
@@ -373,6 +385,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
         // embedded in a `Registration`, which is guaranteed to be valid because it has a
         // superblock associated to it.
         let reg = unsafe { &*container_of!(super_type, Registration, fs) };
+        // SAFETY: WithData has been allocated by VFS (allocate_inode_callback)
         let ptr = unsafe { container_of!(inode, WithData<T::INodeData>, inode) };
 
         if !is_bad {
@@ -399,7 +412,7 @@ impl<T: FileSystem + ?Sized> INode<T> {
             // to free the inode.
             unsafe { bindings::free_inode_nonrcu(inode) };
         } else {
-            // The callback contract guarantees that the inode was previously allocated via the
+            // SAFETY: The callback contract guarantees that the inode was previously allocated via the
             // `alloc_inode_callback` callback, so it is safe to free it back to the cache.
             unsafe {
                 bindings::kmem_cache_free(
@@ -427,6 +440,7 @@ unsafe impl<T: FileSystem + ?Sized> AlwaysRefCounted for INode<T> {
 /// Indicates that the an inode's rw semapahore is locked in read (shared) mode.
 pub struct ReadSem;
 
+// SAFETY: `raw_lock` calls `inode_lock_shared` which locks the inode in shared mode.
 unsafe impl<T: FileSystem + ?Sized> Lockable<ReadSem> for INode<T> {
     fn raw_lock(&self) {
         // SAFETY: Since there's a reference to the inode, it must be valid.
@@ -553,7 +567,7 @@ impl<T: FileSystem + ?Sized> New<T> {
                 unsafe {
                     bindings::init_special_inode(
                         inode,
-                        bindings::S_IFCHR as _,
+                        bindings::S_IFCHR as u16,
                         bindings::MKDEV(major, minor & bindings::MINORMASK),
                     )
                 };
@@ -700,6 +714,8 @@ impl<T: FileSystem + ?Sized> New<T> {
     }
 
     pub fn set_iops(&mut self, iops: Ops<T>) -> &mut Self {
+        // SAFETY: its okay to mutate the Inode since its still locked which is enforced by the
+        // typestate
         let inode = unsafe { self.0.as_mut() };
         inode.i_op = iops.0;
         self
@@ -734,9 +750,13 @@ impl<T: FileSystem + ?Sized> New<T> {
         parent: &Locked<&INode<T>, kernel::inode::ReadSem>,
         mode: u16,
     ) -> (kuid_t, kgid_t) {
+        // SAFETY: its okay to mutate the parent since it is locked, and inode is in the correct
+        // typestate
         let inode = unsafe { self.0.as_mut() };
-        let parent = unsafe { parent.as_raw() };
+        let parent = parent.as_raw();
 
+        // SAFETY: inode hasn't been idmapped so passing in nop_mnt_idmap is expected,
+        // inode in valid typestate, and parent locked
         unsafe {
             bindings::inode_init_owner(&raw mut bindings::nop_mnt_idmap, inode, parent, mode);
         }
@@ -767,8 +787,10 @@ impl<T: FileSystem + ?Sized> Ready<T> {
     pub fn mark_dirty(&mut self) {
         // SAFETY: This is safe since it is guaranteed by the typestate
         // that the inode has been inserted into the hash
-        let inode = unsafe { self.0.as_mut() };
-        unsafe { bindings::mark_inode_dirty(inode) };
+        unsafe {
+            let inode = { self.0.as_mut() };
+            bindings::mark_inode_dirty(inode);
+        }
     }
 
     pub fn instantiate_dentry(self, dentry: &dentry::Unhashed<'_, T>) {
