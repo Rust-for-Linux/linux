@@ -369,6 +369,7 @@ impl<T: FileSystem + ?Sized> LocalFile<T> {
     pub fn parent_ino(&self) -> usize {
         let dentry = self.dentry().0.get();
 
+        // SAFETY: dentry is guarenteed to be valid, thus okay to get its parent_ino
         unsafe { bindings::d_parent_ino(dentry) }
     }
 }
@@ -541,6 +542,7 @@ pub fn generic_seek(
     offset: Offset,
     whence: Whence,
 ) -> Result<Offset> {
+    // SAFETY: generic_file_llseek returns an offset (err if n < 0) which is dealt with below
     let n = unsafe { bindings::generic_file_llseek(file.inner.get(), offset, whence as i32) };
     if n < 0 {
         Err(Error::from_errno(n.try_into()?))
@@ -605,8 +607,8 @@ pub struct Ops<T: FileSystem + ?Sized> {
 impl<T: FileSystem + ?Sized> Ops<T> {
     /// Returns file operations for page-cache-based ro files.
     pub fn generic_ro_file() -> Self {
-        // SAFETY: This is a constant in C, it never changes.
         Self {
+            // SAFETY: This is a constant in C, it never changes.
             inner: unsafe { &bindings::generic_ro_fops },
             _p: PhantomData,
         }
