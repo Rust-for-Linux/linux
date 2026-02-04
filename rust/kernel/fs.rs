@@ -145,6 +145,8 @@ impl Registration {
                 // SAFETY: `try_ffi_init` guarantees that `fs_ptr` is valid for write.
                 unsafe { fs_ptr.write(bindings::file_system_type::default()) };
 
+                // SAFETY: `try_ffi_init` guarantees that `fs_ptr` is valid for write, and it has
+                // just been initialised above, so it's also valid for read.
                 let fs = unsafe { &mut *fs_ptr };
                 fs.owner = module.0;
                 fs.name = T::NAME.as_char_ptr();
@@ -190,6 +192,7 @@ impl Registration {
             },
         }
 
+        // SAFETY: sb_ptr must be valid (caller responsibility)
         let ptr = unsafe { (*sb_ptr).s_fs_info };
         if !ptr.is_null() {
             // SAFETY: The only place where `s_fs_info` is assigned is `NewSuperBlock::init`, where
@@ -232,9 +235,13 @@ impl<T: FileSystem + ?Sized> Tables<T> {
 
     unsafe extern "C" fn get_tree_callback(fc: *mut bindings::fs_context) -> ffi::c_int {
         match T::SUPER_TYPE {
+            // SAFETY: the function contract guarentees the `fc` is a valid fs_context and
+            // fill_super_callback is a valid function pointer with the correct signature
             sb::Type::BlockDev => unsafe {
                 bindings::get_tree_bdev(fc, Some(Self::fill_super_callback))
             },
+            // SAFETY: the function contract guarentees the `fc` is a valid fs_context and
+            // fill_super_callback is a valid function pointer with the correct signature
             sb::Type::Independent => unsafe {
                 bindings::get_tree_nodev(fc, Some(Self::fill_super_callback))
             },

@@ -82,7 +82,7 @@ impl<'a, T: ForeignOwnable> Kiocb<'a, T> {
         // SAFETY: VFS guarantees ki_filp is a valid file pointer
         let file_ptr = unsafe { (*self.as_raw()).ki_filp };
 
-        // While the Kiocb exists, it will have a valid reference to the file pointer
+        // SAFETY: While the Kiocb exists, it will have a valid reference to the file pointer
         unsafe { File::<FS>::from_raw_file(file_ptr) }
     }
 }

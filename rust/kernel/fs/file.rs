@@ -727,6 +727,8 @@ impl<T: FileSystem + ?Sized> Ops<T> {
                 kiocb: *mut bindings::kiocb,
                 iter: *mut bindings::iov_iter,
             ) -> isize {
+                // SAFETY: returns copied bytes, caller deals with error (negative numbers, hence
+                // isize), should be improved to be specifible instead of relying on generic
                 unsafe { bindings::generic_file_read_iter(kiocb, iter) }
             }
 
