@@ -21,6 +21,8 @@ impl Writer {
             return Err(EFAULT);
         }
 
+        // SAFETY: `len <= self.len` is checked above, ensuring `self.ptr` points to
+        // at least `len` bytes of valid userspace memory, and `data` is a valid slice.
         let pending = unsafe {
             bindings::copy_to_user(
                 self.ptr.cast::<core::ffi::c_void>(),

@@ -125,7 +125,8 @@ impl<T: FileSystem + ?Sized, S> SuperBlock<T, S> {
         // SAFETY: all block devices have a valid bd_mapping
         let mapping = unsafe { (*bdev.0.get()).bd_mapping };
 
-        MappingPage::read(self, mapping, index)
+        // SAFETY: mapping is initilized above
+        unsafe { MappingPage::read(self, mapping, index) }
     }
 }
 
@@ -147,7 +148,7 @@ impl<'a> MappingPage<'a> {
     }
 
     /// `<C>` determines the lifetime of this page reference
-    pub fn read<C>(
+    pub unsafe fn read<C>(
         _ctx: &'a C,
         mapping: *mut bindings::address_space,
         index: u64,
@@ -202,8 +203,10 @@ impl<T: FileSystem + ?Sized, S: DataInited> SuperBlock<T, S> {
 
         // SAFETY: This method is only available if the typestate implements `DataInited`, whose
         // safety requirements include `s_fs_info` being properly initialised.
-        let ptr = unsafe { (*self.0.get()).s_fs_info };
-        unsafe { T::Data::borrow(ptr) }
+        unsafe {
+            let ptr = (*self.0.get()).s_fs_info;
+            T::Data::borrow(ptr)
+        }
     }
 
     /// Tries to get an existing inode or create a new one if it doesn't exist yet.

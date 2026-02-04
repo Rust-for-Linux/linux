@@ -802,8 +802,6 @@ impl<T: FileSystem + ?Sized> Ready<T> {
         unsafe {
             bindings::d_instantiate_new(dentry_ptr, inode_ptr);
         }
-
-        core::mem::forget(self);
     }
     /// Returns the number of the inode.
     pub fn ino(&self) -> Ino {
