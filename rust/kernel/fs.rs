@@ -163,6 +163,9 @@ impl Registration {
         })
     }
 
+    /// # Safety
+    ///
+    /// `fc_ptr` must be a reference to a valid `struct fs_context`
     unsafe extern "C" fn init_fs_context_callback<T: FileSystem + ?Sized>(
         fc_ptr: *mut bindings::fs_context,
     ) -> ffi::c_int {
@@ -174,6 +177,9 @@ impl Registration {
         })
     }
 
+    /// # Safety
+    ///
+    /// `sb_ptr` must be a reference to a valid `struct super_block`
     unsafe extern "C" fn kill_sb_callback<T: FileSystem + ?Sized>(
         sb_ptr: *mut bindings::super_block,
     ) {
@@ -233,6 +239,9 @@ impl<T: FileSystem + ?Sized> Tables<T> {
         dup: None,
     };
 
+    /// # Safety
+    ///
+    /// `fc` must be a reference to a valid `struct fc_context`
     unsafe extern "C" fn get_tree_callback(fc: *mut bindings::fs_context) -> ffi::c_int {
         match T::SUPER_TYPE {
             // SAFETY: the function contract guarentees the `fc` is a valid fs_context and
@@ -248,6 +257,9 @@ impl<T: FileSystem + ?Sized> Tables<T> {
         }
     }
 
+    /// # Safety
+    ///
+    /// `sb_ptr` must be a reference to a valid `struct super_block`
     unsafe extern "C" fn fill_super_callback(
         sb_ptr: *mut bindings::super_block,
         _fc: *mut bindings::fs_context,
