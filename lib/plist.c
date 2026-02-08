@@ -10,7 +10,7 @@
  * 2001-2005 (c) MontaVista Software, Inc.
  * Daniel Walker <dwalker@mvista.com>
  *
- * (C) 2005 Thomas Gleixner <tglx@linutronix.de>
+ * (C) 2005 Linutronix GmbH, Thomas Gleixner <tglx@kernel.org>
  *
  * Simplifications of the original code by
  * Oleg Nesterov <oleg@tv-sign.ru>
@@ -47,8 +47,8 @@ static void plist_check_list(struct list_head *top)
 
 	plist_check_prev_next(top, prev, next);
 	while (next != top) {
-		WRITE_ONCE(prev, next);
-		WRITE_ONCE(next, prev->next);
+		prev = next;
+		next = prev->next;
 		plist_check_prev_next(top, prev, next);
 	}
 }

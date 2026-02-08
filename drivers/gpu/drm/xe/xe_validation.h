@@ -108,7 +108,7 @@ struct xe_val_flags {
  * @request_exclusive: Whether to lock exclusively (write mode) the next time
  * the domain lock is locked.
  * @exec_flags: The drm_exec flags used for drm_exec (re-)initialization.
- * @nr: The drm_exec nr parameter used for drm_exec (re-)initializaiton.
+ * @nr: The drm_exec nr parameter used for drm_exec (re-)initialization.
  */
 struct xe_validation_ctx {
 	struct drm_exec *exec;
@@ -137,7 +137,7 @@ bool xe_validation_should_retry(struct xe_validation_ctx *ctx, int *ret);
  * @_ret: The current error value possibly holding -ENOMEM
  *
  * Use this in way similar to drm_exec_retry_on_contention().
- * If @_ret contains -ENOMEM the tranaction is restarted once in a way that
+ * If @_ret contains -ENOMEM the transaction is restarted once in a way that
  * blocks other transactions and allows exhastive eviction. If the transaction
  * was already restarted once, Just return the -ENOMEM. May also set
  * _ret to -EINTR if not retrying and waits are interruptible.
@@ -166,10 +166,10 @@ xe_validation_device_init(struct xe_validation_device *val)
  */
 DEFINE_CLASS(xe_validation, struct xe_validation_ctx *,
 	     if (_T) xe_validation_ctx_fini(_T);,
-	     ({_ret = xe_validation_ctx_init(_ctx, _val, _exec, _flags);
-	       _ret ? NULL : _ctx; }),
+	     ({*_ret = xe_validation_ctx_init(_ctx, _val, _exec, _flags);
+	       *_ret ? NULL : _ctx; }),
 	     struct xe_validation_ctx *_ctx, struct xe_validation_device *_val,
-	     struct drm_exec *_exec, const struct xe_val_flags _flags, int _ret);
+	     struct drm_exec *_exec, const struct xe_val_flags _flags, int *_ret);
 static inline void *class_xe_validation_lock_ptr(class_xe_validation_t *_T)
 {return *_T; }
 #define class_xe_validation_is_conditional true
@@ -180,13 +180,13 @@ static inline void *class_xe_validation_lock_ptr(class_xe_validation_t *_T)
  * @_val: The xe_validation_device.
  * @_exec: The struct drm_exec object
  * @_flags: Flags for the xe_validation_ctx initialization.
- * @_ret: Return in / out parameter. May be set by this macro. Typicall 0 when called.
+ * @_ret: Return in / out parameter. May be set by this macro. Typically 0 when called.
  *
  * This macro is will initiate a drm_exec transaction with additional support for
  * exhaustive eviction.
  */
 #define xe_validation_guard(_ctx, _val, _exec, _flags, _ret)		\
-	scoped_guard(xe_validation, _ctx, _val, _exec, _flags, _ret) \
+	scoped_guard(xe_validation, _ctx, _val, _exec, _flags, &_ret) \
 	drm_exec_until_all_locked(_exec)
 
 #endif

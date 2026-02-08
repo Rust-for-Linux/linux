@@ -1,7 +1,7 @@
 /*
  * Performance events:
  *
- *    Copyright (C) 2008-2009, Thomas Gleixner <tglx@linutronix.de>
+ *    Copyright (C) 2008-2009, Linutronix GmbH, Thomas Gleixner <tglx@kernel.org>
  *    Copyright (C) 2008-2011, Red Hat, Inc., Ingo Molnar
  *    Copyright (C) 2008-2011, Red Hat, Inc., Peter Zijlstra
  *
@@ -1720,7 +1720,7 @@ extern void perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct p
 extern void perf_callchain_kernel(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs);
 extern struct perf_callchain_entry *
 get_perf_callchain(struct pt_regs *regs, bool kernel, bool user,
-		   u32 max_stack, bool crosstask, bool add_mark);
+		   u32 max_stack, bool crosstask, bool add_mark, u64 defer_cookie);
 extern int get_callchain_buffers(int max_stack);
 extern void put_callchain_buffers(void);
 extern struct perf_callchain_entry *get_callchain_entry(int *rctx);

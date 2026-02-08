@@ -8,7 +8,6 @@
 #include <linux/perf_event.h>
 #include <linux/stacktrace.h>
 #include <linux/uaccess.h>
-#include <linux/compat.h>
 #include <asm/asm-offsets.h>
 #include <asm/stacktrace.h>
 #include <asm/unwind.h>
@@ -105,10 +104,7 @@ void arch_stack_walk_user_common(stack_trace_consume_fn consume_entry, void *coo
 	struct stack_frame_vdso_wrapper __user *sf_vdso;
 	struct stack_frame_user __user *sf;
 	unsigned long ip, sp;
-	bool first = true;
 
-	if (is_compat_task())
-		return;
 	if (!current->mm)
 		return;
 	ip = instruction_pointer(regs);
@@ -136,24 +132,11 @@ void arch_stack_walk_user_common(stack_trace_consume_fn consume_entry, void *coo
 			if (__get_user(ip, &sf->gprs[8]))
 				break;
 		}
-		/* Sanity check: ABI requires SP to be 8 byte aligned. */
-		if (sp & 0x7)
+		/* Validate SP and RA (ABI requires SP to be 8 byte aligned). */
+		if (sp & 0x7 || ip_invalid(ip))
 			break;
-		if (ip_invalid(ip)) {
-			/*
-			 * If the instruction address is invalid, and this
-			 * is the first stack frame, assume r14 has not
-			 * been written to the stack yet. Otherwise exit.
-			 */
-			if (!first)
-				break;
-			ip = regs->gprs[14];
-			if (ip_invalid(ip))
-				break;
-		}
 		if (!store_ip(consume_entry, cookie, entry, perf, ip))
 			break;
-		first = false;
 	}
 	pagefault_enable();
 }

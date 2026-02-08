@@ -1283,6 +1283,7 @@ static const struct nvme_ctrl_ops nvme_ctrl_ops = {
 	.reg_read64 = apple_nvme_reg_read64,
 	.free_ctrl = apple_nvme_free_ctrl,
 	.get_address = apple_nvme_get_address,
+	.get_virt_boundary = nvme_get_virt_boundary,
 };
 
 static void apple_nvme_async_probe(void *data, async_cookie_t cookie)
@@ -1703,6 +1704,7 @@ static const struct apple_nvme_hw apple_nvme_t8103_hw = {
 
 static const struct of_device_id apple_nvme_of_match[] = {
 	{ .compatible = "apple,t8015-nvme-ans2", .data = &apple_nvme_t8015_hw },
+	{ .compatible = "apple,t8103-nvme-ans2", .data = &apple_nvme_t8103_hw },
 	{ .compatible = "apple,nvme-ans2", .data = &apple_nvme_t8103_hw },
 	{},
 };

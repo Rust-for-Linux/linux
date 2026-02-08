@@ -289,11 +289,11 @@ int mlx5_query_module_num(struct mlx5_core_dev *dev, int *module_num)
 }
 
 static int mlx5_query_module_id(struct mlx5_core_dev *dev, int module_num,
-				u8 *module_id)
+				u8 *module_id, u8 *status)
 {
 	u32 in[MLX5_ST_SZ_DW(mcia_reg)] = {};
 	u32 out[MLX5_ST_SZ_DW(mcia_reg)];
-	int err, status;
+	int err;
 	u8 *ptr;
 
 	MLX5_SET(mcia_reg, in, i2c_device_address, MLX5_I2C_ADDR_LOW);
@@ -308,12 +308,12 @@ static int mlx5_query_module_id(struct mlx5_core_dev *dev, int module_num,
 	if (err)
 		return err;
 
-	status = MLX5_GET(mcia_reg, out, status);
-	if (status) {
-		mlx5_core_err(dev, "query_mcia_reg failed: status: 0x%x\n",
-			      status);
+	if (MLX5_GET(mcia_reg, out, status)) {
+		if (status)
+			*status = MLX5_GET(mcia_reg, out, status);
 		return -EIO;
 	}
+
 	ptr = MLX5_ADDR_OF(mcia_reg, out, dword_0);
 
 	*module_id = ptr[0];
@@ -370,13 +370,14 @@ static int mlx5_mcia_max_bytes(struct mlx5_core_dev *dev)
 }
 
 static int mlx5_query_mcia(struct mlx5_core_dev *dev,
-			   struct mlx5_module_eeprom_query_params *params, u8 *data)
+			   struct mlx5_module_eeprom_query_params *params,
+			   u8 *data, u8 *status)
 {
 	u32 in[MLX5_ST_SZ_DW(mcia_reg)] = {};
 	u32 out[MLX5_ST_SZ_DW(mcia_reg)];
-	int status, err;
 	void *ptr;
 	u16 size;
+	int err;
 
 	size = min_t(int, params->size, mlx5_mcia_max_bytes(dev));
 
@@ -392,10 +393,9 @@ static int mlx5_query_mcia(struct mlx5_core_dev *dev,
 	if (err)
 		return err;
 
-	status = MLX5_GET(mcia_reg, out, status);
-	if (status) {
-		mlx5_core_err(dev, "query_mcia_reg failed: status: 0x%x\n",
-			      status);
+	if (MLX5_GET(mcia_reg, out, status)) {
+		if (status)
+			*status = MLX5_GET(mcia_reg, out, status);
 		return -EIO;
 	}
 
@@ -406,7 +406,7 @@ static int mlx5_query_mcia(struct mlx5_core_dev *dev,
 }
 
 int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
-			     u16 offset, u16 size, u8 *data)
+			     u16 offset, u16 size, u8 *data, u8 *status)
 {
 	struct mlx5_module_eeprom_query_params query = {0};
 	u8 module_id;
@@ -416,7 +416,8 @@ int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
 	if (err)
 		return err;
 
-	err = mlx5_query_module_id(dev, query.module_number, &module_id);
+	err = mlx5_query_module_id(dev, query.module_number, &module_id,
+				   status);
 	if (err)
 		return err;
 
@@ -430,7 +431,8 @@ int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
 		mlx5_qsfp_eeprom_params_set(&query.i2c_address, &query.page, &offset);
 		break;
 	default:
-		mlx5_core_err(dev, "Module ID not recognized: 0x%x\n", module_id);
+		mlx5_core_dbg(dev, "Module ID not recognized: 0x%x\n",
+			      module_id);
 		return -EINVAL;
 	}
 
@@ -441,12 +443,12 @@ int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
 	query.size = size;
 	query.offset = offset;
 
-	return mlx5_query_mcia(dev, &query, data);
+	return mlx5_query_mcia(dev, &query, data, status);
 }
 
 int mlx5_query_module_eeprom_by_page(struct mlx5_core_dev *dev,
 				     struct mlx5_module_eeprom_query_params *params,
-				     u8 *data)
+				     u8 *data, u8 *status)
 {
 	int err;
 
@@ -460,7 +462,7 @@ int mlx5_query_module_eeprom_by_page(struct mlx5_core_dev *dev,
 		return -EINVAL;
 	}
 
-	return mlx5_query_mcia(dev, params, data);
+	return mlx5_query_mcia(dev, params, data, status);
 }
 
 static int mlx5_query_port_pvlc(struct mlx5_core_dev *dev, u32 *pvlc,
@@ -1109,6 +1111,7 @@ mlx5e_ext_link_info[MLX5E_EXT_LINK_MODES_NUMBER] = {
 	[MLX5E_200GAUI_1_200GBASE_CR1_KR1]	= {.speed = 200000, .lanes = 1},
 	[MLX5E_400GAUI_2_400GBASE_CR2_KR2]	= {.speed = 400000, .lanes = 2},
 	[MLX5E_800GAUI_4_800GBASE_CR4_KR4]	= {.speed = 800000, .lanes = 4},
+	[MLX5E_1600TAUI_8_1600TBASE_CR8_KR8]	= {.speed = 1600000, .lanes = 8},
 };
 
 int mlx5_port_query_eth_proto(struct mlx5_core_dev *dev, u8 port, bool ext,

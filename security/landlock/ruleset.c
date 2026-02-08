@@ -23,7 +23,6 @@
 #include <linux/workqueue.h>
 
 #include "access.h"
-#include "audit.h"
 #include "domain.h"
 #include "limits.h"
 #include "object.h"
@@ -83,6 +82,10 @@ static void build_check_rule(void)
 		.num_layers = ~0,
 	};
 
+	/*
+	 * Checks that .num_layers is large enough for at least
+	 * LANDLOCK_MAX_NUM_LAYERS layers.
+	 */
 	BUILD_BUG_ON(rule.num_layers < LANDLOCK_MAX_NUM_LAYERS);
 }
 
@@ -290,6 +293,10 @@ static void build_check_layer(void)
 		.access = ~0,
 	};
 
+	/*
+	 * Checks that .level and .access are large enough to contain their expected
+	 * maximum values.
+	 */
 	BUILD_BUG_ON(layer.level < LANDLOCK_MAX_NUM_LAYERS);
 	BUILD_BUG_ON(layer.access < LANDLOCK_MASK_ACCESS_FS);
 }
@@ -644,8 +651,8 @@ bool landlock_unmask_layers(const struct landlock_rule *const rule,
 		bool is_empty;
 
 		/*
-		 * Records in @layer_masks which layer grants access to each
-		 * requested access.
+		 * Records in @layer_masks which layer grants access to each requested
+		 * access: bit cleared if the related layer grants access.
 		 */
 		is_empty = true;
 		for_each_set_bit(access_bit, &access_req, masks_array_size) {

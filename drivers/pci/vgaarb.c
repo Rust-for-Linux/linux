@@ -556,10 +556,8 @@ EXPORT_SYMBOL(vga_put);
 
 static bool vga_is_firmware_default(struct pci_dev *pdev)
 {
-#ifdef CONFIG_SCREEN_INFO
-	struct screen_info *si = &screen_info;
-
-	return pdev == screen_info_pci_dev(si);
+#if defined CONFIG_X86
+	return pdev == screen_info_pci_dev(&screen_info);
 #else
 	return false;
 #endif
@@ -653,13 +651,6 @@ static bool vga_is_boot_device(struct vga_device *vgadev)
 		}
 		return true;
 	}
-
-	/*
-	 * Vgadev has neither IO nor MEM enabled.  If we haven't found any
-	 * other VGA devices, it is the best candidate so far.
-	 */
-	if (!boot_vga)
-		return true;
 
 	return false;
 }

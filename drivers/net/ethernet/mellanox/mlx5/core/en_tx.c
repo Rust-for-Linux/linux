@@ -256,7 +256,7 @@ mlx5e_tx_wqe_inline_mode(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	u8 mode;
 
 #ifdef CONFIG_MLX5_EN_TLS
-	if (accel && accel->tls.tls_tisn)
+	if (accel->tls.tls_tisn)
 		return MLX5_INLINE_MODE_TCP_UDP;
 #endif
 
@@ -755,7 +755,7 @@ static void mlx5e_consume_skb(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		hwts.hwtstamp = mlx5e_cqe_ts_to_ns(sq->ptp_cyc2time, sq->clock, ts);
 		if (sq->ptpsq) {
 			mlx5e_skb_cb_hwtstamp_handler(skb, MLX5E_SKB_CB_CQE_HWTSTAMP,
-						      hwts.hwtstamp, sq->ptpsq->cq_stats);
+						      hwts.hwtstamp, sq->ptpsq);
 		} else {
 			skb_tstamp_tx(skb, &hwts);
 			sq->stats->timestamps++;
@@ -939,7 +939,11 @@ void mlx5e_free_txqsq_descs(struct mlx5e_txqsq *sq)
 	sq->dma_fifo_cc = dma_fifo_cc;
 	sq->cc = sqcc;
 
-	netdev_tx_completed_queue(sq->txq, npkts, nbytes);
+	/* Do not update BQL for TXQs that got replaced by new active ones, as
+	 * netdev_tx_reset_queue() is called for them in mlx5e_activate_txqsq().
+	 */
+	if (sq == sq->priv->txq2sq[sq->txq_ix])
+		netdev_tx_completed_queue(sq->txq, npkts, nbytes);
 }
 
 #ifdef CONFIG_MLX5_CORE_IPOIB
@@ -982,6 +986,7 @@ void mlx5i_sq_xmit(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	struct mlx5e_tx_attr attr;
 	struct mlx5i_tx_wqe *wqe;
 
+	struct mlx5e_accel_tx_state accel = {};
 	struct mlx5_wqe_datagram_seg *datagram;
 	struct mlx5_wqe_ctrl_seg *cseg;
 	struct mlx5_wqe_eth_seg  *eseg;
@@ -992,7 +997,7 @@ void mlx5i_sq_xmit(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	int num_dma;
 	u16 pi;
 
-	mlx5e_sq_xmit_prepare(sq, skb, NULL, &attr);
+	mlx5e_sq_xmit_prepare(sq, skb, &accel, &attr);
 	mlx5i_sq_calc_wqe_attr(skb, &attr, &wqe_attr);
 
 	pi = mlx5e_txqsq_get_next_pi(sq, wqe_attr.num_wqebbs);
@@ -1009,7 +1014,7 @@ void mlx5i_sq_xmit(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 
 	mlx5i_txwqe_build_datagram(av, dqpn, dqkey, datagram);
 
-	mlx5e_txwqe_build_eseg_csum(sq, skb, NULL, eseg);
+	mlx5e_txwqe_build_eseg_csum(sq, skb, &accel, eseg);
 
 	eseg->mss = attr.mss;
 

@@ -1624,22 +1624,15 @@ netvsc_get_rxfh_fields(struct net_device *ndev,
 	return 0;
 }
 
-static int
-netvsc_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
-		 u32 *rules)
+static u32 netvsc_get_rx_ring_count(struct net_device *dev)
 {
 	struct net_device_context *ndc = netdev_priv(dev);
 	struct netvsc_device *nvdev = rtnl_dereference(ndc->nvdev);
 
 	if (!nvdev)
-		return -ENODEV;
-
-	switch (info->cmd) {
-	case ETHTOOL_GRXRINGS:
-		info->data = nvdev->num_chn;
 		return 0;
-	}
-	return -EOPNOTSUPP;
+
+	return nvdev->num_chn;
 }
 
 static int
@@ -1755,6 +1748,9 @@ static int netvsc_set_rxfh(struct net_device *dev,
 
 	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
 	    rxfh->hfunc != ETH_RSS_HASH_TOP)
+		return -EOPNOTSUPP;
+
+	if (!ndc->rx_table_sz)
 		return -EOPNOTSUPP;
 
 	rndis_dev = ndev->extension;
@@ -1969,7 +1965,7 @@ static const struct ethtool_ops ethtool_ops = {
 	.get_channels   = netvsc_get_channels,
 	.set_channels   = netvsc_set_channels,
 	.get_ts_info	= ethtool_op_get_ts_info,
-	.get_rxnfc	= netvsc_get_rxnfc,
+	.get_rx_ring_count = netvsc_get_rx_ring_count,
 	.get_rxfh_key_size = netvsc_get_rxfh_key_size,
 	.get_rxfh_indir_size = netvsc_rss_indir_size,
 	.get_rxfh	= netvsc_get_rxfh,

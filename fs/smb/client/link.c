@@ -5,6 +5,7 @@
  *   Author(s): Steve French (sfrench@us.ibm.com)
  *
  */
+#include <crypto/md5.h>
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/slab.h>
@@ -37,23 +38,6 @@
 #define CIFS_MF_SYMLINK_MD5_ARGS(md5_hash) md5_hash
 
 static int
-symlink_hash(unsigned int link_len, const char *link_str, u8 *md5_hash)
-{
-	int rc;
-	struct shash_desc *md5 = NULL;
-
-	rc = cifs_alloc_hash("md5", &md5);
-	if (rc)
-		return rc;
-
-	rc = crypto_shash_digest(md5, link_str, link_len, md5_hash);
-	if (rc)
-		cifs_dbg(VFS, "%s: Could not generate md5 hash\n", __func__);
-	cifs_free_hash(&md5);
-	return rc;
-}
-
-static int
 parse_mf_symlink(const u8 *buf, unsigned int buf_len, unsigned int *_link_len,
 		 char **_link_str)
 {
@@ -77,11 +61,7 @@ parse_mf_symlink(const u8 *buf, unsigned int buf_len, unsigned int *_link_len,
 	if (link_len > CIFS_MF_SYMLINK_LINK_MAXLEN)
 		return -EINVAL;
 
-	rc = symlink_hash(link_len, link_str, md5_hash);
-	if (rc) {
-		cifs_dbg(FYI, "%s: MD5 hash failure: %d\n", __func__, rc);
-		return rc;
-	}
+	md5(link_str, link_len, md5_hash);
 
 	scnprintf(md5_str2, sizeof(md5_str2),
 		  CIFS_MF_SYMLINK_MD5_FORMAT,
@@ -103,7 +83,6 @@ parse_mf_symlink(const u8 *buf, unsigned int buf_len, unsigned int *_link_len,
 static int
 format_mf_symlink(u8 *buf, unsigned int buf_len, const char *link_str)
 {
-	int rc;
 	unsigned int link_len;
 	unsigned int ofs;
 	u8 md5_hash[16];
@@ -116,11 +95,7 @@ format_mf_symlink(u8 *buf, unsigned int buf_len, const char *link_str)
 	if (link_len > CIFS_MF_SYMLINK_LINK_MAXLEN)
 		return -ENAMETOOLONG;
 
-	rc = symlink_hash(link_len, link_str, md5_hash);
-	if (rc) {
-		cifs_dbg(FYI, "%s: MD5 hash failure: %d\n", __func__, rc);
-		return rc;
-	}
+	md5(link_str, link_len, md5_hash);
 
 	scnprintf(buf, buf_len,
 		  CIFS_MF_SYMLINK_LEN_FORMAT CIFS_MF_SYMLINK_MD5_FORMAT,
@@ -185,7 +160,8 @@ create_mf_symlink(const unsigned int xid, struct cifs_tcon *tcon,
 		goto out;
 
 	if (bytes_written != CIFS_MF_SYMLINK_FILE_SIZE)
-		rc = -EIO;
+		rc = smb_EIO2(smb_eio_trace_symlink_file_size,
+			      bytes_written, CIFS_MF_SYMLINK_FILE_SIZE);
 out:
 	kfree(buf);
 	return rc;
@@ -449,7 +425,8 @@ smb3_create_mf_symlink(unsigned int xid, struct cifs_tcon *tcon,
 
 	/* Make sure we wrote all of the symlink data */
 	if ((rc == 0) && (*pbytes_written != CIFS_MF_SYMLINK_FILE_SIZE))
-		rc = -EIO;
+		rc = smb_EIO2(smb_eio_trace_short_symlink_write,
+			      *pbytes_written, CIFS_MF_SYMLINK_FILE_SIZE);
 
 	SMB2_close(xid, tcon, fid.persistent_fid, fid.volatile_fid);
 
@@ -476,7 +453,7 @@ cifs_hardlink(struct dentry *old_file, struct inode *inode,
 	struct cifsInodeInfo *cifsInode;
 
 	if (unlikely(cifs_forced_shutdown(cifs_sb)))
-		return -EIO;
+		return smb_EIO(smb_eio_trace_forced_shutdown);
 
 	tlink = cifs_sb_tlink(cifs_sb);
 	if (IS_ERR(tlink))
@@ -578,7 +555,7 @@ cifs_symlink(struct mnt_idmap *idmap, struct inode *inode,
 	struct inode *newinode = NULL;
 
 	if (unlikely(cifs_forced_shutdown(cifs_sb)))
-		return -EIO;
+		return smb_EIO(smb_eio_trace_forced_shutdown);
 
 	page = alloc_dentry_path();
 	if (!page)

@@ -12,6 +12,7 @@ use crate::{
     sync::aref::ARef,
     transmute::{AsBytes, FromBytes},
 };
+use core::ptr::NonNull;
 
 /// DMA address type.
 ///
@@ -26,8 +27,9 @@ pub type DmaAddress = bindings::dma_addr_t;
 /// Trait to be implemented by DMA capable bus devices.
 ///
 /// The [`dma::Device`](Device) trait should be implemented by bus specific device representations,
-/// where the underlying bus is DMA capable, such as [`pci::Device`](::kernel::pci::Device) or
-/// [`platform::Device`](::kernel::platform::Device).
+/// where the underlying bus is DMA capable, such as:
+#[cfg_attr(CONFIG_PCI, doc = "* [`pci::Device`](kernel::pci::Device)")]
+/// * [`platform::Device`](::kernel::platform::Device)
 pub trait Device: AsRef<device::Device<Core>> {
     /// Set up the device's DMA streaming addressing capabilities.
     ///
@@ -358,7 +360,7 @@ pub struct CoherentAllocation<T: AsBytes + FromBytes> {
     dev: ARef<device::Device>,
     dma_handle: DmaAddress,
     count: usize,
-    cpu_addr: *mut T,
+    cpu_addr: NonNull<T>,
     dma_attrs: Attrs,
 }
 
@@ -392,7 +394,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
             .ok_or(EOVERFLOW)?;
         let mut dma_handle = 0;
         // SAFETY: Device pointer is guaranteed as valid by the type invariant on `Device`.
-        let ret = unsafe {
+        let addr = unsafe {
             bindings::dma_alloc_attrs(
                 dev.as_raw(),
                 size,
@@ -401,9 +403,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
                 dma_attrs.as_raw(),
             )
         };
-        if ret.is_null() {
-            return Err(ENOMEM);
-        }
+        let addr = NonNull::new(addr).ok_or(ENOMEM)?;
         // INVARIANT:
         // - We just successfully allocated a coherent region which is accessible for
         //   `count` elements, hence the cpu address is valid. We also hold a refcounted reference
@@ -414,7 +414,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
             dev: dev.into(),
             dma_handle,
             count,
-            cpu_addr: ret.cast::<T>(),
+            cpu_addr: addr.cast(),
             dma_attrs,
         })
     }
@@ -446,13 +446,13 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
 
     /// Returns the base address to the allocated region in the CPU's virtual address space.
     pub fn start_ptr(&self) -> *const T {
-        self.cpu_addr
+        self.cpu_addr.as_ptr()
     }
 
     /// Returns the base address to the allocated region in the CPU's virtual address space as
     /// a mutable pointer.
     pub fn start_ptr_mut(&mut self) -> *mut T {
-        self.cpu_addr
+        self.cpu_addr.as_ptr()
     }
 
     /// Returns a DMA handle which may be given to the device as the DMA address base of
@@ -505,7 +505,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
         //   data is also guaranteed by the safety requirements of the function.
         // - `offset + count` can't overflow since it is smaller than `self.count` and we've checked
         //   that `self.count` won't overflow early in the constructor.
-        Ok(unsafe { core::slice::from_raw_parts(self.cpu_addr.add(offset), count) })
+        Ok(unsafe { core::slice::from_raw_parts(self.start_ptr().add(offset), count) })
     }
 
     /// Performs the same functionality as [`CoherentAllocation::as_slice`], except that a mutable
@@ -525,7 +525,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
         //   data is also guaranteed by the safety requirements of the function.
         // - `offset + count` can't overflow since it is smaller than `self.count` and we've checked
         //   that `self.count` won't overflow early in the constructor.
-        Ok(unsafe { core::slice::from_raw_parts_mut(self.cpu_addr.add(offset), count) })
+        Ok(unsafe { core::slice::from_raw_parts_mut(self.start_ptr_mut().add(offset), count) })
     }
 
     /// Writes data to the region starting from `offset`. `offset` is in units of `T`, not the
@@ -533,8 +533,6 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
     ///
     /// # Safety
     ///
-    /// * Callers must ensure that the device does not read/write to/from memory while the returned
-    ///   slice is live.
     /// * Callers must ensure that this call does not race with a read or write to the same region
     ///   that overlaps with this write.
     ///
@@ -557,7 +555,11 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
         // - `offset + count` can't overflow since it is smaller than `self.count` and we've checked
         //   that `self.count` won't overflow early in the constructor.
         unsafe {
-            core::ptr::copy_nonoverlapping(src.as_ptr(), self.cpu_addr.add(offset), src.len())
+            core::ptr::copy_nonoverlapping(
+                src.as_ptr(),
+                self.start_ptr_mut().add(offset),
+                src.len(),
+            )
         };
         Ok(())
     }
@@ -576,7 +578,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
         // and we've just checked that the range and index is within bounds.
         // - `offset` can't overflow since it is smaller than `self.count` and we've checked
         // that `self.count` won't overflow early in the constructor.
-        Ok(unsafe { self.cpu_addr.add(offset) })
+        Ok(unsafe { self.cpu_addr.as_ptr().add(offset) })
     }
 
     /// Reads the value of `field` and ensures that its type is [`FromBytes`].
@@ -637,7 +639,7 @@ impl<T: AsBytes + FromBytes> Drop for CoherentAllocation<T> {
             bindings::dma_free_attrs(
                 self.dev.as_raw(),
                 size,
-                self.cpu_addr.cast(),
+                self.start_ptr_mut().cast(),
                 self.dma_handle,
                 self.dma_attrs.as_raw(),
             )

@@ -54,6 +54,7 @@
 #define KVM_REQ_NESTED_S2_UNMAP		KVM_ARCH_REQ(8)
 #define KVM_REQ_GUEST_HYP_IRQ_PENDING	KVM_ARCH_REQ(9)
 #define KVM_REQ_MAP_L1_VNCR_EL2		KVM_ARCH_REQ(10)
+#define KVM_REQ_VGIC_PROCESS_UPDATE	KVM_ARCH_REQ(11)
 
 #define KVM_DIRTY_LOG_MANUAL_CAPS   (KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE | \
 				     KVM_DIRTY_LOG_INITIALLY_SET)
@@ -350,6 +351,8 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_GUEST_HAS_SVE			9
 	/* MIDR_EL1, REVIDR_EL1, and AIDR_EL1 are writable from userspace */
 #define KVM_ARCH_FLAG_WRITABLE_IMP_ID_REGS		10
+	/* Unhandled SEAs are taken to userspace */
+#define KVM_ARCH_FLAG_EXIT_SEA				11
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
@@ -815,6 +818,11 @@ struct kvm_vcpu_arch {
 	u64 hcr_el2;
 	u64 hcrx_el2;
 	u64 mdcr_el2;
+
+	struct {
+		u64 r;
+		u64 w;
+	} fgt[__NR_FGT_GROUP_IDS__];
 
 	/* Exception Information */
 	struct kvm_vcpu_fault_info fault;
@@ -1600,6 +1608,51 @@ static inline bool kvm_arch_has_irq_bypass(void)
 void compute_fgu(struct kvm *kvm, enum fgt_group_id fgt);
 void get_reg_fixed_bits(struct kvm *kvm, enum vcpu_sysreg reg, u64 *res0, u64 *res1);
 void check_feature_map(void);
+void kvm_vcpu_load_fgt(struct kvm_vcpu *vcpu);
 
+static __always_inline enum fgt_group_id __fgt_reg_to_group_id(enum vcpu_sysreg reg)
+{
+	switch (reg) {
+	case HFGRTR_EL2:
+	case HFGWTR_EL2:
+		return HFGRTR_GROUP;
+	case HFGITR_EL2:
+		return HFGITR_GROUP;
+	case HDFGRTR_EL2:
+	case HDFGWTR_EL2:
+		return HDFGRTR_GROUP;
+	case HAFGRTR_EL2:
+		return HAFGRTR_GROUP;
+	case HFGRTR2_EL2:
+	case HFGWTR2_EL2:
+		return HFGRTR2_GROUP;
+	case HFGITR2_EL2:
+		return HFGITR2_GROUP;
+	case HDFGRTR2_EL2:
+	case HDFGWTR2_EL2:
+		return HDFGRTR2_GROUP;
+	default:
+		BUILD_BUG_ON(1);
+	}
+}
+
+#define vcpu_fgt(vcpu, reg)						\
+	({								\
+		enum fgt_group_id id = __fgt_reg_to_group_id(reg);	\
+		u64 *p;							\
+		switch (reg) {						\
+		case HFGWTR_EL2:					\
+		case HDFGWTR_EL2:					\
+		case HFGWTR2_EL2:					\
+		case HDFGWTR2_EL2:					\
+			p = &(vcpu)->arch.fgt[id].w;			\
+			break;						\
+		default:						\
+			p = &(vcpu)->arch.fgt[id].r;			\
+			break;						\
+		}							\
+									\
+		p;							\
+	})
 
 #endif /* __ARM64_KVM_HOST_H__ */

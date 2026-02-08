@@ -117,9 +117,6 @@ struct kvm_sev_info {
 	cpumask_var_t have_run_cpus; /* CPUs that have done VMRUN for this VM. */
 };
 
-#define SEV_POLICY_NODBG	BIT_ULL(0)
-#define SNP_POLICY_DEBUG	BIT_ULL(19)
-
 struct kvm_svm {
 	struct kvm kvm;
 
@@ -329,13 +326,14 @@ struct vcpu_svm {
 	 * back into remapped mode).
 	 */
 	struct list_head ir_list;
-	spinlock_t ir_list_lock;
+	raw_spinlock_t ir_list_lock;
 
 	struct vcpu_sev_es_state sev_es;
 
 	bool guest_state_loaded;
 
 	bool x2avic_msrs_intercepted;
+	bool lbr_msrs_intercepted;
 
 	/* Guest GIF value, used when vGIF is not enabled */
 	bool guest_gif;
@@ -763,9 +761,10 @@ int nested_svm_vmexit(struct vcpu_svm *svm);
 
 static inline int nested_svm_simple_vmexit(struct vcpu_svm *svm, u32 exit_code)
 {
-	svm->vmcb->control.exit_code   = exit_code;
-	svm->vmcb->control.exit_info_1 = 0;
-	svm->vmcb->control.exit_info_2 = 0;
+	svm->vmcb->control.exit_code	= exit_code;
+	svm->vmcb->control.exit_code_hi	= 0;
+	svm->vmcb->control.exit_info_1	= 0;
+	svm->vmcb->control.exit_info_2	= 0;
 	return nested_svm_vmexit(svm);
 }
 
@@ -805,7 +804,8 @@ extern struct kvm_x86_nested_ops svm_nested_ops;
 )
 
 bool __init avic_hardware_setup(void);
-int avic_ga_log_notifier(u32 ga_tag);
+void avic_hardware_unsetup(void);
+int avic_alloc_physical_id_table(struct kvm *kvm);
 void avic_vm_destroy(struct kvm *kvm);
 int avic_vm_init(struct kvm *kvm);
 void avic_init_vmcb(struct vcpu_svm *svm, struct vmcb *vmcb);

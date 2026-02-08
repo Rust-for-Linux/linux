@@ -1413,15 +1413,18 @@ static int __mlx5_lag_dev_add_mdev(struct mlx5_core_dev *dev)
 static void mlx5_lag_unregister_hca_devcom_comp(struct mlx5_core_dev *dev)
 {
 	mlx5_devcom_unregister_component(dev->priv.hca_devcom_comp);
+	dev->priv.hca_devcom_comp = NULL;
 }
 
 static int mlx5_lag_register_hca_devcom_comp(struct mlx5_core_dev *dev)
 {
 	struct mlx5_devcom_match_attr attr = {
-		.key.val = mlx5_query_nic_system_image_guid(dev),
 		.flags = MLX5_DEVCOM_MATCH_FLAGS_NS,
 		.net = mlx5_core_net(dev),
 	};
+	u8 len __always_unused;
+
+	mlx5_query_nic_sw_system_image_guid(dev, attr.key.buf, &len);
 
 	/* This component is use to sync adding core_dev to lag_dev and to sync
 	 * changes of mlx5_adev_devices between LAG layer and other layers.
@@ -1430,11 +1433,10 @@ static int mlx5_lag_register_hca_devcom_comp(struct mlx5_core_dev *dev)
 		mlx5_devcom_register_component(dev->priv.devc,
 					       MLX5_DEVCOM_HCA_PORTS,
 					       &attr, NULL, dev);
-	if (IS_ERR(dev->priv.hca_devcom_comp)) {
+	if (!dev->priv.hca_devcom_comp) {
 		mlx5_core_err(dev,
-			      "Failed to register devcom HCA component, err: %ld\n",
-			      PTR_ERR(dev->priv.hca_devcom_comp));
-		return PTR_ERR(dev->priv.hca_devcom_comp);
+			      "Failed to register devcom HCA component.");
+		return -EINVAL;
 	}
 
 	return 0;

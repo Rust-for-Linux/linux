@@ -12,6 +12,7 @@
 #include <linux/task_work.h>
 #include <linux/mmu_notifier.h>
 #include <linux/mmu_context.h>
+#include <linux/kvm_types.h>
 
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>
@@ -911,11 +912,31 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 		 * CR3 and cpu_tlbstate.loaded_mm are not all in sync.
 		 */
 		this_cpu_write(cpu_tlbstate.loaded_mm, LOADED_MM_SWITCHING);
-		barrier();
 
-		/* Start receiving IPIs and then read tlb_gen (and LAM below) */
+		/*
+		 * Make sure this CPU is set in mm_cpumask() such that we'll
+		 * receive invalidation IPIs.
+		 *
+		 * Rely on the smp_mb() implied by cpumask_set_cpu()'s atomic
+		 * operation, or explicitly provide one. Such that:
+		 *
+		 * switch_mm_irqs_off()				flush_tlb_mm_range()
+		 *   smp_store_release(loaded_mm, SWITCHING);     atomic64_inc_return(tlb_gen)
+		 *   smp_mb(); // here                            // smp_mb() implied
+		 *   atomic64_read(tlb_gen);                      this_cpu_read(loaded_mm);
+		 *
+		 * we properly order against flush_tlb_mm_range(), where the
+		 * loaded_mm load can happen in mative_flush_tlb_multi() ->
+		 * should_flush_tlb().
+		 *
+		 * This way switch_mm() must see the new tlb_gen or
+		 * flush_tlb_mm_range() must see the new loaded_mm, or both.
+		 */
 		if (next != &init_mm && !cpumask_test_cpu(cpu, mm_cpumask(next)))
 			cpumask_set_cpu(cpu, mm_cpumask(next));
+		else
+			smp_mb();
+
 		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
 
 		ns = choose_new_asid(next, next_tlb_gen);
@@ -1562,7 +1583,7 @@ unsigned long __get_current_cr3_fast(void)
 	VM_BUG_ON(cr3 != __read_cr3());
 	return cr3;
 }
-EXPORT_SYMBOL_GPL(__get_current_cr3_fast);
+EXPORT_SYMBOL_FOR_KVM(__get_current_cr3_fast);
 
 /*
  * Flush one page in the kernel mapping
@@ -1703,7 +1724,7 @@ void __flush_tlb_all(void)
 		flush_tlb_local();
 	}
 }
-EXPORT_SYMBOL_GPL(__flush_tlb_all);
+EXPORT_SYMBOL_FOR_KVM(__flush_tlb_all);
 
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 {

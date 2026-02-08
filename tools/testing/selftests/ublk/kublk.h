@@ -175,23 +175,20 @@ struct ublk_queue {
 
 struct ublk_thread {
 	struct ublk_dev *dev;
-	struct io_uring ring;
-	unsigned int cmd_inflight;
-	unsigned int io_inflight;
-
-	pthread_t thread;
 	unsigned idx;
 
 #define UBLKS_T_STOPPING	(1U << 0)
 #define UBLKS_T_IDLE	(1U << 1)
 	unsigned state;
+	unsigned int cmd_inflight;
+	unsigned int io_inflight;
+	struct io_uring ring;
 };
 
 struct ublk_dev {
 	struct ublk_tgt tgt;
 	struct ublksrv_ctrl_dev_info  dev_info;
 	struct ublk_queue q[UBLK_MAX_QUEUES];
-	struct ublk_thread threads[UBLK_MAX_THREADS];
 	unsigned nthreads;
 	unsigned per_io_tasks;
 
@@ -209,6 +206,12 @@ extern int ublk_queue_io_cmd(struct ublk_thread *t, struct ublk_io *io);
 static inline int ublk_io_auto_zc_fallback(const struct ublksrv_io_desc *iod)
 {
 	return !!(iod->op_flags & UBLK_IO_F_NEED_REG_BUF);
+}
+
+static inline __u64 ublk_user_copy_offset(unsigned q_id, unsigned tag)
+{
+	return UBLKSRV_IO_BUF_OFFSET +
+	       ((__u64)q_id << UBLK_QID_OFF | (__u64)tag << UBLK_TAG_OFF);
 }
 
 static inline int is_target_io(__u64 user_data)
@@ -393,19 +396,24 @@ static inline int ublk_completed_tgt_io(struct ublk_thread *t,
 	return --io->tgt_ios == 0;
 }
 
-static inline int ublk_queue_use_zc(const struct ublk_queue *q)
+static inline bool ublk_queue_use_zc(const struct ublk_queue *q)
 {
-	return q->flags & UBLK_F_SUPPORT_ZERO_COPY;
+	return !!(q->flags & UBLK_F_SUPPORT_ZERO_COPY);
 }
 
-static inline int ublk_queue_use_auto_zc(const struct ublk_queue *q)
+static inline bool ublk_queue_use_auto_zc(const struct ublk_queue *q)
 {
-	return q->flags & UBLK_F_AUTO_BUF_REG;
+	return !!(q->flags & UBLK_F_AUTO_BUF_REG);
 }
 
-static inline int ublk_queue_auto_zc_fallback(const struct ublk_queue *q)
+static inline bool ublk_queue_auto_zc_fallback(const struct ublk_queue *q)
 {
-	return q->flags & UBLKS_Q_AUTO_BUF_REG_FALLBACK;
+	return !!(q->flags & UBLKS_Q_AUTO_BUF_REG_FALLBACK);
+}
+
+static inline bool ublk_queue_use_user_copy(const struct ublk_queue *q)
+{
+	return !!(q->flags & UBLK_F_USER_COPY);
 }
 
 static inline int ublk_queue_no_buf(const struct ublk_queue *q)

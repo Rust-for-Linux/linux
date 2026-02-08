@@ -17,7 +17,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "../kselftest_harness.h"
+#include "kselftest_harness.h"
 #include "wrappers.h"
 
 #define TMP_DIR "tmp"
@@ -237,6 +237,7 @@ struct service_fixture {
 			struct sockaddr_un unix_addr;
 			socklen_t unix_addr_len;
 		};
+		struct sockaddr_storage _largest;
 	};
 };
 

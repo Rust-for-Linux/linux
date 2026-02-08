@@ -32,6 +32,8 @@
 #include "ioctl.h"
 #include "relocation.h"
 #include "scrub.h"
+#include "ordered-data.h"
+#include "delayed-inode.h"
 
 static struct kmem_cache *btrfs_trans_handle_cachep;
 
@@ -138,7 +140,6 @@ static const unsigned int btrfs_blocked_trans_types[TRANS_STATE_MAX] = {
 
 void btrfs_put_transaction(struct btrfs_transaction *transaction)
 {
-	WARN_ON(refcount_read(&transaction->use_count) == 0);
 	if (refcount_dec_and_test(&transaction->use_count)) {
 		BUG_ON(!list_empty(&transaction->list));
 		WARN_ON(!xa_empty(&transaction->delayed_refs.head_refs));
@@ -185,7 +186,8 @@ static noinline void switch_commit_roots(struct btrfs_trans_handle *trans)
 	 * At this point no one can be using this transaction to modify any tree
 	 * and no one can start another transaction to modify any tree either.
 	 */
-	ASSERT(cur_trans->state == TRANS_STATE_COMMIT_DOING);
+	ASSERT(cur_trans->state == TRANS_STATE_COMMIT_DOING,
+	       "cur_trans->state=%d", cur_trans->state);
 
 	down_write(&fs_info->commit_root_sem);
 
@@ -518,13 +520,14 @@ static inline int is_transaction_blocked(struct btrfs_transaction *trans)
  * when this is done, it is safe to start a new transaction, but the current
  * transaction might not be fully on disk.
  */
-static void wait_current_trans(struct btrfs_fs_info *fs_info)
+static void wait_current_trans(struct btrfs_fs_info *fs_info, unsigned int type)
 {
 	struct btrfs_transaction *cur_trans;
 
 	spin_lock(&fs_info->trans_lock);
 	cur_trans = fs_info->running_transaction;
-	if (cur_trans && is_transaction_blocked(cur_trans)) {
+	if (cur_trans && is_transaction_blocked(cur_trans) &&
+	    (btrfs_blocked_trans_types[cur_trans->state] & type)) {
 		refcount_inc(&cur_trans->use_count);
 		spin_unlock(&fs_info->trans_lock);
 
@@ -575,7 +578,7 @@ static int btrfs_reserve_trans_metadata(struct btrfs_fs_info *fs_info,
 	 * We want to reserve all the bytes we may need all at once, so we only
 	 * do 1 enospc flushing cycle per transaction start.
 	 */
-	ret = btrfs_reserve_metadata_bytes(fs_info, si, bytes, flush);
+	ret = btrfs_reserve_metadata_bytes(si, bytes, flush);
 
 	/*
 	 * If we are an emergency flush, which can steal from the global block
@@ -585,7 +588,7 @@ static int btrfs_reserve_trans_metadata(struct btrfs_fs_info *fs_info,
 	if (ret && flush == BTRFS_RESERVE_FLUSH_ALL_STEAL) {
 		bytes -= *delayed_refs_bytes;
 		*delayed_refs_bytes = 0;
-		ret = btrfs_reserve_metadata_bytes(fs_info, si, bytes, flush);
+		ret = btrfs_reserve_metadata_bytes(si, bytes, flush);
 	}
 
 	return ret;
@@ -699,12 +702,12 @@ again:
 		sb_start_intwrite(fs_info->sb);
 
 	if (may_wait_transaction(fs_info, type))
-		wait_current_trans(fs_info);
+		wait_current_trans(fs_info, type);
 
 	do {
 		ret = join_transaction(fs_info, type);
 		if (ret == -EBUSY) {
-			wait_current_trans(fs_info);
+			wait_current_trans(fs_info, type);
 			if (unlikely(type == TRANS_ATTACH ||
 				     type == TRANS_JOIN_NOSTART))
 				ret = -ENOENT;
@@ -1001,7 +1004,7 @@ out:
 
 void btrfs_throttle(struct btrfs_fs_info *fs_info)
 {
-	wait_current_trans(fs_info);
+	wait_current_trans(fs_info, TRANS_START);
 }
 
 bool btrfs_should_end_transaction(struct btrfs_trans_handle *trans)
@@ -1024,13 +1027,18 @@ static void btrfs_trans_release_metadata(struct btrfs_trans_handle *trans)
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 
 	if (!trans->block_rsv) {
-		ASSERT(!trans->bytes_reserved);
-		ASSERT(!trans->delayed_refs_bytes_reserved);
+		ASSERT(trans->bytes_reserved == 0,
+		       "trans->bytes_reserved=%llu", trans->bytes_reserved);
+		ASSERT(trans->delayed_refs_bytes_reserved == 0,
+		       "trans->delayed_refs_bytes_reserved=%llu",
+		       trans->delayed_refs_bytes_reserved);
 		return;
 	}
 
 	if (!trans->bytes_reserved) {
-		ASSERT(!trans->delayed_refs_bytes_reserved);
+		ASSERT(trans->delayed_refs_bytes_reserved == 0,
+		       "trans->delayed_refs_bytes_reserved=%llu",
+		       trans->delayed_refs_bytes_reserved);
 		return;
 	}
 
@@ -1229,7 +1237,8 @@ int btrfs_wait_tree_log_extents(struct btrfs_root *log_root, int mark)
 	bool errors = false;
 	int ret;
 
-	ASSERT(btrfs_root_id(log_root) == BTRFS_TREE_LOG_OBJECTID);
+	ASSERT(btrfs_root_id(log_root) == BTRFS_TREE_LOG_OBJECTID,
+	       "root_id(log_root)=%llu", btrfs_root_id(log_root));
 
 	ret = __btrfs_wait_marked_extents(fs_info, dirty_pages);
 	if ((mark & EXTENT_DIRTY_LOG1) &&
@@ -1334,7 +1343,8 @@ static noinline int commit_cowonly_roots(struct btrfs_trans_handle *trans)
 	 * At this point no one can be using this transaction to modify any tree
 	 * and no one can start another transaction to modify any tree either.
 	 */
-	ASSERT(trans->transaction->state == TRANS_STATE_COMMIT_DOING);
+	ASSERT(trans->transaction->state == TRANS_STATE_COMMIT_DOING,
+	       "trans->transaction->state=%d", trans->transaction->state);
 
 	eb = btrfs_lock_root_node(fs_info->tree_root);
 	ret = btrfs_cow_block(trans, fs_info->tree_root, eb, NULL,
@@ -1468,7 +1478,8 @@ static noinline int commit_fs_roots(struct btrfs_trans_handle *trans)
 	 * At this point no one can be using this transaction to modify any tree
 	 * and no one can start another transaction to modify any tree either.
 	 */
-	ASSERT(trans->transaction->state == TRANS_STATE_COMMIT_DOING);
+	ASSERT(trans->transaction->state == TRANS_STATE_COMMIT_DOING,
+	       "trans->transaction->state=%d", trans->transaction->state);
 
 	spin_lock(&fs_info->fs_roots_radix_lock);
 	while (1) {
@@ -1486,9 +1497,15 @@ static noinline int commit_fs_roots(struct btrfs_trans_handle *trans)
 			 * At this point we can neither have tasks logging inodes
 			 * from a root nor trying to commit a log tree.
 			 */
-			ASSERT(atomic_read(&root->log_writers) == 0);
-			ASSERT(atomic_read(&root->log_commit[0]) == 0);
-			ASSERT(atomic_read(&root->log_commit[1]) == 0);
+			ASSERT(atomic_read(&root->log_writers) == 0,
+			       "atomic_read(&root->log_writers)=%d",
+			       atomic_read(&root->log_writers));
+			ASSERT(atomic_read(&root->log_commit[0]) == 0,
+			       "atomic_read(&root->log_commit[0])=%d",
+			       atomic_read(&root->log_commit[0]));
+			ASSERT(atomic_read(&root->log_commit[1]) == 0,
+			       "atomic_read(&root->log_commit[1])=%d",
+			       atomic_read(&root->log_commit[1]));
 
 			radix_tree_tag_clear(&fs_info->fs_roots_radix,
 					(unsigned long)btrfs_root_id(root),
@@ -2157,7 +2174,8 @@ static void add_pending_snapshot(struct btrfs_trans_handle *trans)
 		return;
 
 	lockdep_assert_held(&trans->fs_info->trans_lock);
-	ASSERT(cur_trans->state >= TRANS_STATE_COMMIT_PREP);
+	ASSERT(cur_trans->state >= TRANS_STATE_COMMIT_PREP,
+	       "cur_trans->state=%d", cur_trans->state);
 
 	list_add(&trans->pending_snapshot->list, &cur_trans->pending_snapshots);
 }
@@ -2184,7 +2202,8 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	struct btrfs_transaction *prev_trans = NULL;
 	int ret;
 
-	ASSERT(refcount_read(&trans->use_count) == 1);
+	ASSERT(refcount_read(&trans->use_count) == 1,
+	       "refcount_read(&trans->use_count)=%d", refcount_read(&trans->use_count));
 	btrfs_trans_state_lockdep_acquire(fs_info, BTRFS_LOCKDEP_TRANS_COMMIT_PREP);
 
 	clear_bit(BTRFS_FS_NEED_TRANS_COMMIT, &fs_info->flags);

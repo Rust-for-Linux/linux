@@ -30,6 +30,11 @@
 static unsigned nfs_delegation_watermark = NFS_DEFAULT_DELEGATION_WATERMARK;
 module_param_named(delegation_watermark, nfs_delegation_watermark, uint, 0644);
 
+bool directory_delegations = true;
+module_param(directory_delegations, bool, 0644);
+MODULE_PARM_DESC(directory_delegations,
+		 "Enable the use of directory delegations, defaults to on.");
+
 static struct hlist_head *nfs_delegation_hash(struct nfs_server *server,
 		const struct nfs_fh *fhandle)
 {
@@ -143,6 +148,8 @@ static int nfs4_do_check_delegation(struct inode *inode, fmode_t type,
  */
 int nfs4_have_delegation(struct inode *inode, fmode_t type, int flags)
 {
+	if (S_ISDIR(inode->i_mode) && !directory_delegations)
+		nfs4_inode_set_return_delegation_on_close(inode);
 	return nfs4_do_check_delegation(inode, type, flags, true);
 }
 
@@ -379,6 +386,7 @@ nfs_detach_delegation_locked(struct nfs_inode *nfsi,
 	delegation->inode = NULL;
 	rcu_assign_pointer(nfsi->delegation, NULL);
 	spin_unlock(&delegation->lock);
+	clear_bit(NFS_INO_REQ_DIR_DELEG, &nfsi->flags);
 	return delegation;
 }
 
@@ -573,6 +581,10 @@ static int nfs_end_delegation_return(struct inode *inode, struct nfs_delegation 
 	if (delegation == NULL)
 		return 0;
 
+	/* Directory delegations don't require any state recovery */
+	if (!S_ISREG(inode->i_mode))
+		goto out_return;
+
 	if (!issync)
 		mode |= O_NONBLOCK;
 	/* Recall of any remaining application leases */
@@ -596,6 +608,7 @@ static int nfs_end_delegation_return(struct inode *inode, struct nfs_delegation 
 		goto out;
 	}
 
+out_return:
 	err = nfs_do_return_delegation(inode, delegation, issync);
 out:
 	/* Refcount matched in nfs_start_delegation_return_locked() */

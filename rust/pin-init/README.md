@@ -9,7 +9,7 @@
 > [!NOTE]
 > 
 > This crate was originally named [`pinned-init`], but the migration to
-> `pin-init` is not yet complete. The `legcay` branch contains the current
+> `pin-init` is not yet complete. The `legacy` branch contains the current
 > version of the `pinned-init` crate & the `main` branch already incorporates
 > the rename to `pin-init`.
 >
@@ -135,7 +135,7 @@ struct DriverData {
 
 impl DriverData {
     fn new() -> impl PinInit<Self, Error> {
-        try_pin_init!(Self {
+        pin_init!(Self {
             status <- CMutex::new(0),
             buffer: Box::init(pin_init::init_zeroed())?,
         }? Error)

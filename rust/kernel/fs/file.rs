@@ -24,6 +24,11 @@ use crate::{
 
 use core::{marker::PhantomData, mem::ManuallyDrop, ptr};
 
+/// Primitive type representing the offset within a [`File`].
+///
+/// Type alias for `bindings::loff_t`.
+pub type Offset = bindings::loff_t;
+
 /// Flags associated with a [`File`].
 pub mod flags {
     /// File is opened in append mode.
@@ -483,9 +488,9 @@ impl Drop for FileDescriptorReservation {
     }
 }
 
-/// Represents the `EBADF` error code.
+/// Represents the [`EBADF`] error code.
 ///
-/// Used for methods that can only fail with `EBADF`.
+/// Used for methods that can only fail with [`EBADF`].
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct BadFdError;
 

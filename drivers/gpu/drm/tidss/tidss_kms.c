@@ -24,13 +24,35 @@ static void tidss_atomic_commit_tail(struct drm_atomic_state *old_state)
 	struct drm_device *ddev = old_state->dev;
 	struct tidss_device *tidss = to_tidss(ddev);
 
-	dev_dbg(ddev->dev, "%s\n", __func__);
-
 	tidss_runtime_get(tidss);
 
-	drm_atomic_helper_commit_modeset_disables(ddev, old_state);
-	drm_atomic_helper_commit_planes(ddev, old_state, DRM_PLANE_COMMIT_ACTIVE_ONLY);
-	drm_atomic_helper_commit_modeset_enables(ddev, old_state);
+	/*
+	 * TI's OLDI and DSI encoders need to be set up before the crtc is
+	 * enabled. Thus drm_atomic_helper_commit_modeset_enables() and
+	 * drm_atomic_helper_commit_modeset_disables() cannot be used here, as
+	 * they enable the crtc before bridges' pre-enable, and disable the crtc
+	 * after bridges' post-disable.
+	 *
+	 * Open code the functions here and first call the bridges' pre-enables,
+	 * then crtc enable, then bridges' post-enable (and vice versa for
+	 * disable).
+	 */
+
+	drm_atomic_helper_commit_encoder_bridge_disable(ddev, old_state);
+	drm_atomic_helper_commit_crtc_disable(ddev, old_state);
+	drm_atomic_helper_commit_encoder_bridge_post_disable(ddev, old_state);
+
+	drm_atomic_helper_update_legacy_modeset_state(ddev, old_state);
+	drm_atomic_helper_calc_timestamping_constants(old_state);
+	drm_atomic_helper_commit_crtc_set_mode(ddev, old_state);
+
+	drm_atomic_helper_commit_planes(ddev, old_state,
+					DRM_PLANE_COMMIT_ACTIVE_ONLY);
+
+	drm_atomic_helper_commit_encoder_bridge_pre_enable(ddev, old_state);
+	drm_atomic_helper_commit_crtc_enable(ddev, old_state);
+	drm_atomic_helper_commit_encoder_bridge_enable(ddev, old_state);
+	drm_atomic_helper_commit_writebacks(ddev, old_state);
 
 	drm_atomic_helper_commit_hw_done(old_state);
 	drm_atomic_helper_wait_for_flip_done(ddev, old_state);
@@ -244,8 +266,6 @@ int tidss_modeset_init(struct tidss_device *tidss)
 {
 	struct drm_device *ddev = &tidss->ddev;
 	int ret;
-
-	dev_dbg(tidss->dev, "%s\n", __func__);
 
 	ret = drmm_mode_config_init(ddev);
 	if (ret)

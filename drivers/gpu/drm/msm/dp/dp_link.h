@@ -12,6 +12,7 @@
 #define DS_PORT_STATUS_CHANGED 0x200
 #define DP_TEST_BIT_DEPTH_UNKNOWN 0xFFFFFFFF
 #define DP_LINK_CAP_ENHANCED_FRAMING (1 << 0)
+#define DP_MAX_NUM_DP_LANES    4
 
 struct msm_dp_link_info {
 	unsigned char revision;
@@ -72,14 +73,18 @@ struct msm_dp_link {
 	struct msm_dp_link_test_audio test_audio;
 	struct msm_dp_link_phy_params phy_params;
 	struct msm_dp_link_info link_params;
+
+	u32 lane_map[DP_MAX_NUM_DP_LANES];
+	u32 max_dp_lanes;
+	u32 max_dp_link_rate;
 };
 
 /**
- * mdss_dp_test_bit_depth_to_bpp() - convert test bit depth to bpp
+ * msm_dp_link_bit_depth_to_bpp() - convert test bit depth to bpp
  * @tbd: test bit depth
  *
- * Returns the bits per pixel (bpp) to be used corresponding to the
- * git bit depth value. This function assumes that bit depth has
+ * Returns: the bits per pixel (bpp) to be used corresponding to the
+ * bit depth value. This function assumes that bit depth has
  * already been validated.
  */
 static inline u32 msm_dp_link_bit_depth_to_bpp(u32 tbd)
@@ -115,7 +120,8 @@ bool msm_dp_link_send_edid_checksum(struct msm_dp_link *msm_dp_link, u8 checksum
 
 /**
  * msm_dp_link_get() - get the functionalities of dp test module
- *
+ * @dev: kernel device structure
+ * @aux: DisplayPort AUX channel
  *
  * return: a pointer to msm_dp_link struct
  */

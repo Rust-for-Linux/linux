@@ -40,6 +40,7 @@
 #define MPTCP_PM_ADDR_FLAG_FULLMESH		_BITUL(3)
 #define MPTCP_PM_ADDR_FLAG_IMPLICIT		_BITUL(4)
 #define MPTCP_PM_ADDR_FLAG_LAMINAR		_BITUL(5)
+#define MPTCP_PM_ADDR_FLAGS_MASK		GENMASK(5, 0)
 
 struct mptcp_info {
 	__u8	mptcpi_subflows;
@@ -70,7 +71,8 @@ struct mptcp_info {
 	__u64	mptcpi_bytes_acked;
 	__u8	mptcpi_subflows_total;
 	__u8	mptcpi_endp_laminar_max;
-	__u8	reserved[2];
+	__u8	mptcpi_endp_fullmesh_max;
+	__u8	reserved;
 	__u32	mptcpi_last_data_sent;
 	__u32	mptcpi_last_data_recv;
 	__u32	mptcpi_last_ack_recv;

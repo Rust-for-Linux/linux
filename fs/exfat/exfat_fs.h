@@ -29,7 +29,6 @@ enum exfat_error_mode {
 enum {
 	NLS_NAME_NO_LOSSY =	0,	/* no lossy */
 	NLS_NAME_LOSSY =	1 << 0,	/* just detected incorrect filename(s) */
-	NLS_NAME_OVERLEN =	1 << 1,	/* the length is over than its limit */
 };
 
 #define EXFAT_HASH_BITS		8
@@ -453,8 +452,9 @@ int exfat_count_num_clusters(struct super_block *sb,
 /* balloc.c */
 int exfat_load_bitmap(struct super_block *sb);
 void exfat_free_bitmap(struct exfat_sb_info *sbi);
-int exfat_set_bitmap(struct inode *inode, unsigned int clu, bool sync);
-int exfat_clear_bitmap(struct inode *inode, unsigned int clu, bool sync);
+int exfat_set_bitmap(struct super_block *sb, unsigned int clu, bool sync);
+int exfat_clear_bitmap(struct super_block *sb, unsigned int clu, bool sync);
+bool exfat_test_bitmap(struct super_block *sb, unsigned int clu);
 unsigned int exfat_find_free_bitmap(struct super_block *sb, unsigned int clu);
 int exfat_count_used_clusters(struct super_block *sb, unsigned int *ret_count);
 int exfat_trim_fs(struct inode *inode, struct fstrim_range *range);

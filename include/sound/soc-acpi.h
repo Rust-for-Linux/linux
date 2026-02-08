@@ -114,8 +114,8 @@ struct snd_soc_acpi_endpoint {
  * @name_prefix: string used for codec controls
  */
 struct snd_soc_acpi_adr_device {
-	const u64 adr;
-	const u8 num_endpoints;
+	u64 adr;
+	u8 num_endpoints;
 	const struct snd_soc_acpi_endpoint *endpoints;
 	const char *name_prefix;
 };
@@ -131,8 +131,8 @@ struct snd_soc_acpi_adr_device {
  */
 
 struct snd_soc_acpi_link_adr {
-	const u32 mask;
-	const u32 num_adr;
+	u32 mask;
+	u32 num_adr;
 	const struct snd_soc_acpi_adr_device *adr_d;
 };
 
@@ -203,6 +203,8 @@ struct snd_soc_acpi_link_adr {
  *	@mach: the pointer of the machine driver
  *	@prefix: the prefix of the topology file name. Typically, it is the path.
  *	@tplg_files: the pointer of the array of the topology file names.
+ *	@best_effort: ignore non supported links and try to build the card in best effort
+ *		      with supported links
  */
 /* Descriptor for SST ASoC machine driver */
 struct snd_soc_acpi_mach {
@@ -224,7 +226,8 @@ struct snd_soc_acpi_mach {
 	const u32 tplg_quirk_mask;
 	int (*get_function_tplg_files)(struct snd_soc_card *card,
 				       const struct snd_soc_acpi_mach *mach,
-				       const char *prefix, const char ***tplg_files);
+				       const char *prefix, const char ***tplg_files,
+				       bool best_effort);
 };
 
 #define SND_SOC_ACPI_MAX_CODECS 3

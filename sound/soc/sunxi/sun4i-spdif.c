@@ -171,12 +171,15 @@
  * @reg_dac_txdata: TX FIFO offset for DMA config.
  * @has_reset: SoC needs reset deasserted.
  * @val_fctl_ftx: TX FIFO flush bitmask.
+ * @mclk_multiplier: ratio of internal MCLK divider
+ * @tx_clk_name: name of TX module clock if split clock design
  */
 struct sun4i_spdif_quirks {
 	unsigned int reg_dac_txdata;
 	bool has_reset;
 	unsigned int val_fctl_ftx;
 	unsigned int mclk_multiplier;
+	const char *tx_clk_name;
 };
 
 struct sun4i_spdif_dev {
@@ -572,6 +575,14 @@ static const struct sun4i_spdif_quirks sun50i_h6_spdif_quirks = {
 	.mclk_multiplier = 1,
 };
 
+static const struct sun4i_spdif_quirks sun55i_a523_spdif_quirks = {
+	.reg_dac_txdata = SUN8I_SPDIF_TXFIFO,
+	.val_fctl_ftx   = SUN50I_H6_SPDIF_FCTL_FTX,
+	.has_reset      = true,
+	.mclk_multiplier = 1,
+	.tx_clk_name	= "tx",
+};
+
 static const struct of_device_id sun4i_spdif_of_match[] = {
 	{
 		.compatible = "allwinner,sun4i-a10-spdif",
@@ -593,6 +604,15 @@ static const struct of_device_id sun4i_spdif_of_match[] = {
 		.compatible = "allwinner,sun50i-h616-spdif",
 		/* Essentially the same as the H6, but without RX */
 		.data = &sun50i_h6_spdif_quirks,
+	},
+	{
+		.compatible = "allwinner,sun55i-a523-spdif",
+		/*
+		 * Almost the same as H6, but has split the TX and RX clocks,
+		 * has a separate reset bit for the RX side, and has some
+		 * expanded features for the RX side.
+		 */
+		.data = &sun55i_a523_spdif_quirks,
 	},
 	{ /* sentinel */ }
 };
@@ -635,6 +655,7 @@ static int sun4i_spdif_probe(struct platform_device *pdev)
 	const struct sun4i_spdif_quirks *quirks;
 	int ret;
 	void __iomem *base;
+	const char *tx_clk_name = "spdif";
 
 	dev_dbg(&pdev->dev, "Entered %s\n", __func__);
 
@@ -671,9 +692,12 @@ static int sun4i_spdif_probe(struct platform_device *pdev)
 		return PTR_ERR(host->apb_clk);
 	}
 
-	host->spdif_clk = devm_clk_get(&pdev->dev, "spdif");
+	if (quirks->tx_clk_name)
+		tx_clk_name = quirks->tx_clk_name;
+	host->spdif_clk = devm_clk_get(&pdev->dev, tx_clk_name);
 	if (IS_ERR(host->spdif_clk)) {
-		dev_err(&pdev->dev, "failed to get a spdif clock.\n");
+		dev_err(&pdev->dev, "failed to get the \"%s\" clock.\n",
+			tx_clk_name);
 		return PTR_ERR(host->spdif_clk);
 	}
 

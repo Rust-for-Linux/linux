@@ -73,7 +73,11 @@ struct mm_struct efi_mm = {
 	MMAP_LOCK_INITIALIZER(efi_mm)
 	.page_table_lock	= __SPIN_LOCK_UNLOCKED(efi_mm.page_table_lock),
 	.mmlist			= LIST_HEAD_INIT(efi_mm.mmlist),
+	.user_ns		= &init_user_ns,
 	.cpu_bitmap		= { [BITS_TO_LONGS(NR_CPUS)] = 0},
+#ifdef CONFIG_SCHED_MM_CID
+	.mm_cid.lock		= __RAW_SPIN_LOCK_UNLOCKED(efi_mm.mm_cid.lock),
+#endif
 };
 
 struct workqueue_struct *efi_rts_wq;
@@ -815,6 +819,7 @@ int __init efi_config_parse_tables(const efi_config_table_t *config_tables,
 		if (tbl) {
 			phys_initrd_start = tbl->base;
 			phys_initrd_size = tbl->size;
+			tbl->base = tbl->size = 0;
 			early_memunmap(tbl, sizeof(*tbl));
 		}
 	}

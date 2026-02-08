@@ -241,6 +241,12 @@ A few EV_ABS codes have special meanings:
     emitted only when the selected profile changes, indicating the newly
     selected profile value.
 
+* ABS_SND_PROFILE:
+
+  - Used to describe the state of a multi-value sound profile switch.
+    An event is emitted only when the selected profile changes,
+    indicating the newly selected profile value.
+
 * ABS_MT_<name>:
 
   - Used to describe multitouch input events. Please see
@@ -400,19 +406,30 @@ can report through the rotational axes (absolute and/or relative rx, ry, rz).
 All other axes retain their meaning. A device must not mix
 regular directional axes and accelerometer axes on the same event node.
 
-INPUT_PROP_HAPTIC_TOUCHPAD
---------------------------
+INPUT_PROP_PRESSUREPAD
+----------------------
 
-The INPUT_PROP_HAPTIC_TOUCHPAD property indicates that device:
-- supports simple haptic auto and manual triggering
+The INPUT_PROP_PRESSUREPAD property indicates that the device provides
+simulated haptic feedback (e.g. a vibrator motor situated below the surface)
+instead of physical haptic feedback (e.g. a hinge). This property is only set
+if the device:
+
 - can differentiate between at least 5 fingers
 - uses correct resolution for the X/Y (units and value)
-- reports correct force per touch, and correct units for them (newtons or grams)
 - follows the MT protocol type B
 
+If the simulated haptic feedback is controllable by userspace the device must:
+
+- support simple haptic auto and manual triggering, and
+- report correct force per touch, and correct units for them (newtons or grams), and
+- provide the EV_FF FF_HAPTIC force feedback effect.
+
 Summing up, such devices follow the MS spec for input devices in
-Win8 and Win8.1, and in addition support the Simple haptic controller HID table,
-and report correct units for the pressure.
+Win8 and Win8.1, and in addition may support the Simple haptic controller HID
+table, and report correct units for the pressure.
+
+Where applicable, this property is set in addition to INPUT_PROP_BUTTONPAD, it
+does not replace that property.
 
 Guidelines
 ==========

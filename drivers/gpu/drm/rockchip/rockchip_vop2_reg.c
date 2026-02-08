@@ -1369,6 +1369,25 @@ static const struct vop2_regs_dump rk3588_regs_dump[] = {
 	},
 };
 
+/*
+ * phys_id is used to identify a main window(Cluster Win/Smart Win, not
+ * include the sub win of a cluster or the multi area) that can do overlay
+ * in main overlay stage.
+ */
+static struct vop2_win *vop2_find_win_by_phys_id(struct vop2 *vop2, uint8_t phys_id)
+{
+	struct vop2_win *win;
+	int i;
+
+	for (i = 0; i < vop2->data->win_size; i++) {
+		win = &vop2->win[i];
+		if (win->data->phys_id == phys_id)
+			return win;
+	}
+
+	return NULL;
+}
+
 static unsigned long rk3568_set_intf_mux(struct vop2_video_port *vp, int id, u32 polflags)
 {
 	struct vop2 *vop2 = vp->vop2;
@@ -1842,15 +1861,31 @@ static void vop2_parse_alpha(struct vop2_alpha_config *alpha_config,
 	alpha->dst_alpha_ctrl.bits.factor_mode = ALPHA_SRC_INVERSE;
 }
 
-static int vop2_find_start_mixer_id_for_vp(struct vop2 *vop2, u8 port_id)
+static int vop2_find_start_mixer_id_for_vp(struct vop2_video_port *vp)
 {
-	struct vop2_video_port *vp;
-	int used_layer = 0;
+	struct vop2 *vop2 = vp->vop2;
+	struct vop2_win *win;
+	u32 layer_sel = vop2->old_layer_sel;
+	u32 used_layer = 0;
+	unsigned long win_mask = vp->win_mask;
+	unsigned long phys_id;
+	bool match;
 	int i;
 
-	for (i = 0; i < port_id; i++) {
-		vp = &vop2->vps[i];
-		used_layer += hweight32(vp->win_mask);
+	for (i = 0; i < 31; i += 4) {
+		match = false;
+		for_each_set_bit(phys_id, &win_mask, ROCKCHIP_VOP2_ESMART3) {
+			win = vop2_find_win_by_phys_id(vop2, phys_id);
+			if (win->data->layer_sel_id[vp->id] == ((layer_sel >> i) & 0xf)) {
+				match = true;
+				break;
+			}
+		}
+
+		if (!match)
+			used_layer += 1;
+		else
+			break;
 	}
 
 	return used_layer;
@@ -1935,7 +1970,7 @@ static void vop2_setup_alpha(struct vop2_video_port *vp)
 	u32 dst_global_alpha = DRM_BLEND_ALPHA_OPAQUE;
 
 	if (vop2->version <= VOP_VERSION_RK3588)
-		mixer_id = vop2_find_start_mixer_id_for_vp(vop2, vp->id);
+		mixer_id = vop2_find_start_mixer_id_for_vp(vp);
 	else
 		mixer_id = 0;
 
@@ -2069,7 +2104,7 @@ static void rk3568_vop2_wait_for_port_mux_done(struct vop2 *vop2)
 	 * Spin until the previous port_mux figuration is done.
 	 */
 	ret = readx_poll_timeout_atomic(rk3568_vop2_read_port_mux, vop2, port_mux_sel,
-					port_mux_sel == vop2->old_port_sel, 0, 50 * 1000);
+					port_mux_sel == vop2->old_port_sel, 10, 50 * 1000);
 	if (ret)
 		DRM_DEV_ERROR(vop2->dev, "wait port_mux done timeout: 0x%x--0x%x\n",
 			      port_mux_sel, vop2->old_port_sel);
@@ -2089,7 +2124,7 @@ static void rk3568_vop2_wait_for_layer_cfg_done(struct vop2 *vop2, u32 cfg)
 	 * Spin until the previous layer configuration is done.
 	 */
 	ret = readx_poll_timeout_atomic(rk3568_vop2_read_layer_cfg, vop2, atv_layer_cfg,
-					atv_layer_cfg == cfg, 0, 50 * 1000);
+					atv_layer_cfg == cfg, 10, 50 * 1000);
 	if (ret)
 		DRM_DEV_ERROR(vop2->dev, "wait layer cfg done timeout: 0x%x--0x%x\n",
 			      atv_layer_cfg, cfg);
@@ -2109,6 +2144,7 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 	u8 layer_sel_id;
 	unsigned int ofs;
 	u32 ovl_ctrl;
+	u32 cfg_done;
 	int i;
 	struct vop2_video_port *vp0 = &vop2->vps[0];
 	struct vop2_video_port *vp1 = &vop2->vps[1];
@@ -2263,8 +2299,16 @@ static void rk3568_vop2_setup_layer_mixer(struct vop2_video_port *vp)
 		rk3568_vop2_wait_for_port_mux_done(vop2);
 	}
 
-	if (layer_sel != old_layer_sel && atv_layer_sel != old_layer_sel)
-		rk3568_vop2_wait_for_layer_cfg_done(vop2, vop2->old_layer_sel);
+	if (layer_sel != old_layer_sel && atv_layer_sel != old_layer_sel) {
+		cfg_done = vop2_readl(vop2, RK3568_REG_CFG_DONE);
+		cfg_done &= (BIT(vop2->data->nr_vps) - 1);
+		cfg_done &= ~BIT(vp->id);
+		/*
+		 * Changes of other VPs' overlays have not taken effect
+		 */
+		if (cfg_done)
+			rk3568_vop2_wait_for_layer_cfg_done(vop2, vop2->old_layer_sel);
+	}
 
 	vop2_writel(vop2, RK3568_OVL_LAYER_SEL, layer_sel);
 	mutex_unlock(&vop2->ovl_lock);

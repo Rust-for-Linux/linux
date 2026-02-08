@@ -205,6 +205,8 @@ struct sk_buff *prp_get_untagged_frame(struct hsr_frame_info *frame,
 				__pskb_copy(frame->skb_prp,
 					    skb_headroom(frame->skb_prp),
 					    GFP_ATOMIC);
+			if (!frame->skb_std)
+				return NULL;
 		} else {
 			/* Unexpected */
 			WARN_ONCE(1, "%s:%d: Unexpected frame received (port_src %s)\n",
@@ -262,15 +264,23 @@ static struct sk_buff *prp_fill_rct(struct sk_buff *skb,
 	return skb;
 }
 
-static void hsr_set_path_id(struct hsr_ethhdr *hsr_ethhdr,
+static void hsr_set_path_id(struct hsr_frame_info *frame,
+			    struct hsr_ethhdr *hsr_ethhdr,
 			    struct hsr_port *port)
 {
 	int path_id;
 
-	if (port->type == HSR_PT_SLAVE_A)
-		path_id = 0;
-	else
-		path_id = 1;
+	if (port->hsr->prot_version) {
+		if (port->type == HSR_PT_SLAVE_A)
+			path_id = 0;
+		else
+			path_id = 1;
+	} else {
+		if (frame->is_supervision)
+			path_id = 0xf;
+		else
+			path_id = 1;
+	}
 
 	set_hsr_tag_path(&hsr_ethhdr->hsr_tag, path_id);
 }
@@ -304,7 +314,7 @@ static struct sk_buff *hsr_fill_tag(struct sk_buff *skb,
 	else
 		hsr_ethhdr = (struct hsr_ethhdr *)pc;
 
-	hsr_set_path_id(hsr_ethhdr, port);
+	hsr_set_path_id(frame, hsr_ethhdr, port);
 	set_hsr_tag_LSDU_size(&hsr_ethhdr->hsr_tag, lsdu_size);
 	hsr_ethhdr->hsr_tag.sequence_nr = htons(frame->sequence_nr);
 	hsr_ethhdr->hsr_tag.encap_proto = hsr_ethhdr->ethhdr.h_proto;
@@ -330,7 +340,7 @@ struct sk_buff *hsr_create_tagged_frame(struct hsr_frame_info *frame,
 			(struct hsr_ethhdr *)skb_mac_header(frame->skb_hsr);
 
 		/* set the lane id properly */
-		hsr_set_path_id(hsr_ethhdr, port);
+		hsr_set_path_id(frame, hsr_ethhdr, port);
 		return skb_clone(frame->skb_hsr, GFP_ATOMIC);
 	} else if (port->dev->features & NETIF_F_HW_HSR_TAG_INS) {
 		return skb_clone(frame->skb_std, GFP_ATOMIC);

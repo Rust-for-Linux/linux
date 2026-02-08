@@ -3,7 +3,7 @@
 
 use crate::debugfs::file_ops::FileOps;
 use crate::ffi::c_void;
-use crate::str::CStr;
+use crate::str::{CStr, CStrExt as _};
 use crate::sync::Arc;
 use core::marker::PhantomData;
 
@@ -148,7 +148,7 @@ impl Entry<'_> {
     /// # Guarantees
     ///
     /// Due to the type invariant, the value returned from this function will always be an error
-    /// code, NULL, or a live DebugFS directory. If it is live, it will remain live at least as
+    /// code, `NULL`, or a live DebugFS directory. If it is live, it will remain live at least as
     /// long as this entry lives.
     pub(crate) fn as_ptr(&self) -> *mut bindings::dentry {
         self.entry

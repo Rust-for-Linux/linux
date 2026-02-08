@@ -37,7 +37,7 @@ struct zl3073x_fw_component_info {
 static const struct zl3073x_fw_component_info component_info[] = {
 	[ZL_FW_COMPONENT_UTIL] = {
 		.name		= "utility",
-		.max_size	= 0x2300,
+		.max_size	= 0x4000,
 		.load_addr	= 0x20000000,
 		.flash_type	= ZL3073X_FLASH_TYPE_NONE,
 	},
@@ -352,12 +352,12 @@ struct zl3073x_fw *zl3073x_fw_load(struct zl3073x_dev *zldev, const char *data,
 }
 
 /**
- * zl3073x_flash_bundle_flash - Flash all components
+ * zl3073x_fw_component_flash - Flash all components
  * @zldev: zl3073x device structure
- * @components: pointer to components array
+ * @comp: pointer to components array
  * @extack: netlink extack pointer to report errors
  *
- * Returns 0 in case of success or negative number otherwise.
+ * Return: 0 in case of success or negative number otherwise.
  */
 static int
 zl3073x_fw_component_flash(struct zl3073x_dev *zldev,

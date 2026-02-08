@@ -801,18 +801,18 @@ static const struct mlxbf_pmc_events mlxbf_pmc_llt_miss_events[] = {
 	{11, "GDC_MISS_MACHINE_CHI_TXDAT"},
 	{12, "GDC_MISS_MACHINE_CHI_RXDAT"},
 	{13, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC0_0"},
-	{14, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC0_1 "},
+	{14, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC0_1"},
 	{15, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC0_2"},
-	{16, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC0_3 "},
-	{17, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_0 "},
-	{18, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_1 "},
-	{19, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_2 "},
-	{20, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_3 "},
+	{16, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC0_3"},
+	{17, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_0"},
+	{18, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_1"},
+	{19, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_2"},
+	{20, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC1_3"},
 	{21, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE0_0"},
 	{22, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE0_1"},
 	{23, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE0_2"},
 	{24, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE0_3"},
-	{25, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE1_0 "},
+	{25, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE1_0"},
 	{26, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE1_1"},
 	{27, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE1_2"},
 	{28, "GDC_MISS_MACHINE_G_FIFO_FF_EXEC_DONE1_3"},
@@ -2015,6 +2015,7 @@ static int mlxbf_pmc_init_perftype_counter(struct device *dev, unsigned int blk_
 	if (pmc->block[blk_num].type == MLXBF_PMC_TYPE_CRSPACE) {
 		/* Program crspace counters to count clock cycles using "count_clock" sysfs */
 		attr = &pmc->block[blk_num].attr_count_clock;
+		sysfs_attr_init(&attr->dev_attr.attr);
 		attr->dev_attr.attr.mode = 0644;
 		attr->dev_attr.show = mlxbf_pmc_count_clock_show;
 		attr->dev_attr.store = mlxbf_pmc_count_clock_store;

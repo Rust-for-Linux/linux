@@ -178,7 +178,6 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 			memcpy(pacl, value, size);
 			if (pTcon->ses->server->ops->set_acl) {
 				int aclflags = 0;
-				rc = 0;
 
 				switch (handler->flags) {
 				case XATTR_CIFS_NTSD_FULL:
@@ -398,7 +397,7 @@ ssize_t cifs_listxattr(struct dentry *direntry, char *data, size_t buf_size)
 	void *page;
 
 	if (unlikely(cifs_forced_shutdown(cifs_sb)))
-		return -EIO;
+		return smb_EIO(smb_eio_trace_forced_shutdown);
 
 	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_NO_XATTR)
 		return -EOPNOTSUPP;
