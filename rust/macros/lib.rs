@@ -59,7 +59,7 @@ use syn::parse_macro_input;
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use kernel::prelude::*;
 ///
 /// module!{

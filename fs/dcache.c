@@ -1104,6 +1104,16 @@ struct dentry *d_find_alias_rcu(struct inode *inode)
 	return de;
 }
 
+/**
+ * d_dispose_if_unused - move unreferenced dentries to shrink list
+ * @dentry: dentry in question
+ * @dispose: head of shrink list
+ *
+ * If dentry has no external references, move it to shrink list.
+ *
+ * NOTE!!! The caller is responsible for preventing eviction of the dentry by
+ * holding dentry->d_inode->i_lock or equivalent.
+ */
 void d_dispose_if_unused(struct dentry *dentry, struct list_head *dispose)
 {
 	spin_lock(&dentry->d_lock);
@@ -3227,10 +3237,7 @@ EXPORT_SYMBOL(d_parent_ino);
 static __initdata unsigned long dhash_entries;
 static int __init set_dhash_entries(char *str)
 {
-	if (!str)
-		return 0;
-	dhash_entries = simple_strtoul(str, &str, 0);
-	return 1;
+	return kstrtoul(str, 0, &dhash_entries) == 0;
 }
 __setup("dhash_entries=", set_dhash_entries);
 
@@ -3290,10 +3297,6 @@ static void __init dcache_init(void)
 	runtime_const_init(ptr, dentry_hashtable);
 }
 
-/* SLAB cache for __getname() consumers */
-struct kmem_cache *names_cachep __ro_after_init;
-EXPORT_SYMBOL(names_cachep);
-
 void __init vfs_caches_init_early(void)
 {
 	int i;
@@ -3307,9 +3310,7 @@ void __init vfs_caches_init_early(void)
 
 void __init vfs_caches_init(void)
 {
-	names_cachep = kmem_cache_create_usercopy("names_cache", PATH_MAX, 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC, 0, PATH_MAX, NULL);
-
+	filename_init();
 	dcache_init();
 	inode_init();
 	files_init();

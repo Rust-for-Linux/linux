@@ -232,6 +232,8 @@ struct bio {
 
 	atomic_t		__bi_remaining;
 
+	/* The actual vec list, preserved by bio_reset() */
+	struct bio_vec		*bi_io_vec;
 	struct bvec_iter	bi_iter;
 
 	union {
@@ -275,13 +277,12 @@ struct bio {
 
 	atomic_t		__bi_cnt;	/* pin count */
 
-	struct bio_vec		*bi_io_vec;	/* the actual vec list */
-
 	struct bio_set		*bi_pool;
 };
 
 #define BIO_RESET_BYTES		offsetof(struct bio, bi_max_vecs)
-#define BIO_MAX_SECTORS		(UINT_MAX >> SECTOR_SHIFT)
+#define BIO_MAX_SIZE		UINT_MAX /* max value of bi_iter.bi_size */
+#define BIO_MAX_SECTORS		(BIO_MAX_SIZE >> SECTOR_SHIFT)
 
 static inline struct bio_vec *bio_inline_vecs(struct bio *bio)
 {

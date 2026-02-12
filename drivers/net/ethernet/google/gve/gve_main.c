@@ -283,9 +283,9 @@ static int gve_alloc_stats_report(struct gve_priv *priv)
 	int tx_stats_num, rx_stats_num;
 
 	tx_stats_num = (GVE_TX_STATS_REPORT_NUM + NIC_TX_STATS_REPORT_NUM) *
-		       gve_num_tx_queues(priv);
+				priv->tx_cfg.max_queues;
 	rx_stats_num = (GVE_RX_STATS_REPORT_NUM + NIC_RX_STATS_REPORT_NUM) *
-		       priv->rx_cfg.num_queues;
+				priv->rx_cfg.max_queues;
 	priv->stats_report_len = struct_size(priv->stats_report, stats,
 					     size_add(tx_stats_num, rx_stats_num));
 	priv->stats_report =
@@ -680,10 +680,12 @@ static int gve_setup_device_resources(struct gve_priv *priv)
 		}
 	}
 
-	err = gve_init_clock(priv);
-	if (err) {
-		dev_err(&priv->pdev->dev, "Failed to init clock");
-		goto abort_with_ptype_lut;
+	if (priv->nic_timestamp_supported) {
+		err = gve_init_clock(priv);
+		if (err) {
+			dev_warn(&priv->pdev->dev, "Failed to init clock, continuing without PTP support");
+			err = 0;
+		}
 	}
 
 	err = gve_init_rss_config(priv, priv->rx_cfg.num_queues);
@@ -2183,7 +2185,7 @@ static int gve_set_ts_config(struct net_device *dev,
 	}
 
 	if (kernel_config->rx_filter != HWTSTAMP_FILTER_NONE) {
-		if (!priv->nic_ts_report) {
+		if (!gve_is_clock_enabled(priv)) {
 			NL_SET_ERR_MSG_MOD(extack,
 					   "RX timestamping is not supported");
 			kernel_config->rx_filter = HWTSTAMP_FILTER_NONE;
