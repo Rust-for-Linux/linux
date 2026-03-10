@@ -12,6 +12,8 @@
 //! do so first instead of bypassing this crate.
 
 #![no_std]
+#![allow(missing_docs)]
+#![allow(unused)]
 //
 // Please see https://github.com/Rust-for-Linux/linux/issues/2 for details on
 // the unstable features in use.
@@ -84,6 +86,7 @@ pub mod cpufreq;
 pub mod cpumask;
 pub mod cred;
 pub mod debugfs;
+pub mod dentry;
 pub mod device;
 pub mod device_id;
 pub mod devres;
@@ -96,6 +99,7 @@ pub mod faux;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
 pub mod fmt;
+pub mod folio;
 pub mod fs;
 #[cfg(CONFIG_I2C = "y")]
 pub mod i2c;
@@ -103,6 +107,9 @@ pub mod id_pool;
 #[doc(hidden)]
 pub mod impl_flags;
 pub mod init;
+pub mod inode;
+pub mod iomap;
+pub mod address_space;
 pub mod io;
 pub mod ioctl;
 pub mod iommu;
@@ -113,6 +120,7 @@ pub mod jump_label;
 pub mod kunit;
 pub mod list;
 pub mod maple_tree;
+pub mod mem_cache;
 pub mod miscdevice;
 pub mod mm;
 pub mod module_param;
@@ -136,6 +144,7 @@ pub mod pwm;
 pub mod rbtree;
 pub mod regulator;
 pub mod revocable;
+pub mod sb;
 pub mod safety;
 pub mod scatterlist;
 pub mod security;
@@ -155,6 +164,7 @@ pub mod tracepoint;
 pub mod transmute;
 pub mod types;
 pub mod uaccess;
+pub mod user;
 #[cfg(CONFIG_USB = "y")]
 pub mod usb;
 pub mod workqueue;

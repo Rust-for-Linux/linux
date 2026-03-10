@@ -48,3 +48,23 @@ __rust_helper void rust_helper_vma_end_read(struct vm_area_struct *vma)
 {
 	vma_end_read(vma);
 }
+
+void rust_helper_folio_get(struct folio *folio)
+{
+	folio_get(folio);
+}
+
+void rust_helper_folio_put(struct folio *folio)
+{
+	folio_put(folio);
+}
+
+size_t rust_helper_folio_size(struct folio *folio)
+{
+	return folio_size(folio);
+}
+
+void rust_helper_put_page(struct page *page)
+{
+	return put_page(page);
+}

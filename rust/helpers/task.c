@@ -45,6 +45,11 @@ __rust_helper bool rust_helper_uid_eq(kuid_t left, kuid_t right)
 	return uid_eq(left, right);
 }
 
+__rust_helper bool rust_helper_gid_eq(kgid_t left, kgid_t right)
+{
+	return gid_eq(left, right);
+}
+
 __rust_helper kuid_t rust_helper_current_euid(void)
 {
 	return current_euid();

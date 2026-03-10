@@ -57,6 +57,8 @@
 #include <linux/file.h>
 #include <linux/firmware.h>
 #include <linux/fs.h>
+#include <linux/iomap.h>
+#include <linux/fs_context.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/io-pgtable.h>
@@ -121,6 +123,8 @@ const gfp_t RUST_CONST_HELPER_XA_FLAGS_ALLOC = XA_FLAGS_ALLOC;
 const gfp_t RUST_CONST_HELPER_XA_FLAGS_ALLOC1 = XA_FLAGS_ALLOC1;
 
 const vm_flags_t RUST_CONST_HELPER_VM_MERGEABLE = VM_MERGEABLE;
+const slab_flags_t RUST_CONST_HELPER_SLAB_RECLAIM_ACCOUNT = SLAB_RECLAIM_ACCOUNT;
+const slab_flags_t RUST_CONST_HELPER_SLAB_ACCOUNT = SLAB_ACCOUNT;
 const vm_flags_t RUST_CONST_HELPER_VM_READ = VM_READ;
 const vm_flags_t RUST_CONST_HELPER_VM_WRITE = VM_WRITE;
 const vm_flags_t RUST_CONST_HELPER_VM_EXEC = VM_EXEC;

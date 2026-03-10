@@ -10,6 +10,8 @@ use core::marker::PhantomData;
 use core::ptr::NonNull;
 use kernel::types::ForeignOwnable;
 
+use crate::fs::{File, FileSystem};
+
 /// Wrapper for the kernel's `struct kiocb`.
 ///
 /// Currently this abstractions is incomplete and is essentially just a tuple containing a
@@ -64,5 +66,23 @@ impl<'a, T: ForeignOwnable> Kiocb<'a, T> {
     pub fn ki_pos_mut(&mut self) -> &mut i64 {
         // SAFETY: We have exclusive access to the kiocb, so we can write to `ki_pos`.
         unsafe { &mut (*self.as_raw()).ki_pos }
+    }
+
+    pub fn ki_flags(&self) -> u32 {
+        // CAST: ki_flags is a bit mask and has the same
+        // SAFETY: VFS guarantees kiocb is never null and can be dereferenced
+        // Therefore, both operations below are valid
+        unsafe { (*self.as_raw()).ki_flags as u32 }
+    }
+
+    pub fn ki_filp<FS>(&self) -> &'a File<FS>
+    where
+        FS: FileSystem<Data = T> + ?Sized,
+    {
+        // SAFETY: VFS guarantees ki_filp is a valid file pointer
+        let file_ptr = unsafe { (*self.as_raw()).ki_filp };
+
+        // SAFETY: While the Kiocb exists, it will have a valid reference to the file pointer
+        unsafe { File::<FS>::from_raw_file(file_ptr) }
     }
 }
