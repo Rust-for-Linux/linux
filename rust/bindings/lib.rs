@@ -22,6 +22,7 @@
 #![feature(cfi_encoding)]
 
 #[allow(dead_code)]
+#[allow(invalid_runtime_symbol_definitions)]
 #[allow(clippy::cast_lossless)]
 #[allow(clippy::ptr_as_ptr)]
 #[allow(clippy::ref_as_ptr)]

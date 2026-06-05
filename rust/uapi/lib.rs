@@ -15,6 +15,7 @@
     clippy::ref_as_ptr,
     clippy::undocumented_unsafe_blocks,
     dead_code,
+    invalid_runtime_symbol_definitions,
     missing_docs,
     non_camel_case_types,
     non_upper_case_globals,
