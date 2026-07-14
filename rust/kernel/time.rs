@@ -360,16 +360,12 @@ impl ops::Div for Delta {
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        #[cfg(CONFIG_64BIT)]
-        {
+        if_cfg!(if CONFIG_64BIT {
             self.nanos / rhs.nanos
-        }
-
-        #[cfg(not(CONFIG_64BIT))]
-        {
+        } else {
             // SAFETY: This function is always safe to call regardless of the input values
             unsafe { bindings::div64_s64(self.nanos, rhs.nanos) }
-        }
+        })
     }
 }
 
@@ -441,31 +437,23 @@ impl Delta {
     /// to the value in the [`Delta`].
     #[inline]
     pub fn as_micros_ceil(self) -> i64 {
-        #[cfg(CONFIG_64BIT)]
-        {
+        if_cfg!(if CONFIG_64BIT {
             self.as_nanos().saturating_add(NSEC_PER_USEC - 1) / NSEC_PER_USEC
-        }
-
-        #[cfg(not(CONFIG_64BIT))]
-        // SAFETY: It is always safe to call `ktime_to_us()` with any value.
-        unsafe {
-            bindings::ktime_to_us(self.as_nanos().saturating_add(NSEC_PER_USEC - 1))
-        }
+        } else {
+            // SAFETY: It is always safe to call `ktime_to_us()` with any value.
+            unsafe { bindings::ktime_to_us(self.as_nanos().saturating_add(NSEC_PER_USEC - 1)) }
+        })
     }
 
     /// Return the number of milliseconds in the [`Delta`].
     #[inline]
     pub fn as_millis(self) -> i64 {
-        #[cfg(CONFIG_64BIT)]
-        {
+        if_cfg!(if CONFIG_64BIT {
             self.as_nanos() / NSEC_PER_MSEC
-        }
-
-        #[cfg(not(CONFIG_64BIT))]
-        // SAFETY: It is always safe to call `ktime_to_ms()` with any value.
-        unsafe {
-            bindings::ktime_to_ms(self.as_nanos())
-        }
+        } else {
+            // SAFETY: It is always safe to call `ktime_to_ms()` with any value.
+            unsafe { bindings::ktime_to_ms(self.as_nanos()) }
+        })
     }
 
     /// Return `self % dividend` where `dividend` is in nanoseconds.
@@ -474,15 +462,11 @@ impl Delta {
     /// limited to 32 bit dividends.
     #[inline]
     pub fn rem_nanos(self, dividend: i32) -> Self {
-        #[cfg(CONFIG_64BIT)]
-        {
+        if_cfg!(if CONFIG_64BIT {
             Self {
                 nanos: self.as_nanos() % i64::from(dividend),
             }
-        }
-
-        #[cfg(not(CONFIG_64BIT))]
-        {
+        } else {
             let mut rem = 0;
 
             // SAFETY: `rem` is in the stack, so we can always provide a valid pointer to it.
@@ -491,6 +475,6 @@ impl Delta {
             Self {
                 nanos: i64::from(rem),
             }
-        }
+        })
     }
 }
