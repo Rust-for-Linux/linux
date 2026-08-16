@@ -483,8 +483,39 @@ pub struct I2cClient<Ctx: device::DeviceContext = device::Normal>(
 );
 
 impl<Ctx: device::DeviceContext> I2cClient<Ctx> {
-    fn as_raw(&self) -> *mut bindings::i2c_client {
+    /// Returns the raw pointer to the C `struct i2c_client`.
+    pub fn as_raw(&self) -> *mut bindings::i2c_client {
         self.0.get()
+    }
+
+    /// Read an 8-bit byte from an SMBus register.
+    pub fn smbus_read_byte_data(&self, command: u8) -> Result<u8> {
+        let res = unsafe { bindings::i2c_smbus_read_byte_data(self.as_raw(), command) };
+        if res < 0 {
+            Err(Error::from_errno(res))
+        } else {
+            Ok(res as u8)
+        }
+    }
+
+    /// Write an 8-bit byte to an SMBus register.
+    pub fn smbus_write_byte_data(&self, command: u8, value: u8) -> Result {
+        to_result(unsafe { bindings::i2c_smbus_write_byte_data(self.as_raw(), command, value) })
+    }
+
+    /// Read a 16-bit word from an SMBus register.
+    pub fn smbus_read_word_data(&self, command: u8) -> Result<u16> {
+        let res = unsafe { bindings::i2c_smbus_read_word_data(self.as_raw(), command) };
+        if res < 0 {
+            Err(Error::from_errno(res))
+        } else {
+            Ok(res as u16)
+        }
+    }
+
+    /// Write a 16-bit word to an SMBus register.
+    pub fn smbus_write_word_data(&self, command: u8, value: u16) -> Result {
+        to_result(unsafe { bindings::i2c_smbus_write_word_data(self.as_raw(), command, value) })
     }
 }
 
