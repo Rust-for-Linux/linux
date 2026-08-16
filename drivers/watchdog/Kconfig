@@ -381,6 +381,17 @@ config ZIIRAVE_WATCHDOG
 	  To compile this driver as a module, choose M here: the
 	  module will be called ziirave_wdt.
 
+config ZIIRAVE_WATCHDOG_RUST
+	tristate "Zodiac RAVE Watchdog Timer in Rust"
+	depends on RUST && I2C && WATCHDOG
+	select WATCHDOG_CORE
+	help
+	  Rust watchdog driver for the Zodiac Aerospace RAVE Switch Watchdog
+	  Processor over I2C.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ziirave_wdt_rust.
+
 config RAVE_SP_WATCHDOG
 	tristate "RAVE SP Watchdog timer"
 	depends on RAVE_SP_CORE
