@@ -123,6 +123,7 @@ obj-$(CONFIG_SENSORS_LM63)	+= lm63.o
 obj-$(CONFIG_SENSORS_LM70)	+= lm70.o
 obj-$(CONFIG_SENSORS_LM73)	+= lm73.o
 obj-$(CONFIG_SENSORS_LM75)	+= lm75.o
+obj-$(CONFIG_SENSORS_LM75_RUST)	+= lm75_rust.o
 obj-$(CONFIG_SENSORS_LM77)	+= lm77.o
 obj-$(CONFIG_SENSORS_LM78)	+= lm78.o
 obj-$(CONFIG_SENSORS_LM80)	+= lm80.o

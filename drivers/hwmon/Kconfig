@@ -1552,12 +1552,19 @@ config SENSORS_LM75
 		- Texas Instruments TMP100, TMP101, TMP105, TMP112, TMP75,
 		  TMP175, TMP275
 
-	  This driver supports driver model based binding through board
-	  specific I2C device tables.
+	  This driver can also be built as a module.  If so, the module
+	  will be called lm75.
 
-	  It also supports the "legacy" style of driver binding.  To use
-	  that with some chips which don't replicate LM75 quirks exactly,
-	  you may need the "force" module parameter.
+config SENSORS_LM75_RUST
+	tristate "National Semiconductor LM75 and compatibles in Rust"
+	depends on RUST && I2C
+	help
+	  This option enables the Rust implementation of the LM75 digital
+	  temperature sensor driver and its compatible chips (TMP75, TMP102,
+	  DS75, MCP980x, etc.).
+
+	  This driver can also be built as a module. If so, the module
+	  will be called lm75_rust.
 
 	  This driver can also be built as a module. If so, the module
 	  will be called lm75.
