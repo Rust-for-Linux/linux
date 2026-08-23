@@ -80,6 +80,8 @@ pub mod fs;
 pub mod fwctl;
 #[cfg(CONFIG_GPU_BUDDY = "y")]
 pub mod gpu;
+#[cfg(CONFIG_HWMON)]
+pub mod hwmon;
 #[cfg(CONFIG_I2C = "y")]
 pub mod i2c;
 pub mod id_pool;
@@ -96,6 +98,8 @@ pub mod irq;
 pub mod jump_label;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
+#[cfg(CONFIG_NEW_LEDS)]
+pub mod leds;
 pub mod list;
 pub mod maple_tree;
 pub mod miscdevice;
@@ -105,6 +109,8 @@ pub mod module_param;
 #[cfg(CONFIG_NET)]
 pub mod net;
 pub mod num;
+#[cfg(CONFIG_NVMEM)]
+pub mod nvmem;
 pub mod of;
 #[cfg(CONFIG_PM_OPP)]
 pub mod opp;
@@ -122,6 +128,8 @@ pub mod pwm;
 pub mod rbtree;
 pub mod regulator;
 pub mod revocable;
+#[cfg(CONFIG_RTC_CLASS)]
+pub mod rtc;
 pub mod safety;
 pub mod scatterlist;
 pub mod security;
@@ -143,6 +151,8 @@ pub mod types;
 pub mod uaccess;
 #[cfg(CONFIG_USB = "y")]
 pub mod usb;
+#[cfg(CONFIG_WATCHDOG)]
+pub mod watchdog;
 pub mod workqueue;
 pub mod xarray;
 

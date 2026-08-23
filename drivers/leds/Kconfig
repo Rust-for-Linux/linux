@@ -389,6 +389,16 @@ config LEDS_PCA9532
 	  LED controller. It is generally only useful
 	  as a platform driver
 
+config LEDS_PCA9532_RUST
+	tristate "LED driver for NXP PCA9532/PCA9533 in Rust"
+	depends on RUST && I2C && LEDS_CLASS
+	help
+	  This option enables the Rust implementation of the NXP PCA9530,
+	  PCA9531, PCA9532, and PCA9533 I2C LED dimmers.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called leds_pca9532_rust.
+
 config LEDS_PCA9532_GPIO
 	bool "Enable GPIO support for PCA9532"
 	depends on LEDS_PCA9532

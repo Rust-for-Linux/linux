@@ -32,6 +32,17 @@ config EEPROM_AT24
 	  This driver can also be built as a module.  If so, the module
 	  will be called at24.
 
+config EEPROM_AT24_RUST
+	tristate "I2C EEPROMs (24c02..24c512) in Rust"
+	depends on RUST && I2C
+	select NVMEM
+	help
+	  This option enables the Rust implementation of the I2C EEPROM driver
+	  for Atmel/Microchip 24C02..24C512 chips.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called at24_rust.
+
 config EEPROM_AT25
 	tristate "SPI EEPROMs (FRAMs) from most vendors"
 	depends on SPI && SYSFS
