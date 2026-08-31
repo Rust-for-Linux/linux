@@ -75,7 +75,7 @@ impl GenDiskBuilder {
     /// Set the logical block size of the device to be built.
     ///
     /// This method will check that block size is a power of two and between 512
-    /// and 4096. If not, an error is returned and the block size is not set.
+    /// and `PAGE_SIZE`. If not, an error is returned and the block size is not set.
     ///
     /// This is the smallest unit the storage device can address. It is
     /// typically 4096 bytes.
@@ -88,7 +88,7 @@ impl GenDiskBuilder {
     /// Set the physical block size of the device to be built.
     ///
     /// This method will check that block size is a power of two and between 512
-    /// and 4096. If not, an error is returned and the block size is not set.
+    /// and `PAGE_SIZE`. If not, an error is returned and the block size is not set.
     ///
     /// This is the smallest unit a physical storage device can write
     /// atomically. It is usually the same as the logical block size but may be
