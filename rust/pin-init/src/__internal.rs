@@ -42,22 +42,6 @@ impl<T: ?Sized> PhantomInvariant<T> {
     }
 }
 
-/// Zero-sized type used to mark a lifetime as invariant.
-///
-/// This is a polyfill for the [unstable type] in the standard library of the same name.
-///
-/// [unstable type]: https://doc.rust-lang.org/nightly/std/marker/struct.PhantomInvariantLifetime.html
-#[repr(transparent)]
-#[derive(Clone, Copy, Default)]
-pub struct PhantomInvariantLifetime<'a>(PhantomInvariant<&'a ()>);
-
-impl PhantomInvariantLifetime<'_> {
-    #[inline(always)]
-    pub const fn new() -> Self {
-        Self(PhantomInvariant::new())
-    }
-}
-
 /// Token type to signify successful initialization.
 ///
 /// Can only be constructed via the unsafe [`Self::new`] function. The initializer macros use this

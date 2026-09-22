@@ -5,10 +5,10 @@ use quote::{format_ident, quote, ToTokens};
 use syn::{
     parse::{End, Nothing, Parse},
     parse_quote, parse_quote_spanned,
+    punctuated::Punctuated,
     spanned::Spanned,
     visit_mut::VisitMut,
     Field, Fields, Generics, Ident, Index, Item, Member, PathSegment, Type, TypePath, Visibility,
-    WhereClause,
 };
 
 use crate::{
@@ -231,21 +231,11 @@ fn generate_unpin_impl(
     generics: &Generics,
     fields: &[FieldInfo<'_>],
 ) -> TokenStream {
-    let (_, ty_generics, _) = generics.split_for_impl();
-    let mut generics_with_pin_lt = generics.clone();
-    generics_with_pin_lt.params.insert(0, parse_quote!('__pin));
-    generics_with_pin_lt.make_where_clause();
-    let (
-        impl_generics_with_pin_lt,
-        ty_generics_with_pin_lt,
-        Some(WhereClause {
-            where_token,
-            predicates,
-        }),
-    ) = generics_with_pin_lt.split_for_impl()
-    else {
-        unreachable!()
-    };
+    let (impl_generics, ty_generics, whr) = generics.split_for_impl();
+    let predicates = whr
+        .map(|x| &x.predicates)
+        .unwrap_or(const { &Punctuated::new() });
+
     let pinned_fields = fields.iter().filter(|f| f.pinned).map(|f| {
         let ident = f.member.as_ident();
         let ty = &f.field.ty;
@@ -260,19 +250,18 @@ fn generate_unpin_impl(
             dead_code, // The fields below are never used.
             non_snake_case // The warning will be emitted on the struct definition.
         )]
-        struct __Unpin #generics_with_pin_lt
-        #where_token
-            #predicates
+        struct __Unpin #generics #whr
         {
-            __phantom_pin: ::pin_init::__internal::PhantomInvariantLifetime<'__pin>,
             __phantom: ::pin_init::__internal::PhantomInvariant<#ident #ty_generics>,
             #(#pinned_fields),*
         }
 
         #[doc(hidden)]
-        impl #impl_generics_with_pin_lt ::core::marker::Unpin for #ident #ty_generics
-        #where_token
-            __Unpin #ty_generics_with_pin_lt: ::core::marker::Unpin,
+        impl #impl_generics ::core::marker::Unpin for #ident #ty_generics
+        where
+            // the `for<'__dummy>` HRTB makes this not error without the `trivial_bounds`
+            // feature <https://github.com/rust-lang/rust/issues/48214#issuecomment-2557829956>.
+            for<'__dummy> __Unpin #ty_generics: ::core::marker::Unpin,
             #predicates
         {}
     }
