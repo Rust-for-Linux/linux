@@ -73,30 +73,31 @@ pub unsafe trait HasPinData {
     fn __pin_data() -> Self::PinData;
 }
 
-/// This trait is automatically implemented for every type. It aims to provide the same type
-/// inference help as `HasPinData`.
+/// This trait is automatically implemented for every type.
 ///
-/// # Safety
-///
-/// Only the `init` module is allowed to use this trait.
-pub unsafe trait HasInitData {
-    type InitData;
-
-    fn __init_data() -> Self::InitData;
+/// It aims to provide type inference help; `PATH::__init_data()` would be able to retrieve an
+/// instance of `InitData<PATH<Generics>>` without having to mention the generics explicitly.
+pub trait HasInitData {
+    #[inline]
+    fn __init_data() -> InitData<Self> {
+        InitData(PhantomInvariant::new())
+    }
 }
 
-pub struct AllData<T: ?Sized>(PhantomInvariant<T>);
+impl<T: ?Sized> HasInitData for T {}
 
-impl<T: ?Sized> Clone for AllData<T> {
+pub struct InitData<T: ?Sized>(PhantomInvariant<T>);
+
+impl<T: ?Sized> Clone for InitData<T> {
     #[inline]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T: ?Sized> Copy for AllData<T> {}
+impl<T: ?Sized> Copy for InitData<T> {}
 
-impl<T: ?Sized> AllData<T> {
+impl<T: ?Sized> InitData<T> {
     /// Type inference helper function.
     #[inline(always)]
     pub fn __make_closure<F, E>(self, f: F) -> F
@@ -104,16 +105,6 @@ impl<T: ?Sized> AllData<T> {
         F: FnOnce(*mut T) -> Result<InitOk, E>,
     {
         f
-    }
-}
-
-// SAFETY: TODO.
-unsafe impl<T: ?Sized> HasInitData for T {
-    type InitData = AllData<T>;
-
-    #[inline]
-    fn __init_data() -> Self::InitData {
-        AllData(PhantomInvariant::new())
     }
 }
 
