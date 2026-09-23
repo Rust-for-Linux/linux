@@ -67,6 +67,10 @@ impl InitOk {
 ///
 /// `pin-init` relies on the correctness of the helper functions defined on `PinData`.
 /// Thus, only the `#[pin_data]` can implement this trait.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot be used with `pin_init!` macro",
+    note = "did you forget to add `#[pin_data]` attribute to the struct?"
+)]
 pub unsafe trait HasPinData {
     type PinData;
 
