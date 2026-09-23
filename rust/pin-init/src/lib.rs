@@ -920,7 +920,8 @@ macro_rules! assert_pinned {
     ($ty:ty, $field:ident, $field_ty:ty, inline) => {
         // SAFETY: This code is unreachable.
         let _ = move |ptr: *mut $ty| unsafe {
-            let data = <$ty as $crate::__internal::HasPinData>::__pin_data();
+            let data = <$ty as $crate::__internal::HasInitData>::__init_data();
+            let data = $crate::__internal::HasPinData::__pin_data(data);
             _ = data
                 .$field(ptr)
                 .init($crate::__internal::AlwaysFail::<$field_ty>::new());

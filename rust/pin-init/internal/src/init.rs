@@ -269,18 +269,17 @@ fn expand(
         },
         |(_, err)| Box::new(err),
     );
-    let (has_data_trait, get_data, init_from_closure) = if pinned {
+    let (get_pin_data, init_from_closure) = if pinned {
         (
-            format_ident!("HasPinData"),
-            format_ident!("__pin_data"),
+            Some(
+                quote_spanned! { path.span().resolved_at(Span::mixed_site()) =>
+                    let data = ::pin_init::__internal::HasPinData::__pin_data(data);
+                },
+            ),
             format_ident!("pin_init_from_closure"),
         )
     } else {
-        (
-            format_ident!("HasInitData"),
-            format_ident!("__init_data"),
-            format_ident!("init_from_closure"),
-        )
+        (None, format_ident!("init_from_closure"))
     };
     let init_kind = get_init_kind(rest, dcx);
     let zeroable_check = match init_kind {
@@ -313,11 +312,14 @@ fn expand(
     Ok(quote_spanned! { Span::mixed_site() => {
         // Get the data about fields from the supplied type.
         let data = {
-            use ::pin_init::__internal::#has_data_trait;
+            use ::pin_init::__internal::HasInitData;
             // Can't use `<#path as #has_data_trait>::#get_data`, since the user is able to omit
             // generics (which need to be present with that syntax).
-            #path::#get_data()
+            #path::__init_data()
         };
+
+        #get_pin_data
+
         // Ensure that `data` really is of type `data` and help with type inference:
         let init = data.__make_closure::<_, #error>(
             move |slot| {

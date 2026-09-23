@@ -70,7 +70,7 @@ impl InitOk {
 pub unsafe trait HasPinData {
     type PinData;
 
-    fn __pin_data() -> Self::PinData;
+    fn __pin_data(_: InitData<Self>) -> Self::PinData;
 }
 
 /// This trait is automatically implemented for every type.
