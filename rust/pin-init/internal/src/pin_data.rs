@@ -527,7 +527,7 @@ fn generate_the_pin_data(
             type PinData = __ThePinData #ty_generics;
 
             #[inline]
-            unsafe fn __pin_data() -> Self::PinData {
+            fn __pin_data() -> Self::PinData {
                 __ThePinData { __phantom: ::pin_init::__internal::PhantomInvariant::new() }
             }
         }

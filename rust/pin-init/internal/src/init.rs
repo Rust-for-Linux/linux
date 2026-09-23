@@ -312,8 +312,7 @@ fn expand(
     let field_check = make_field_check(&fields, init_kind, &path);
     Ok(quote_spanned! { Span::mixed_site() => {
         // Get the data about fields from the supplied type.
-        // SAFETY: TODO
-        let data = unsafe {
+        let data = {
             use ::pin_init::__internal::#has_data_trait;
             // Can't use `<#path as #has_data_trait>::#get_data`, since the user is able to omit
             // generics (which need to be present with that syntax).
