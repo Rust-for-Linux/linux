@@ -155,7 +155,7 @@ impl<Data> Subsystem<Data> {
                     // SAFETY: We initialized the required fields of `place.group` above.
                     unsafe {
                         bindings::config_group_init_type_name(
-                            &mut (*place.get()).su_group,
+                            &raw mut (*place.get()).su_group,
                             name.as_char_ptr(),
                             item_type.as_ptr(),
                         )
@@ -164,7 +164,7 @@ impl<Data> Subsystem<Data> {
                     // SAFETY: `place.su_mutex` is valid for use as a mutex.
                     unsafe {
                         bindings::__mutex_init(
-                            &mut (*place.get()).su_mutex,
+                            &raw mut (*place.get()).su_mutex,
                             kernel::optional_name!().as_char_ptr(),
                             kernel::static_lock_class!().as_ptr(),
                         )

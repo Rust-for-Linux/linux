@@ -743,7 +743,7 @@ unsafe fn kstrtobool_raw(string: *const u8) -> Result<bool> {
     // SAFETY:
     // - By function safety requirement, `string` is a valid null-terminated string.
     // - `result` is a valid `bool` that we own.
-    to_result(unsafe { bindings::kstrtobool(string, &mut result) })?;
+    to_result(unsafe { bindings::kstrtobool(string, &raw mut result) })?;
     Ok(result)
 }
 

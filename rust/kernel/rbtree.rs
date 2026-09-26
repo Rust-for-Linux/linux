@@ -206,7 +206,7 @@ impl<K, V> RBTree<K, V> {
             //   - `bindings::rb_first` produces a valid pointer to a node given `root` is valid.
             iter_raw: IterRaw {
                 // SAFETY: by the invariants, all pointers are valid.
-                next: unsafe { bindings::rb_first(&self.root) },
+                next: unsafe { bindings::rb_first(&raw const self.root) },
                 _phantom: PhantomData,
             },
         }
@@ -508,7 +508,7 @@ where
             match key.cmp(this_key) {
                 Ordering::Equal => {
                     // SAFETY: `this` is a non-null node so it is valid by the type invariants.
-                    best_links = Some(unsafe { NonNull::new_unchecked(&mut (*this).links) });
+                    best_links = Some(unsafe { NonNull::new_unchecked(&raw mut (*this).links) });
                     break;
                 }
                 Ordering::Greater => {
@@ -522,7 +522,8 @@ where
                     if is_better_match {
                         best_key = Some(this_key);
                         // SAFETY: `this` is a non-null node so it is valid by the type invariants.
-                        best_links = Some(unsafe { NonNull::new_unchecked(&mut (*this).links) });
+                        best_links =
+                            Some(unsafe { NonNull::new_unchecked(&raw mut (*this).links) });
                     }
                     node = node_ref.rb_left;
                 }
@@ -541,7 +542,7 @@ impl<K, V> Default for RBTree<K, V> {
 impl<K, V> Drop for RBTree<K, V> {
     fn drop(&mut self) {
         // SAFETY: `root` is valid as it's embedded in `self` and we have a valid `self`.
-        let mut next = unsafe { bindings::rb_first_postorder(&self.root) };
+        let mut next = unsafe { bindings::rb_first_postorder(&raw const self.root) };
 
         // INVARIANT: The loop invariant is that all tree nodes from `next` in postorder are valid.
         while !next.is_null() {
@@ -926,7 +927,7 @@ impl<'a, K, V> CursorMut<'a, K, V> {
         let node = RBTreeNode { node };
         // SAFETY: The reference to the tree used to create the cursor outlives the cursor, so
         // the tree cannot change. By the tree invariant, all nodes are valid.
-        unsafe { bindings::rb_erase(&mut (*this).links, addr_of_mut!(self.tree.root)) };
+        unsafe { bindings::rb_erase(&raw mut (*this).links, addr_of_mut!(self.tree.root)) };
 
         // INVARIANT:
         // - `current` is a valid node in the [`RBTree`] pointed to by `self.tree`.
@@ -1382,7 +1383,7 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
     /// Remove this entry from the [`RBTree`].
     pub fn remove_node(self) -> RBTreeNode<K, V> {
         // SAFETY: The node is a node in the tree, so it is valid.
-        unsafe { bindings::rb_erase(self.node_links, &mut self.rbtree.root) };
+        unsafe { bindings::rb_erase(self.node_links, &raw mut self.rbtree.root) };
 
         // INVARIANT: The node is being returned and the caller may free it, however, it was
         // removed from the tree. So the invariants still hold.
@@ -1414,7 +1415,7 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
         // SAFETY: This updates the pointers so that `new_node_links` is in the tree where
         // `self.node_links` used to be.
         unsafe {
-            bindings::rb_replace_node(self.node_links, new_node_links, &mut self.rbtree.root)
+            bindings::rb_replace_node(self.node_links, new_node_links, &raw mut self.rbtree.root)
         };
 
         // SAFETY:

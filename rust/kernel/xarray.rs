@@ -113,12 +113,22 @@ impl<T: ForeignOwnable> XArray<T> {
 
         // SAFETY: `self.xa` is always valid by the type invariant.
         iter::once(unsafe {
-            bindings::xa_find(self.xa.get(), &mut index, usize::MAX, bindings::XA_PRESENT)
+            bindings::xa_find(
+                self.xa.get(),
+                &raw mut index,
+                usize::MAX,
+                bindings::XA_PRESENT,
+            )
         })
         .chain(iter::from_fn(move || {
             // SAFETY: `self.xa` is always valid by the type invariant.
             Some(unsafe {
-                bindings::xa_find_after(self.xa.get(), &mut index, usize::MAX, bindings::XA_PRESENT)
+                bindings::xa_find_after(
+                    self.xa.get(),
+                    &raw mut index,
+                    usize::MAX,
+                    bindings::XA_PRESENT,
+                )
             })
         }))
         .map_while(|ptr| NonNull::new(ptr.cast()))

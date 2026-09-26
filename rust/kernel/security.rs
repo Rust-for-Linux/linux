@@ -66,7 +66,7 @@ impl SecurityCtx {
         let mut ctx: bindings::lsm_context = unsafe { core::mem::zeroed() };
 
         // SAFETY: Just a C FFI call. The pointer is valid for writes.
-        to_result(unsafe { bindings::security_secid_to_secctx(secid, &mut ctx) })?;
+        to_result(unsafe { bindings::security_secid_to_secctx(secid, &raw mut ctx) })?;
 
         // INVARIANT: If the above call did not fail, then we have a valid security context.
         Ok(Self { ctx })
@@ -106,6 +106,6 @@ impl Drop for SecurityCtx {
     fn drop(&mut self) {
         // SAFETY: By the invariant of `Self`, this releases an lsm context that came from a
         // successful call to `security_secid_to_secctx` and has not yet been released.
-        unsafe { bindings::security_release_secctx(&mut self.ctx) };
+        unsafe { bindings::security_release_secctx(&raw mut self.ctx) };
     }
 }

@@ -43,7 +43,7 @@ mod freq {
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements.
             to_result(unsafe {
-                bindings::dev_pm_opp_init_cpufreq_table(table.dev.as_raw(), &mut ptr)
+                bindings::dev_pm_opp_init_cpufreq_table(table.dev.as_raw(), &raw mut ptr)
             })?;
 
             Ok(Self {
@@ -182,7 +182,7 @@ impl Token {
     fn new(dev: &ARef<Device>, mut data: Data) -> Result<Self> {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_add_dynamic(dev.as_raw(), &mut data.0) })?;
+        to_result(unsafe { bindings::dev_pm_opp_add_dynamic(dev.as_raw(), &raw mut data.0) })?;
         Ok(Self {
             dev: dev.clone(),
             freq: data.freq(),
@@ -493,7 +493,7 @@ impl<T: ConfigOps + Default> Config<T> {
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The OPP core guarantees not to access fields of [`Config`] after this
             // call and so we don't need to save a copy of them for future use.
-            let ret = unsafe { bindings::dev_pm_opp_set_config(dev.as_raw(), &mut config) };
+            let ret = unsafe { bindings::dev_pm_opp_set_config(dev.as_raw(), &raw mut config) };
 
             to_result(ret).map(|()| ConfigToken(ret))
         };
@@ -870,13 +870,13 @@ impl Table {
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The returned pointer will be owned by the new [`OPP`] instance.
             SearchType::Ceil => unsafe {
-                bindings::dev_pm_opp_find_freq_ceil_indexed(raw_dev, &mut rate, index)
+                bindings::dev_pm_opp_find_freq_ceil_indexed(raw_dev, &raw mut rate, index)
             },
 
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The returned pointer will be owned by the new [`OPP`] instance.
             SearchType::Floor => unsafe {
-                bindings::dev_pm_opp_find_freq_floor_indexed(raw_dev, &mut rate, index)
+                bindings::dev_pm_opp_find_freq_floor_indexed(raw_dev, &raw mut rate, index)
             },
         })?;
 
@@ -896,13 +896,13 @@ impl Table {
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The returned pointer will be owned by the new [`OPP`] instance.
             SearchType::Ceil => unsafe {
-                bindings::dev_pm_opp_find_level_ceil(raw_dev, &mut level)
+                bindings::dev_pm_opp_find_level_ceil(raw_dev, &raw mut level)
             },
 
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The returned pointer will be owned by the new [`OPP`] instance.
             SearchType::Floor => unsafe {
-                bindings::dev_pm_opp_find_level_floor(raw_dev, &mut level)
+                bindings::dev_pm_opp_find_level_floor(raw_dev, &raw mut level)
             },
         })?;
 
@@ -921,13 +921,13 @@ impl Table {
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The returned pointer will be owned by the new [`OPP`] instance.
             SearchType::Ceil => unsafe {
-                bindings::dev_pm_opp_find_bw_ceil(raw_dev, &mut bw, index)
+                bindings::dev_pm_opp_find_bw_ceil(raw_dev, &raw mut bw, index)
             },
 
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements. The returned pointer will be owned by the new [`OPP`] instance.
             SearchType::Floor => unsafe {
-                bindings::dev_pm_opp_find_bw_floor(raw_dev, &mut bw, index)
+                bindings::dev_pm_opp_find_bw_floor(raw_dev, &raw mut bw, index)
             },
         })?;
 

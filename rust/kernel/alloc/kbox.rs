@@ -430,7 +430,7 @@ where
     /// Moves the `Box`'s value out of the `Box` and consumes the `Box`.
     pub fn into_inner(b: Self) -> T {
         // SAFETY: By the type invariant `&*b` is valid for `read`.
-        let value = unsafe { core::ptr::read(&*b) };
+        let value = unsafe { core::ptr::read(&raw const *b) };
         let _ = Self::forget_contents(b);
         value
     }

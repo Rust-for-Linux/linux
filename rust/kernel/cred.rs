@@ -61,7 +61,7 @@ impl Credential {
     pub fn get_secid(&self) -> u32 {
         let mut secid = 0;
         // SAFETY: The invariants of this type ensures that the pointer is valid.
-        unsafe { bindings::security_cred_getsecid(self.0.get(), &mut secid) };
+        unsafe { bindings::security_cred_getsecid(self.0.get(), &raw mut secid) };
         secid
     }
 

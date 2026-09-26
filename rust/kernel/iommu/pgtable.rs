@@ -96,7 +96,7 @@ impl<'a, F: IoPageTableFmt> IoPageTable<'a, F> {
         //   as cookie.
         // * The caller ensures that the io pgtable does not outlive the device.
         let ops = unsafe {
-            bindings::alloc_io_pgtable_ops(F::FORMAT, &mut raw_cfg, core::ptr::null_mut())
+            bindings::alloc_io_pgtable_ops(F::FORMAT, &raw mut raw_cfg, core::ptr::null_mut())
         };
 
         // INVARIANT: We successfully created a valid page table.
@@ -172,7 +172,7 @@ impl<'a, F: IoPageTableFmt> IoPageTable<'a, F> {
                 pgcount,
                 prot as i32,
                 flags.as_raw(),
-                &mut mapped,
+                &raw mut mapped,
             )
         });
 

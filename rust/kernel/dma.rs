@@ -683,7 +683,7 @@ impl<T: AsBytes + FromBytes> Coherent<T> {
             bindings::dma_alloc_attrs(
                 dev.as_raw(),
                 core::mem::size_of::<T>(),
-                &mut dma_addr,
+                &raw mut dma_addr,
                 gfp_flags.as_raw(),
                 dma_attrs.as_raw(),
             )
@@ -800,7 +800,7 @@ impl<T: AsBytes + FromBytes> Coherent<T> {
             bindings::dma_alloc_attrs(
                 dev.as_raw(),
                 size,
-                &mut dma_addr,
+                &raw mut dma_addr,
                 gfp_flags.as_raw(),
                 dma_attrs.as_raw(),
             )
@@ -1028,7 +1028,7 @@ impl CoherentHandle {
             bindings::dma_alloc_attrs(
                 dev.as_raw(),
                 size,
-                &mut dma_addr,
+                &raw mut dma_addr,
                 gfp_flags.as_raw(),
                 dma_attrs.as_raw(),
             )

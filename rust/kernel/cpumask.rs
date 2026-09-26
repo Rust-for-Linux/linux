@@ -232,7 +232,7 @@ impl CpumaskVar {
                 //
                 // INVARIANT: The associated memory is freed when the `CpumaskVar` goes out of
                 // scope.
-                unsafe { bindings::zalloc_cpumask_var(&mut ptr, _flags.as_raw()) };
+                unsafe { bindings::zalloc_cpumask_var(&raw mut ptr, _flags.as_raw()) };
                 NonNull::new(ptr.cast()).ok_or(AllocError)?
             },
 
@@ -257,7 +257,7 @@ impl CpumaskVar {
                 //
                 // INVARIANT: The associated memory is freed when the `CpumaskVar` goes out of
                 // scope.
-                unsafe { bindings::alloc_cpumask_var(&mut ptr, _flags.as_raw()) };
+                unsafe { bindings::alloc_cpumask_var(&raw mut ptr, _flags.as_raw()) };
                 NonNull::new(ptr.cast()).ok_or(AllocError)?
             },
             #[cfg(not(CONFIG_CPUMASK_OFFSTACK))]

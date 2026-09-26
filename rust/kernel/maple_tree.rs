@@ -461,7 +461,7 @@ impl<T: ForeignOwnable> MapleTreeAlloc<T> {
         let res = to_result(unsafe {
             bindings::mtree_alloc_range(
                 self.tree.tree.get(),
-                &mut index,
+                &raw mut index,
                 ptr,
                 size,
                 min,

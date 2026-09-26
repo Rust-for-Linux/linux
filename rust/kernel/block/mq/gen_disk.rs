@@ -119,7 +119,7 @@ impl GenDiskBuilder {
         let gendisk = from_err_ptr(unsafe {
             bindings::__blk_mq_alloc_disk(
                 tagset.raw_tag_set(),
-                &mut lim,
+                &raw mut lim,
                 data,
                 static_lock_class!().as_ptr(),
             )

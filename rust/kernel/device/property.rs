@@ -288,7 +288,7 @@ impl FwNode {
                 nargs_prop,
                 nargs,
                 index,
-                &mut out_args.0,
+                &raw mut out_args.0,
             )
         };
         to_result(ret)?;
@@ -445,7 +445,7 @@ impl Sealed for CString {}
 impl Property for CString {
     fn read_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<Self> {
         let mut str: *mut u8 = ptr::null_mut();
-        let pstr: *mut _ = &mut str;
+        let pstr: *mut _ = &raw mut str;
 
         // SAFETY:
         // - `name` is non-null and null-terminated.
