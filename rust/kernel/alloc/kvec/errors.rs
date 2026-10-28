@@ -25,6 +25,36 @@ impl<T> From<PushError<T>> for Error {
     }
 }
 
+/// Error type for [`Vec::try_push_init`].
+pub enum TryPushInitError<I, E> {
+    /// The allocation failed. Hand the initializer back.
+    AllocError(I),
+    /// The initializer failed.
+    InitError(E),
+}
+
+impl<I, E> fmt::Debug for TryPushInitError<I, E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TryPushInitError::AllocError(_) => write!(f, "Failed to allocate"),
+            TryPushInitError::InitError(_) => write!(f, "Initializer failed"),
+        }
+    }
+}
+
+impl<I, E> From<TryPushInitError<I, E>> for Error
+where
+    Error: From<E>,
+{
+    #[inline]
+    fn from(e: TryPushInitError<I, E>) -> Error {
+        match e {
+            TryPushInitError::AllocError(_) => ENOMEM,
+            TryPushInitError::InitError(e) => Error::from(e),
+        }
+    }
+}
+
 /// Error type for [`Vec::remove`].
 pub struct RemoveError;
 

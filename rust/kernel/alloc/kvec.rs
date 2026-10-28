@@ -52,10 +52,18 @@ use core::{
     }, //
 };
 
-use pin_init::Zeroable;
+use pin_init::{
+    Init,
+    Zeroable, //
+};
 
 mod errors;
-pub use self::errors::{InsertError, PushError, RemoveError};
+pub use self::errors::{
+    InsertError,
+    PushError,
+    RemoveError,
+    TryPushInitError, //
+};
 
 /// Create a [`KVec`] containing the arguments.
 ///
@@ -356,6 +364,79 @@ where
         // SAFETY: The call to `reserve` was successful, so the capacity is at least one greater
         // than the length.
         unsafe { self.push_within_capacity_unchecked(v) };
+        Ok(())
+    }
+
+    /// Appends an element to the back of the [`Vec`] instance by initializing it in place.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pin_init::init_zeroed;
+    ///
+    /// let mut v = KVec::<[u8; 200]>::new();
+    /// v.push_init(init_zeroed(), GFP_KERNEL)?;
+    /// assert_eq!(v[0], [0; 200]);
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[inline]
+    pub fn push_init(&mut self, init: impl Init<T>, flags: Flags) -> Result<(), AllocError> {
+        self.try_push_init(init, flags)
+            .map_err(|TryPushInitError::AllocError(_)| AllocError)
+    }
+
+    /// Appends an element to the back of the [`Vec`] instance by initializing it in place.
+    ///
+    /// Unlike [`Vec::push_init`], the initializer may be fallible. If the allocation fails, the
+    /// original initializer `init` is handed back in [`TryPushInitError::AllocError`]. If the
+    /// initializer itself fails, its error is returned in [`TryPushInitError::InitError`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// struct Element {
+    ///     value: u8,
+    /// }
+    ///
+    /// impl Element {
+    ///     fn new(value: u32) -> impl Init<Self, Error> {
+    ///         try_init!(Element {
+    ///             value: u8::try_from(value)?,
+    ///         }? Error)
+    ///     }
+    /// }
+    ///
+    /// let mut v: KVec<Element> = KVec::new();
+    /// v.try_push_init(Element::new(16), GFP_KERNEL)?;
+    /// assert_eq!(v[0].value, 16);
+    ///
+    /// // The initializer fails because 256 does not fit in a `u8`.
+    /// assert!(v.try_push_init(Element::new(256), GFP_KERNEL).is_err());
+    /// assert_eq!(v.len(), 1);
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn try_push_init<I, E>(
+        &mut self,
+        init: I,
+        flags: Flags,
+    ) -> Result<(), TryPushInitError<I, E>>
+    where
+        I: Init<T, E>,
+    {
+        if self.reserve(1, flags).is_err() {
+            return Err(TryPushInitError::AllocError(init));
+        }
+        // SAFETY: The call to `reserve` was successful, so there is at least one spare slot.
+        let slot = unsafe { self.spare_capacity_mut().get_unchecked_mut(0) }.as_mut_ptr();
+        // SAFETY:
+        // - `slot` points to a spare slot, which is valid, uninitialized memory.
+        // - If `raw_try_init` fails, this returns without increasing the length or touching `slot`.
+        // - `init` implements `Init<T, E>`, which removes the pinning requirement.
+        unsafe { pin_init::raw_try_init(slot, init) }.map_err(TryPushInitError::InitError)?;
+        // SAFETY: The call to `raw_try_init` returned `Ok`, so the first spare slot now holds an
+        // initialized `T`. The new length does not exceed the capacity because `reserve` ensured
+        // the capacity is greater than the length by at least one.
+        unsafe { self.inc_len(1) };
         Ok(())
     }
 
