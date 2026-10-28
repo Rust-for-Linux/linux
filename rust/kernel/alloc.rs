@@ -3,9 +3,12 @@
 //! Implementation of the kernel's memory allocation infrastructure.
 
 pub mod allocator;
+pub mod arrayvec;
 pub mod kbox;
 pub mod kvec;
 pub mod layout;
+
+pub use self::arrayvec::ArrayVec;
 
 pub use self::kbox::Box;
 pub use self::kbox::KBox;

@@ -7,7 +7,7 @@ use crate::{
     prelude::*, //
 };
 
-/// Error type for [`Vec::push_within_capacity`].
+/// Error type for a push that fails because there is no spare capacity.
 pub struct PushError<T>(pub T);
 
 impl<T> fmt::Debug for PushError<T> {

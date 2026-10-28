@@ -1255,6 +1255,7 @@ macro_rules! impl_slice_eq {
         )*
     }
 }
+pub(super) use impl_slice_eq;
 
 impl_slice_eq! {
     [A1: Allocator, A2: Allocator] Vec<T, A1>, Vec<U, A2>,
