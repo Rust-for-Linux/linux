@@ -904,7 +904,7 @@ pub trait HrTimerMode: private::Sealed {
     /// The C representation of hrtimer mode.
     const C_MODE: bindings::hrtimer_mode;
 
-    /// Type representing the clock source.
+    /// The clock to be used by the timer.
     type Clock: ClockId;
 
     /// Type representing the expiration specification (absolute or relative time).
