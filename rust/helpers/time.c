@@ -19,6 +19,16 @@ __rust_helper ktime_t rust_helper_ktime_get_boottime(void)
 	return ktime_get_boottime();
 }
 
+__rust_helper time64_t rust_helper_ktime_get_boottime_seconds(void)
+{
+	return ktime_get_boottime_seconds();
+}
+
+__rust_helper time64_t rust_helper_ktime_get_clocktai_seconds(void)
+{
+	return ktime_get_clocktai_seconds();
+}
+
 __rust_helper ktime_t rust_helper_ktime_get_clocktai(void)
 {
 	return ktime_get_clocktai();

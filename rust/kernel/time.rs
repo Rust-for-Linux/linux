@@ -69,7 +69,9 @@ pub fn msecs_to_jiffies(msecs: Msecs) -> Jiffies {
 ///
 /// Implementers must ensure that `ktime_get()` returns a value in the inclusive range
 /// `0..=KTIME_MAX` (i.e., greater than or equal to 0 and less than or equal to
-/// `KTIME_MAX`, where `KTIME_MAX` equals `i64::MAX`).
+/// `KTIME_MAX`, where `KTIME_MAX` equals `i64::MAX`), and that `ktime_get_seconds()`
+/// returns a value in the inclusive range `0..=KTIME_SEC_MAX` (where `KTIME_SEC_MAX`
+/// equals `KTIME_MAX / NSEC_PER_SEC`).
 pub unsafe trait ClockId {
     /// The kernel clock ID associated with this clock.
     ///
@@ -80,6 +82,11 @@ pub unsafe trait ClockId {
     ///
     /// The function must return a value in the range `0..=KTIME_MAX`.
     fn ktime_get() -> bindings::ktime_t;
+
+    /// Get the current time from the clock in seconds.
+    ///
+    /// The function must return a value in the range `0..=KTIME_SEC_MAX`.
+    fn ktime_get_seconds() -> bindings::time64_t;
 }
 
 /// A monotonically increasing clock.
@@ -96,13 +103,18 @@ pub unsafe trait ClockId {
 pub struct Monotonic;
 
 // SAFETY: The kernel's `ktime_get()` is guaranteed to return a value
-// in `0..=KTIME_MAX`.
+// in `0..=KTIME_MAX`, and `ktime_get_seconds()` a value in `0..=KTIME_SEC_MAX`.
 unsafe impl ClockId for Monotonic {
     const ID: bindings::clockid_t = bindings::CLOCK_MONOTONIC as bindings::clockid_t;
 
     fn ktime_get() -> bindings::ktime_t {
         // SAFETY: It is always safe to call `ktime_get()` outside of NMI context.
         unsafe { bindings::ktime_get() }
+    }
+
+    fn ktime_get_seconds() -> bindings::time64_t {
+        // SAFETY: It is always safe to call `ktime_get_seconds()` outside of NMI context.
+        unsafe { bindings::ktime_get_seconds() }
     }
 }
 
@@ -123,13 +135,18 @@ unsafe impl ClockId for Monotonic {
 pub struct RealTime;
 
 // SAFETY: The kernel's `ktime_get_real()` is guaranteed to return a value
-// in `0..=KTIME_MAX`.
+// in `0..=KTIME_MAX`, and `ktime_get_real_seconds()` a value in `0..=KTIME_SEC_MAX`.
 unsafe impl ClockId for RealTime {
     const ID: bindings::clockid_t = bindings::CLOCK_REALTIME as bindings::clockid_t;
 
     fn ktime_get() -> bindings::ktime_t {
         // SAFETY: It is always safe to call `ktime_get_real()` outside of NMI context.
         unsafe { bindings::ktime_get_real() }
+    }
+
+    fn ktime_get_seconds() -> bindings::time64_t {
+        // SAFETY: It is always safe to call `ktime_get_real_seconds()` outside of NMI context.
+        unsafe { bindings::ktime_get_real_seconds() }
     }
 }
 
@@ -143,13 +160,18 @@ unsafe impl ClockId for RealTime {
 pub struct BootTime;
 
 // SAFETY: The kernel's `ktime_get_boottime()` is guaranteed to return a value
-// in `0..=KTIME_MAX`.
+// in `0..=KTIME_MAX`, and `ktime_get_boottime_seconds()` a value in `0..=KTIME_SEC_MAX`.
 unsafe impl ClockId for BootTime {
     const ID: bindings::clockid_t = bindings::CLOCK_BOOTTIME as bindings::clockid_t;
 
     fn ktime_get() -> bindings::ktime_t {
         // SAFETY: It is always safe to call `ktime_get_boottime()` outside of NMI context.
         unsafe { bindings::ktime_get_boottime() }
+    }
+
+    fn ktime_get_seconds() -> bindings::time64_t {
+        // SAFETY: It is always safe to call `ktime_get_boottime_seconds()` outside of NMI context.
+        unsafe { bindings::ktime_get_boottime_seconds() }
     }
 }
 
@@ -167,13 +189,18 @@ unsafe impl ClockId for BootTime {
 pub struct Tai;
 
 // SAFETY: The kernel's `ktime_get_clocktai()` is guaranteed to return a value
-// in `0..=KTIME_MAX`.
+// in `0..=KTIME_MAX`, and `ktime_get_clocktai_seconds()` a value in `0..=KTIME_SEC_MAX`.
 unsafe impl ClockId for Tai {
     const ID: bindings::clockid_t = bindings::CLOCK_TAI as bindings::clockid_t;
 
     fn ktime_get() -> bindings::ktime_t {
         // SAFETY: It is always safe to call `ktime_get_tai()` outside of NMI context.
         unsafe { bindings::ktime_get_clocktai() }
+    }
+
+    fn ktime_get_seconds() -> bindings::time64_t {
+        // SAFETY: It is always safe to call `ktime_get_clocktai_seconds()` outside of NMI context.
+        unsafe { bindings::ktime_get_clocktai_seconds() }
     }
 }
 
@@ -186,7 +213,8 @@ unsafe impl ClockId for Tai {
 ///
 /// # Invariants
 ///
-/// The `inner` value is in the range from 0 to `KTIME_MAX`.
+/// * For `U = Nsec`, the `inner` value is in the range from 0 to `KTIME_MAX`.
+/// * For `U = Sec`, the `inner` value is in the range from 0 to `KTIME_SEC_MAX`.
 #[repr(transparent)]
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
 pub struct Instant<C: ClockId, U: InstantUnit = Nsec> {
@@ -206,8 +234,10 @@ impl<C: ClockId, U: InstantUnit> Instant<C, U> {
     /// Get the current time from the clock `C`.
     #[inline]
     pub fn now() -> Self {
-        // INVARIANT: `InstantUnit` is sealed and its only impl, `Nsec`, calls
-        // `ClockId::ktime_get()`, which returns a value in the range from 0 to `KTIME_MAX`.
+        // INVARIANT: `InstantUnit` is sealed. `Nsec` calls `ClockId::ktime_get()`, which
+        // returns a value in the range from 0 to `KTIME_MAX`, and `Sec` calls
+        // `ClockId::ktime_get_seconds()`, which returns a value in the range from 0 to
+        // `KTIME_SEC_MAX`.
         Self {
             inner: U::now::<C>(),
             _c: PhantomData,
@@ -302,10 +332,28 @@ impl<T: ClockId> ops::Sub<Delta> for Instant<T, Nsec> {
     }
 }
 
+impl<C: ClockId> Instant<C, Sec> {
+    /// Return the number of whole seconds in the [`Instant`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::time::{Instant, RealTime, Sec};
+    ///
+    /// let secs: i64 = Instant::<RealTime, Sec>::now().as_secs();
+    /// assert!(secs >= 0);
+    /// ```
+    #[inline]
+    pub fn as_secs(&self) -> i64 {
+        self.inner
+    }
+}
+
 mod private {
     pub trait Sealed {}
 
     impl Sealed for super::Nsec {}
+    impl Sealed for super::Sec {}
     impl Sealed for super::Jiffy {}
 }
 
@@ -326,6 +374,18 @@ pub trait TimeUnit: private::Sealed {
 pub enum Nsec {}
 
 impl TimeUnit for Nsec {
+    type Repr = i64;
+    const ZERO: Self::Repr = 0;
+}
+
+/// A time unit of seconds.
+///
+/// An [`Instant<C, Sec>`] stores its value as [`i64`] seconds. [`Sec`] does not
+/// implement the comparison traits, so two such instants cannot be compared.
+#[derive(Copy, Clone, Debug)]
+pub enum Sec {}
+
+impl TimeUnit for Sec {
     type Repr = i64;
     const ZERO: Self::Repr = 0;
 }
@@ -352,6 +412,13 @@ impl InstantUnit for Nsec {
     #[inline]
     fn now<C: ClockId>() -> i64 {
         C::ktime_get()
+    }
+}
+
+impl InstantUnit for Sec {
+    #[inline]
+    fn now<C: ClockId>() -> i64 {
+        C::ktime_get_seconds()
     }
 }
 
