@@ -179,36 +179,43 @@ unsafe impl ClockId for Tai {
 
 /// A specific point in time.
 ///
+/// The time is read from the clock given by the type parameter `C` (see
+/// [`ClockId`]) and stored in the unit given by `U` (see [`InstantUnit`]); its
+/// value has type `U::Repr`. `U` defaults to [`Nsec`], so a plain
+/// [`Instant<C>`] is a point in time in nanoseconds.
+///
 /// # Invariants
 ///
 /// The `inner` value is in the range from 0 to `KTIME_MAX`.
 #[repr(transparent)]
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
-pub struct Instant<C: ClockId> {
-    inner: bindings::ktime_t,
+pub struct Instant<C: ClockId, U: InstantUnit = Nsec> {
+    inner: U::Repr,
     _c: PhantomData<C>,
 }
 
-impl<C: ClockId> Clone for Instant<C> {
+impl<C: ClockId, U: InstantUnit> Clone for Instant<C, U> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<C: ClockId> Copy for Instant<C> {}
+impl<C: ClockId, U: InstantUnit> Copy for Instant<C, U> {}
 
-impl<C: ClockId> Instant<C> {
-    /// Get the current time from the clock source.
+impl<C: ClockId, U: InstantUnit> Instant<C, U> {
+    /// Get the current time from the clock `C`.
     #[inline]
     pub fn now() -> Self {
-        // INVARIANT: The `ClockId::ktime_get()` function returns a value in the range
-        // from 0 to `KTIME_MAX`.
+        // INVARIANT: `InstantUnit` is sealed and its only impl, `Nsec`, calls
+        // `ClockId::ktime_get()`, which returns a value in the range from 0 to `KTIME_MAX`.
         Self {
-            inner: C::ktime_get(),
+            inner: U::now::<C>(),
             _c: PhantomData,
         }
     }
+}
 
+impl<C: ClockId> Instant<C, Nsec> {
     /// Return the amount of time elapsed since the [`Instant`].
     #[inline]
     pub fn elapsed(&self) -> Delta {
@@ -243,7 +250,7 @@ impl<C: ClockId> Instant<C> {
     }
 }
 
-impl<C: ClockId> ops::Sub for Instant<C> {
+impl<C: ClockId> ops::Sub for Instant<C, Nsec> {
     type Output = Delta;
 
     // By the type invariant, it never overflows.
@@ -255,7 +262,7 @@ impl<C: ClockId> ops::Sub for Instant<C> {
     }
 }
 
-impl<T: ClockId> ops::Add<Delta> for Instant<T> {
+impl<T: ClockId> ops::Add<Delta> for Instant<T, Nsec> {
     type Output = Self;
 
     #[inline]
@@ -275,7 +282,7 @@ impl<T: ClockId> ops::Add<Delta> for Instant<T> {
     }
 }
 
-impl<T: ClockId> ops::Sub<Delta> for Instant<T> {
+impl<T: ClockId> ops::Sub<Delta> for Instant<T, Nsec> {
     type Output = Self;
 
     #[inline]
@@ -333,6 +340,19 @@ pub enum Jiffy {}
 impl TimeUnit for Jiffy {
     type Repr = isize;
     const ZERO: Self::Repr = 0;
+}
+
+/// A trait for time units that can be used with [`Instant`].
+pub trait InstantUnit: TimeUnit {
+    /// Return the current time of the clock `C` in this unit.
+    fn now<C: ClockId>() -> Self::Repr;
+}
+
+impl InstantUnit for Nsec {
+    #[inline]
+    fn now<C: ClockId>() -> i64 {
+        C::ktime_get()
+    }
 }
 
 /// A span of time.
