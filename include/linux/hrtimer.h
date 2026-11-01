@@ -317,6 +317,10 @@ void hrtimer_update_function(struct hrtimer *timer,
 extern u64
 hrtimer_forward(struct hrtimer *timer, ktime_t now, ktime_t interval);
 
+extern u64
+hrtimer_forward_safe_from_callback(struct hrtimer *timer, ktime_t now,
+				   ktime_t interval);
+
 /**
  * hrtimer_forward_now() - forward the timer expiry so it expires after now
  * @timer:	hrtimer to forward

@@ -1121,6 +1121,36 @@ u64 hrtimer_forward(struct hrtimer *timer, ktime_t now, ktime_t interval)
 }
 EXPORT_SYMBOL_GPL(hrtimer_forward);
 
+/**
+ * hrtimer_forward_safe_from_callback() - forward the timer expiry under the base lock
+ * @timer:	hrtimer to forward
+ * @now:	forward past this time
+ * @interval:	the interval to forward
+ *
+ * Variant of hrtimer_forward() which is safe against a concurrent
+ * hrtimer_start(). The expiry is updated with the base lock held. If the
+ * timer is already queued, the expiry is not changed.
+ *
+ * Context: Only from the callback function of @timer.
+ *
+ * Return: The number of overruns, or 0 if the expiry was not changed.
+ */
+u64 hrtimer_forward_safe_from_callback(struct hrtimer *timer, ktime_t now,
+				       ktime_t interval)
+{
+	unsigned long flags;
+	u64 orun = 0;
+
+	lock_hrtimer_base(timer, &flags);
+
+	if (!timer->is_queued)
+		orun = hrtimer_forward(timer, now, interval);
+
+	unlock_hrtimer_base(timer, &flags);
+	return orun;
+}
+EXPORT_SYMBOL_GPL(hrtimer_forward_safe_from_callback);
+
 /*
  * enqueue_hrtimer - internal function to (re)start a timer
  *
