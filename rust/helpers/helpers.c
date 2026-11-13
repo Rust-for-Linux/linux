@@ -95,6 +95,9 @@
 #include "scatterlist.c"
 #include "security.c"
 #include "serdev.c"
+#ifdef CONFIG_RUST_SERIAL_ABSTRACTIONS
+#include "serial.c"
+#endif
 #include "signal.c"
 #include "slab.c"
 #include "spinlock.c"

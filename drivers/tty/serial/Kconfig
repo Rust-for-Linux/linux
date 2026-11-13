@@ -18,6 +18,22 @@ source "drivers/tty/serial/8250/Kconfig"
 
 comment "Non-8250 serial port support"
 
+config RUST_SERIAL_ABSTRACTIONS
+	bool
+	depends on RUST
+	select SERIAL_CORE
+	select SERIAL_CORE_CONSOLE
+	help
+	  This enables Rust abstractions for the serial core API.
+
+config SERIAL_BFLB_RUST
+	bool "Bouffalo Lab polling serial console in Rust"
+	depends on RUST && OF && COMMON_CLK && HAS_IOMEM
+	select RUST_SERIAL_ABSTRACTIONS
+	help
+	  Say Y here to enable kernel console support for the Bouffalo Lab
+	  BL808 UART controller.
+
 config SERIAL_AMBA_PL010
 	tristate "ARM AMBA PL010 serial port support"
 	depends on ARM_AMBA || COMPILE_TEST
