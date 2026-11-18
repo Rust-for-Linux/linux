@@ -846,6 +846,69 @@ impl Delta {
 mod tests {
     use super::*;
 
+    // The largest values that `Delta::from_micros()`, `Delta::from_millis()` and
+    // `Delta::from_secs()` convert without saturation.
+    const MAX_MICROS: i64 = 9_223_372_036_854_775;
+    const MAX_MILLIS: i64 = 9_223_372_036_854;
+    const MAX_SECS: i64 = 9_223_372_036;
+
+    #[test]
+    fn from_micros_saturates() {
+        assert_eq!(
+            Delta::from_micros(MAX_MICROS).as_nanos(),
+            MAX_MICROS * NSEC_PER_USEC
+        );
+        assert_eq!(Delta::from_micros(MAX_MICROS + 1).as_nanos(), i64::MAX);
+
+        assert_eq!(
+            Delta::from_micros(-MAX_MICROS).as_nanos(),
+            -MAX_MICROS * NSEC_PER_USEC
+        );
+        assert_eq!(Delta::from_micros(-MAX_MICROS - 1).as_nanos(), i64::MIN);
+    }
+
+    #[test]
+    fn from_millis_saturates() {
+        assert_eq!(
+            Delta::from_millis(MAX_MILLIS).as_nanos(),
+            MAX_MILLIS * NSEC_PER_MSEC
+        );
+        assert_eq!(Delta::from_millis(MAX_MILLIS + 1).as_nanos(), i64::MAX);
+
+        assert_eq!(
+            Delta::from_millis(-MAX_MILLIS).as_nanos(),
+            -MAX_MILLIS * NSEC_PER_MSEC
+        );
+        assert_eq!(Delta::from_millis(-MAX_MILLIS - 1).as_nanos(), i64::MIN);
+    }
+
+    #[test]
+    fn from_secs_saturates() {
+        assert_eq!(
+            Delta::from_secs(MAX_SECS).as_nanos(),
+            MAX_SECS * NSEC_PER_SEC
+        );
+        assert_eq!(Delta::from_secs(MAX_SECS + 1).as_nanos(), i64::MAX);
+
+        assert_eq!(
+            Delta::from_secs(-MAX_SECS).as_nanos(),
+            -MAX_SECS * NSEC_PER_SEC
+        );
+        assert_eq!(Delta::from_secs(-MAX_SECS - 1).as_nanos(), i64::MIN);
+    }
+
+    #[test]
+    fn as_micros_ceil_handles_extremes() {
+        assert_eq!(Delta::from_nanos(i64::MAX).as_micros_ceil(), MAX_MICROS + 1);
+        assert_eq!(Delta::from_nanos(i64::MIN).as_micros_ceil(), -MAX_MICROS);
+    }
+
+    #[test]
+    fn as_millis_ceil_handles_extremes() {
+        assert_eq!(Delta::from_nanos(i64::MAX).as_millis_ceil(), MAX_MILLIS + 1);
+        assert_eq!(Delta::from_nanos(i64::MIN).as_millis_ceil(), -MAX_MILLIS);
+    }
+
     #[test]
     fn to_jiffies_timeout_converts() {
         const HZ: isize = bindings::HZ as isize;
