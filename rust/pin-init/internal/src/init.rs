@@ -572,7 +572,7 @@ fn make_field_check(
     };
 
     quote_spanned! { Span::mixed_site() =>
-        #[allow(unreachable_code)]
+        #[allow(unreachable_code, clippy::large_unopt_stack_frames)]
         // We use unreachable code to perform field checks. They're still checked by the compiler.
         // SAFETY: this code is never executed.
         let _ = || unsafe {
