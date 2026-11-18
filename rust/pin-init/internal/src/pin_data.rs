@@ -13,7 +13,7 @@ use syn::{
     visit_mut::VisitMut,
     Attribute, Field, Fields, GenericArgument, GenericParam, Generics, Ident, Index, Item,
     ItemStruct, Lifetime, LifetimeParam, Member, Meta, PathArguments, PathSegment, Token, Type,
-    TypeParamBound, TypePath, WhereClause, WherePredicate,
+    TypeParamBound, TypePath, Visibility, WhereClause, WherePredicate,
 };
 
 use crate::{
@@ -1332,13 +1332,20 @@ fn generate_variance_check(info: &StructInfo) -> TokenStream {
 
 fn generate_projections(info: &StructInfo) -> TokenStream {
     let ItemStruct {
-        vis,
-        ident,
-        generics,
-        ..
+        ident, generics, ..
     } = &info.struct_;
     let this_lt = Lifetime::new("'__this", Span::mixed_site());
     let this_lt_generics: Generics = parse_quote!(<#this_lt>);
+
+    // Compute the least upper bound of field visibility.
+    //
+    // This will be used for generated projection methods instead of the visibility of the struct;
+    // if the struct visibility is used, the projection method will exist on public structs that
+    // use `#[pin_data]` but the caller can do nothing with it (as all fields of the projection
+    // struct will be invisible).
+    let field_vis_lub = info.fields.iter().fold(Visibility::Inherited, |accum, f| {
+        accum.semilattice_join(&f.field.vis)
+    });
 
     // Wrap in `CombinedGenerics` because it's ty generics will always output `<>`, so it can be
     // used with `for`.
@@ -1541,7 +1548,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
     let (projection_def, projection_init) = if info.is_tuple_struct {
         (
             quote! {
-                #vis struct __Projection #generics_with_this_lt (
+                #field_vis_lub struct __Projection #generics_with_this_lt (
                     #(#fields_decl)*
                     ::core::marker::PhantomData<&'__this mut #ident #ty_generics>,
                 ) #whr;
@@ -1556,7 +1563,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
     } else {
         (
             quote! {
-                #vis struct __Projection #generics_with_this_lt
+                #field_vis_lub struct __Projection #generics_with_this_lt
                     #whr
                 {
                     #(#fields_decl)*
@@ -1576,7 +1583,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
     let (projection_lt_def, projection_lt_init) = if info.is_tuple_struct {
         (
             quote! {
-                #vis struct #projection_lt #generics_with_this_field_lt (
+                #field_vis_lub struct #projection_lt #generics_with_this_field_lt (
                     #(#fields_decl_lt)*
                     ::core::marker::PhantomData<&'__this mut #ident #ty_generics>,
                 ) #whr;
@@ -1591,7 +1598,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
     } else {
         (
             quote! {
-                #vis struct #projection_lt #generics_with_this_field_lt
+                #field_vis_lub struct #projection_lt #generics_with_this_field_lt
                     #whr
                 {
                     #(#fields_decl_lt)*
@@ -1750,7 +1757,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
     let (projection_ref_lt_def, projection_ref_lt_init) = if info.is_tuple_struct {
         (
             quote!(
-                #vis struct #projection_ref_lt #generics_with_this_field_ref_lt(
+                #field_vis_lub struct #projection_ref_lt #generics_with_this_field_ref_lt(
                     #(#fields_ref_decl_lt)*
                     ::core::marker::PhantomData<&'__this #ident #ty_generics>,
                 ) #whr;
@@ -1765,7 +1772,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
     } else {
         (
             quote! {
-                #vis struct #projection_ref_lt #generics_with_this_field_ref_lt
+                #field_vis_lub struct #projection_ref_lt #generics_with_this_field_ref_lt
                     #whr
                 {
                     #(#fields_ref_decl_lt)*
@@ -1813,7 +1820,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
             /// These fields are **not** structurally pinned:
             #(#[doc = #not_structurally_pinned_fields_docs])*
             #[inline]
-            #vis fn project<'__this>(
+            #field_vis_lub fn project<'__this>(
                 self: ::core::pin::Pin<&'__this mut Self>,
             ) -> __Projection #ty_generics_with_this_lt {
                 // SAFETY: we only give access to `&mut` for fields not structurally pinned.
@@ -1829,7 +1836,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
             /// These fields are **not** structurally pinned:
             #(#[doc = #not_structurally_pinned_fields_docs])*
             #[inline]
-            #vis fn with_project<'__this, R>(
+            #field_vis_lub fn with_project<'__this, R>(
                 self: ::core::pin::Pin<&'__this mut Self>,
                 f: impl for #field_lt_ty_generics ::core::ops::FnOnce(
                     #projection_lt #ty_generics_with_this_field_lt
@@ -1848,7 +1855,7 @@ fn generate_projections(info: &StructInfo) -> TokenStream {
             /// These fields are **not** structurally pinned:
             #(#[doc = #not_structurally_pinned_fields_docs])*
             #[inline]
-            #vis fn with_project_ref<'__this, R>(
+            #field_vis_lub fn with_project_ref<'__this, R>(
                 self: ::core::pin::Pin<&'__this Self>,
                 f: impl for #field_lt_ty_generics ::core::ops::FnOnce(
                     #projection_ref_lt #ty_generics_with_this_field_ref_lt

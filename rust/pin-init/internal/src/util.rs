@@ -6,7 +6,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, ToTokens};
 use syn::{
     parse_quote, visit::Visit, visit_mut::VisitMut, Attribute, BoundLifetimes, GenericParam,
-    Generics, Index, Lifetime, Member, Token, Type, TypePath,
+    Generics, Index, Lifetime, Member, Token, Type, TypePath, VisRestricted, Visibility,
 };
 
 use crate::DiagCtxt;
@@ -496,5 +496,50 @@ impl TypeExt for Type {
         }
         .visit_type_mut(&mut ret);
         ret
+    }
+}
+
+pub(crate) trait VisibilityExt {
+    /// Returns the least upper bound of `self` and `other`.
+    ///
+    /// If the exact upper bound cannot be determined, this may return a greater visibility (more
+    /// visible).
+    fn semilattice_join(self, other: &Self) -> Visibility;
+}
+
+impl VisibilityExt for Visibility {
+    fn semilattice_join(self, other: &Self) -> Visibility {
+        match (&self, other) {
+            (Visibility::Public(_), _) | (_, Visibility::Inherited) => self,
+            (_, Visibility::Public(_)) | (Visibility::Inherited, _) => other.clone(),
+            // `pub(in some::module)` is too complex, so if we get this case just bail out and
+            // return `pub(crate)`.
+            (Visibility::Restricted(a), Visibility::Restricted(b))
+                if a.in_token.is_some() || b.in_token.is_some() =>
+            {
+                Visibility::Restricted(VisRestricted {
+                    pub_token: a.pub_token,
+                    paren_token: a.paren_token,
+                    in_token: None,
+                    path: parse_quote!(crate),
+                })
+            }
+            (Visibility::Restricted(a), Visibility::Restricted(b)) => {
+                let a = a.path.get_ident().unwrap();
+                let b = b.path.get_ident().unwrap();
+
+                if a == "crate" {
+                    self
+                } else if b == "crate" {
+                    other.clone()
+                } else if a == "super" {
+                    self
+                } else if b == "super" {
+                    other.clone()
+                } else {
+                    self
+                }
+            }
+        }
     }
 }
