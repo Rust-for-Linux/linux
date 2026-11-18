@@ -2081,6 +2081,7 @@ fn generate_the_pin_data(info: &StructInfo) -> TokenStream {
 
         // SAFETY: We have added the correct projection functions above to `__ThePinData` and
         // we also use the least restrictive generics possible.
+        #[doc(hidden)]
         unsafe impl #impl_generics ::pin_init::__internal::HasPinData for #struct_name #ty_generics
             #whr
         {
