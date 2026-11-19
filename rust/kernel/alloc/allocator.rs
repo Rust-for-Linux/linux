@@ -101,6 +101,23 @@ impl ReallocFunc {
         nid: NumaNode,
     ) -> Result<NonNull<[u8]>, AllocError> {
         let size = layout.size();
+
+        // `NumaNode::new` validates the ID range, not whether the node is online.
+        // The C allocation paths require an online node for nonzero allocations.
+        // Keep `NUMA_NO_NODE` and zero-sized deallocations unchanged.
+        //
+        // Residual TOCTOU remains if a node goes offline after this check and
+        // before the allocator runs; that matches practical C usage for rejecting
+        // statically missing/offline nodes from safe Rust.
+        if size != 0 && nid != NumaNode::NO_NODE {
+            // SAFETY: The helper only reads the kernel's online-node mask. `nid`
+            // is either `NUMA_NO_NODE` (excluded above) or a value in
+            // `[0, MAX_NUMNODES)` from `NumaNode::new`.
+            if !unsafe { bindings::node_online(nid.0) } {
+                return Err(AllocError);
+            }
+        }
+
         let ptr = match ptr {
             Some(ptr) => {
                 if old_layout.size() == 0 {
@@ -116,6 +133,7 @@ impl ReallocFunc {
         // - `self.0` is one of `krealloc`, `vrealloc`, `kvrealloc` and thus only requires that
         //   `ptr` is NULL or valid.
         // - `ptr` is either NULL or valid by the safety requirements of this function.
+        // - For nonzero allocations with a specific node, `nid` was checked online above.
         //
         // GUARANTEE:
         // - `self.0` is one of `krealloc`, `vrealloc`, `kvrealloc`.
