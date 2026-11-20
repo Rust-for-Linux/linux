@@ -4,11 +4,20 @@
 //!
 //! C header: [`include/linux/xarray.h`](srctree/include/linux/xarray.h)
 
-use crate::{
+use core::{
+    iter,
+    marker::PhantomData,
+    pin::Pin,
+    ptr::NonNull, //
+};
+use kernel::{
     alloc,
     bindings,
     build_assert::build_assert,
-    error::{Error, Result},
+    error::{
+        Error,
+        Result, //
+    },
     ffi::c_void,
     str::{
         CStr,
@@ -21,8 +30,12 @@ use crate::{
         Opaque, //
     }, //
 };
-use core::{iter, marker::PhantomData, pin::Pin, ptr::NonNull};
-use pin_init::{pin_data, pin_init, pinned_drop, PinInit};
+use pin_init::{
+    pin_data,
+    pin_init,
+    pinned_drop,
+    PinInit, //
+};
 
 /// Creates a [`XArray`] initialiser with the given name and a newly-created lock class.
 ///
@@ -68,7 +81,10 @@ pub use new_xarray;
 /// *guard.get_mut(0).unwrap() = 0xffff;
 /// assert_eq!(guard.get(0).copied(), Some(0xffff));
 ///
-/// assert_eq!(guard.store(0, beef, GFP_KERNEL)?.as_deref().copied(), Some(0xffff));
+/// assert_eq!(
+///     guard.store(0, beef, GFP_KERNEL)?.as_deref().copied(),
+///     Some(0xffff)
+/// );
 /// assert_eq!(guard.get(0).copied(), Some(0xbeef));
 ///
 /// guard.remove(0);
