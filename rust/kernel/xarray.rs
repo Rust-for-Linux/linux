@@ -19,6 +19,7 @@ use kernel::{
         Result, //
     },
     ffi::c_void,
+    fmt,
     str::{
         CStr,
         CStrExt, //
@@ -213,6 +214,15 @@ pub struct StoreError<T> {
     pub error: Error,
     /// The value that was not stored.
     pub value: T,
+}
+
+impl<T> fmt::Debug for StoreError<T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StoreError")
+            .field("error", &self.error)
+            .finish()
+    }
 }
 
 impl<T> From<StoreError<T>> for Error {
