@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/mm.h>
+#include <linux/nodemask.h>
 #include <linux/sched/mm.h>
 
 __rust_helper void rust_helper_mmgrab(struct mm_struct *mm)
@@ -36,6 +37,11 @@ __rust_helper bool rust_helper_mmap_read_trylock(struct mm_struct *mm)
 __rust_helper void rust_helper_mmap_read_unlock(struct mm_struct *mm)
 {
 	mmap_read_unlock(mm);
+}
+
+__rust_helper bool rust_helper_node_online(int nid)
+{
+	return node_online(nid);
 }
 
 __rust_helper struct vm_area_struct *
