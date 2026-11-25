@@ -71,6 +71,8 @@
 //! issue the `start` operation while the timer is in the **started** state. In
 //! this case the `start` operation is equivalent to the `restart` operation.
 //!
+//! A timer is **active** if it is either in the **started** or **running** states.
+//!
 //! # Examples
 //!
 //! ## Using an intrusive timer living in a [`Box`]
@@ -592,6 +594,68 @@ impl<T> HrTimer<T> {
                 core::ptr::read_volatile(&raw const ((*c_timer_ptr).node.expires)),
             )
         }
+    }
+
+    /// Query the state of the timer.
+    ///
+    /// Returns [`true`] if the timer is in the started or running states.
+    ///
+    /// This method synchronizes internally and does not require exclusive access to the timer.
+    ///
+    /// The returned value is a snapshot. A concurrent event can change the state of the timer
+    /// right after this method returns, so callers that need the state to be stable must serialize
+    /// against such events by other means.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{
+    /// #     impl_has_hr_timer,
+    /// #     prelude::*,
+    /// #     time::{
+    /// #         hrtimer::{
+    /// #             HasHrTimer, HrTimer, HrTimerCallback, HrTimerCallbackContext,
+    /// #             HrTimerRestart, RelativeMode,
+    /// #         },
+    /// #         Monotonic,
+    /// #     },
+    /// # };
+    /// # use pin_init::stack_pin_init;
+    /// #[pin_data]
+    /// struct ExampleTimer {
+    ///     #[pin]
+    ///     timer: HrTimer<Self>,
+    /// }
+    ///
+    /// impl ExampleTimer {
+    ///     fn new() -> impl PinInit<Self> {
+    ///         pin_init!(Self { timer <- HrTimer::new() })
+    ///     }
+    /// }
+    ///
+    /// impl HrTimerCallback for ExampleTimer {
+    ///     type Pointer<'a> = Pin<&'a Self>;
+    ///     fn run(_this: Pin<&Self>, _ctx: HrTimerCallbackContext<'_, Self>) -> HrTimerRestart {
+    ///         HrTimerRestart::NoRestart
+    ///     }
+    /// }
+    ///
+    /// impl_has_hr_timer! {
+    ///     impl HasHrTimer<Self> for ExampleTimer {
+    ///         mode: RelativeMode<Monotonic>, field: self.timer
+    ///     }
+    /// }
+    ///
+    /// stack_pin_init!(let has_timer = ExampleTimer::new());
+    /// assert!(!has_timer.timer.active());
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
+    #[inline]
+    pub fn active(&self) -> bool {
+        // SAFETY: By type invariant, `self.timer` is valid. `hrtimer_active`
+        // synchronizes internally and is safe to call without exclusive
+        // access to the timer.
+        unsafe { bindings::hrtimer_active(self.timer.get()) }
     }
 }
 
